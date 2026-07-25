@@ -162,6 +162,38 @@ class MobileTaskManager:
         return func(*args)
 
 
+# fuo_netease 1.0.8 hardcodes timeout=2 in its requests wrapper.
+NETEASE_HTTP_TIMEOUT = (10, 15)
+
+
+class _NeteaseTimeoutHttp:
+    def __init__(self, client, timeout=NETEASE_HTTP_TIMEOUT):
+        self._client = client
+        self._timeout = timeout
+
+    def get(self, *args, **kwargs):
+        kwargs["timeout"] = self._timeout
+        return self._client.get(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        kwargs["timeout"] = self._timeout
+        return self._client.post(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+
+def configure_netease_http(provider) -> None:
+    api = getattr(provider, "api", None)
+    set_http = getattr(api, "set_http", None)
+    if not callable(set_http):
+        return
+    client = getattr(api, "http", None)
+    if isinstance(client, _NeteaseTimeoutHttp):
+        return
+    api.set_http(_NeteaseTimeoutHttp(client))
+
+
 class MobileNativePlayer(AbstractPlayer):
     def __init__(self):
         super().__init__()
@@ -241,6 +273,8 @@ class ProviderRegistry:
             self._enable_without_auto_login(module)
             provider = getattr(module, "provider", None)
             provider_id = getattr(provider, "identifier", None)
+            if provider_id == "netease":
+                configure_netease_http(provider)
             if provider_id and self.app.library.get(provider_id) is not None:
                 self.provider_ids.append(provider_id)
             else:
@@ -595,6 +629,7 @@ class FuoMobileBridge:
         self.provider_registry.load()
         self._tracks: Dict[str, Any] = {}
         self._playlists: Dict[str, Any] = {}
+        self._playlist_readers: Dict[str, Any] = {}
         self._media_items: Dict[str, Any] = {}
         self._videos: Dict[str, Any] = {}
         self._dynamic_features: Dict[str, Dict[str, Any]] = {}
@@ -985,9 +1020,13 @@ class FuoMobileBridge:
         bridge_log(
             f"playlist_tracks resolved playlist_id={playlist_id} source={getattr(playlist, 'source', '')}"
         )
-        reader = provider.playlist_create_songs_rd(playlist)
-        bridge_log(f"playlist_tracks reader created playlist_id={playlist_id}")
-        songs = read_models(reader, limit=300)
+        reader = self._playlist_reader_for(playlist_id, provider, playlist)
+        bridge_log(f"playlist_tracks reader ready playlist_id={playlist_id}")
+        try:
+            songs = read_models(reader, limit=300)
+        except Exception:
+            self._invalidate_playlist_reader(playlist_id)
+            raise
         bridge_log(f"playlist_tracks songs read playlist_id={playlist_id} count={len(songs)}")
         tracks = [self._remember_song(song) for song in songs]
         bridge_log(f"playlist_tracks done playlist_id={playlist_id} count={len(tracks)}")
@@ -1030,6 +1069,7 @@ class FuoMobileBridge:
         ok = bool(add_song(playlist, song))
         if ok:
             self._playlists.pop(playlist_id, None)
+            self._invalidate_playlist_reader(playlist_id)
         title = display(song, "title")
         playlist_name = display(playlist, "name")
         message = f"已添加到：{playlist_name}" if ok else f"添加失败：{title}"
@@ -1049,6 +1089,7 @@ class FuoMobileBridge:
         ok = bool(remove_song(playlist, song))
         if ok:
             self._playlists.pop(playlist_id, None)
+            self._invalidate_playlist_reader(playlist_id)
         title = display(song, "title")
         message = f"已从歌单移除：{title}" if ok else f"移除失败：{title}"
         return json.dumps(mutation_result(ok, message), ensure_ascii=False)
@@ -1077,6 +1118,7 @@ class FuoMobileBridge:
         ok = bool(delete(getattr(playlist, "identifier", "")))
         if ok:
             self._playlists.pop(playlist_id, None)
+            self._invalidate_playlist_reader(playlist_id)
         return json.dumps(mutation_result(ok, f"已删除：{display(playlist, 'name')}" if ok else "删除歌单失败"), ensure_ascii=False)
 
     def dislike_song(self, track_id: str, disliked: bool) -> str:
@@ -1140,6 +1182,8 @@ class FuoMobileBridge:
 
     def _get_provider(self, provider_id: str):
         provider = self._raw_provider(provider_id)
+        if provider_id == "netease":
+            configure_netease_http(provider)
         if provider_id == "bilibili":
             self._ensure_bilibili_authenticated(provider)
         else:
@@ -1191,20 +1235,39 @@ class FuoMobileBridge:
         bridge_log(f"playlist_tracks hydrated playlist_id={playlist_id}")
         return detail
 
+    def _playlist_reader_for(self, playlist_id: str, provider, playlist):
+        readers = getattr(self, "_playlist_readers", None)
+        if readers is None:
+            readers = {}
+            self._playlist_readers = readers
+        reader = readers.get(playlist_id)
+        if reader is None:
+            reader = provider.playlist_create_songs_rd(playlist)
+            readers[playlist_id] = reader
+        return reader
+
+    def _invalidate_playlist_reader(self, playlist_id: str):
+        readers = getattr(self, "_playlist_readers", None)
+        if readers is not None:
+            readers.pop(playlist_id, None)
+
     def _playlist_detail_payload(self, playlist_id: str, offset: int = 0, limit: int = 60) -> Dict[str, Any]:
         playlist = self._playlist_from_id(playlist_id)
-        detail_playlist = self._playlist_detail_from_id(playlist_id)
         provider = self._get_provider(getattr(playlist, "source", ""))
         track_playlist = self._playlist_for_tracks(playlist_id, provider, playlist)
         bridge_log(
             f"playlist_detail resolved playlist_id={playlist_id} source={getattr(track_playlist, 'source', '')}"
         )
-        reader = provider.playlist_create_songs_rd(track_playlist)
-        page = read_model_page(reader, offset=offset, limit=limit)
-        songs = page["items"]
-        tracks = [self._remember_song(song) for song in songs]
+        reader = self._playlist_reader_for(playlist_id, provider, track_playlist)
+        try:
+            page = read_model_page(reader, offset=offset, limit=limit)
+            songs = page["items"]
+            tracks = [self._remember_song(song) for song in songs]
+        except Exception:
+            self._invalidate_playlist_reader(playlist_id)
+            raise
         return {
-            "playlist": self._remember_playlist(detail_playlist),
+            "playlist": self._remember_playlist(track_playlist),
             "tracks": tracks,
             "tracks_next_offset": page["next_offset"],
             "tracks_has_more": page["has_more"],
@@ -1338,20 +1401,6 @@ class FuoMobileBridge:
         playlist = provider.playlist_get(identifier)
         self._playlists[playlist_id] = playlist
         return playlist
-
-    def _playlist_detail_from_id(self, playlist_id: str):
-        try:
-            _, provider_id, identifier = playlist_id.split(":", 2)
-        except ValueError as exc:
-            raise RuntimeError(f"invalid playlist id: {playlist_id}") from exc
-        provider = self._get_provider(provider_id)
-        playlist_get = getattr(provider, "playlist_get", None)
-        if playlist_get is not None:
-            detail = playlist_get(identifier)
-            if detail is not None:
-                self._playlists[playlist_id] = detail
-                return detail
-        return self._playlist_from_id(playlist_id)
 
     def _media_item_from_id(self, item_id: str):
         item = self._media_items.get(item_id)
@@ -1517,6 +1566,7 @@ class FuoMobileBridge:
 
             provider.api = API()
             LoginController._api = provider.api
+            configure_netease_http(provider)
         elif provider_id == "qqmusic":
             provider.api.set_cookies(None)
         elif provider_id == "bilibili":
@@ -2147,6 +2197,16 @@ def read_model_page(value, offset: int = 0, limit: int = 60) -> Dict[str, Any]:
         items = value[safe_offset:safe_offset + read_limit]
         return page_result(items, safe_offset, safe_limit)
     if hasattr(value, "read_range"):
+        total = getattr(value, "count", None)
+        if total is not None:
+            items = value.read_range(safe_offset, safe_offset + safe_limit)
+            page_items = list(items or [])
+            total_count = max(0, int(total))
+            return {
+                "items": page_items,
+                "next_offset": safe_offset + len(page_items),
+                "has_more": safe_offset + safe_limit < total_count,
+            }
         items = value.read_range(safe_offset, safe_offset + read_limit)
         return page_result(items, safe_offset, safe_limit)
     if hasattr(value, "readall"):
