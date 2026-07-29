@@ -12,7 +12,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,10 +51,12 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Slider
@@ -63,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,9 +74,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -158,12 +157,34 @@ fun MiniPlayer(controller: FuoPlayerController) {
 @Composable
 private fun MiniPlayerProgress(state: PlaybackState, isLoadingAudio: Boolean) {
     val duration = state.durationMs.takeIf { it > 0 }
-    if (isLoadingAudio || duration != null) {
-        LinearProgressIndicator(
-            progress = { duration?.let { state.positionMs.coerceIn(0, it).toFloat() / it } ?: 0f },
+    when {
+        isLoadingAudio -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        duration != null -> PlayingProgressIndicator(
+            progress = { state.positionMs.coerceIn(0, duration).toFloat() / duration },
+            isPlaying = state.status == PlayerStatus.Playing,
             modifier = Modifier.fillMaxWidth(),
         )
     }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun PlayingProgressIndicator(
+    progress: () -> Float,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    LinearWavyProgressIndicator(
+        progress = progress,
+        modifier = modifier,
+        amplitude = { value ->
+            if (isPlaying) {
+                WavyProgressIndicatorDefaults.indicatorAmplitude(value)
+            } else {
+                0f
+            }
+        },
+    )
 }
 
 @Composable
@@ -283,14 +304,6 @@ fun FullPlayer(controller: FuoPlayerController) {
                         }
                     }
                 }
-                FullPlayerSpectrum(
-                    controller = controller,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 8.dp),
-                )
                 QueueBottomSheet(controller)
             }
         }
@@ -380,14 +393,6 @@ fun FullPlayer(controller: FuoPlayerController) {
                     },
                 )
             }
-            FullPlayerSpectrum(
-                controller = controller,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 8.dp),
-            )
             QueueBottomSheet(controller)
         }
     }
@@ -473,81 +478,6 @@ fun PlayerSharedCover(
         }
     }
     CoverBox(track = track, cornerRadius = cornerRadius, modifier = sharedModifier)
-}
-
-@Composable
-fun FullPlayerSpectrum(controller: FuoPlayerController, modifier: Modifier = Modifier) {
-    if (controller.playbackSpectrumStyle == PlaybackSpectrumStyle.None) return
-    AudioSpectrumLines(
-        levels = controller.playbackState.spectrumLevels,
-        isPlaying = controller.playbackState.status == PlayerStatus.Playing,
-        style = controller.playbackSpectrumStyle,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(64.dp),
-    )
-}
-
-@Composable
-fun AudioSpectrumLines(
-    levels: List<Float>,
-    isPlaying: Boolean,
-    style: PlaybackSpectrumStyle,
-    modifier: Modifier = Modifier,
-) {
-    if (!isPlaying || levels.isEmpty()) return
-    val color = MaterialTheme.colorScheme.primary
-    Canvas(modifier = modifier) {
-        val count = levels.size
-        val spacing = size.width / (count * 2f)
-        val strokeWidth = (spacing * 0.48f).coerceAtLeast(1f)
-        when (style) {
-            PlaybackSpectrumStyle.None -> Unit
-            PlaybackSpectrumStyle.Bars,
-            PlaybackSpectrumStyle.MirrorBars -> levels.forEachIndexed { index, level ->
-                val normalized = 0.12f + level.coerceIn(0f, 1f) * 0.88f
-                val height = size.height * if (style == PlaybackSpectrumStyle.Bars) normalized else normalized / 2f
-                val x = spacing * (index * 2 + 1)
-                drawLine(
-                    color = color,
-                    start = androidx.compose.ui.geometry.Offset(
-                        x,
-                        if (style == PlaybackSpectrumStyle.Bars) size.height else size.height / 2f - height,
-                    ),
-                    end = androidx.compose.ui.geometry.Offset(
-                        x,
-                        if (style == PlaybackSpectrumStyle.Bars) size.height - height else size.height / 2f + height,
-                    ),
-                    strokeWidth = strokeWidth,
-                    cap = StrokeCap.Round,
-                )
-            }
-            PlaybackSpectrumStyle.Wave -> {
-                val path = Path()
-                val points = levels.mapIndexed { index, level ->
-                    androidx.compose.ui.geometry.Offset(
-                        x = if (count == 1) size.width / 2f else size.width * index / (count - 1f),
-                        y = size.height * (1f - (0.04f + level.coerceIn(0f, 1f) * 0.92f)),
-                    )
-                }
-                path.moveTo(points.first().x, points.first().y)
-                points.zipWithNext().forEach { (previous, current) ->
-                    path.quadraticTo(
-                        x1 = previous.x,
-                        y1 = previous.y,
-                        x2 = (previous.x + current.x) / 2f,
-                        y2 = (previous.y + current.y) / 2f,
-                    )
-                }
-                points.last().let { point -> path.lineTo(point.x, point.y) }
-                drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(width = (strokeWidth * 0.75f).coerceAtLeast(1f), cap = StrokeCap.Round),
-                )
-            }
-        }
-    }
 }
 
 enum class PlayerVisualTab(val title: String) {
@@ -1163,6 +1093,13 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
         },
         enabled = canSeek,
         valueRange = 0f..duration.toFloat(),
+        track = { sliderState ->
+            PlayingProgressIndicator(
+                progress = { sliderState.value / duration.toFloat() },
+                isPlaying = canSeek && state.status == PlayerStatus.Playing,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
     )
     Row(
         modifier = Modifier.fillMaxWidth(),

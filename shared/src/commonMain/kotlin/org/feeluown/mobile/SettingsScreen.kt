@@ -808,26 +808,6 @@ fun PlayerDisplaySettingsPanel(controller: FuoPlayerController) {
                 }
             }
             Text(
-                text = "频谱样式",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                PlaybackSpectrumStyle.entries.forEachIndexed { index, style ->
-                    SegmentedButton(
-                        selected = controller.playbackSpectrumStyle == style,
-                        onClick = { controller.onPlaybackSpectrumStyleChange(style) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = PlaybackSpectrumStyle.entries.size,
-                        ),
-                        colors = settingsSegmentedButtonColors(),
-                    ) {
-                        Text(style.label)
-                    }
-                }
-            }
-            Text(
                 text = "外观模式",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
