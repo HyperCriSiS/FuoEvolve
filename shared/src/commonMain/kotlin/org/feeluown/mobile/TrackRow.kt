@@ -51,7 +51,7 @@ fun TrackRow(
     onOpenAlbum: () -> Unit,
     onOpenDetail: (() -> Unit)? = null,
     onEditLocalMetadata: (() -> Unit)? = null,
-    onAddToProviderPlaylist: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
     onRemoveFromProviderPlaylist: (() -> Unit)? = null,
     onSetDisliked: (() -> Unit)? = null,
     dislikedActionLabel: String = "不喜欢",
@@ -100,7 +100,7 @@ fun TrackRow(
             onOpenAlbum = onOpenAlbum,
             onOpenDetail = onOpenDetail,
             onEditLocalMetadata = onEditLocalMetadata,
-            onAddToProviderPlaylist = onAddToProviderPlaylist,
+            onAddToPlaylist = onAddToPlaylist,
             onRemoveFromProviderPlaylist = onRemoveFromProviderPlaylist,
             onSetDisliked = onSetDisliked,
             dislikedActionLabel = dislikedActionLabel,
@@ -137,7 +137,7 @@ fun TrackAction(
     onOpenAlbum: () -> Unit,
     onOpenDetail: (() -> Unit)? = null,
     onEditLocalMetadata: (() -> Unit)?,
-    onAddToProviderPlaylist: (() -> Unit)?,
+    onAddToPlaylist: (() -> Unit)?,
     onRemoveFromProviderPlaylist: (() -> Unit)?,
     onSetDisliked: (() -> Unit)?,
     dislikedActionLabel: String,
@@ -232,13 +232,13 @@ fun TrackAction(
                     },
                 )
             }
-            if (onAddToProviderPlaylist != null) {
+            if (onAddToPlaylist != null) {
                 DropdownMenuItem(
                     text = { Text("添加到歌单") },
                     leadingIcon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
                     onClick = {
                         expanded = false
-                        onAddToProviderPlaylist()
+                        onAddToPlaylist()
                     },
                 )
             }
@@ -294,9 +294,17 @@ fun TrackAction(
     }
 }
 
-fun addToProviderPlaylistAction(controller: FuoPlayerController, track: MusicTrack): (() -> Unit)? {
-    return if (controller.canAddTrackToProviderPlaylist(track)) {
+fun addToPlaylistAction(controller: FuoPlayerController, track: MusicTrack): (() -> Unit)? {
+    return if (controller.canAddTrackToPlaylist(track)) {
         { controller.openPlaylistTargetPicker(track) }
+    } else {
+        null
+    }
+}
+
+fun addToLocalPlaylistAction(controller: FuoPlayerController, track: MusicTrack): (() -> Unit)? {
+    return if (controller.canAddTrackToLocalPlaylist(track)) {
+        { controller.openLocalPlaylistTargetPicker(track) }
     } else {
         null
     }
@@ -305,6 +313,14 @@ fun addToProviderPlaylistAction(controller: FuoPlayerController, track: MusicTra
 fun removeFromSelectedPlaylistAction(controller: FuoPlayerController, track: MusicTrack): (() -> Unit)? {
     return if (controller.canRemoveTrackFromSelectedPlaylist(track)) {
         { controller.removeTrackFromSelectedPlaylist(track) }
+    } else {
+        null
+    }
+}
+
+fun removeFromSelectedLocalPlaylistAction(controller: FuoPlayerController, track: MusicTrack): (() -> Unit)? {
+    return if (controller.canRemoveTrackFromSelectedLocalPlaylist(track)) {
+        { controller.removeTrackFromSelectedLocalPlaylist(track) }
     } else {
         null
     }

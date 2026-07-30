@@ -151,7 +151,7 @@ fun ProviderContentHomeSection(
                                         onOpenArtist = { controller.openTrackArtist(track) },
                                         onOpenAlbum = { controller.openTrackAlbum(track) },
                                         onOpenDetail = trackDetailAction(controller, track),
-                                        onAddToProviderPlaylist = addToProviderPlaylistAction(controller, track),
+                                        onAddToPlaylist = addToPlaylistAction(controller, track),
                                     )
                                     HorizontalDivider()
                                 }

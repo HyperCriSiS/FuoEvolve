@@ -11,6 +11,22 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import platform.UIKit.UIViewController
 
+internal fun handleIosLocalPlaylistImportResult(
+    fileName: String?,
+    content: String?,
+    onImport: (String, String) -> Unit,
+    onReadFailure: () -> Unit,
+) {
+    if (fileName == null && content == null) return
+    val validFileName = fileName?.takeIf { it.isNotBlank() }
+    val validContent = content?.takeIf { it.isNotBlank() }
+    if (validFileName != null && validContent != null) {
+        onImport(validFileName, validContent)
+    } else {
+        onReadFailure()
+    }
+}
+
 fun MainViewController(
     pythonRuntime: IosPythonRuntime,
     audioOutput: IosAudioOutput,
@@ -19,6 +35,7 @@ fun MainViewController(
     downloadOutput: IosDownloadOutput,
     webLoginOutput: IosWebLoginOutput,
     shareOutput: IosShareOutput,
+    localPlaylistFileOutput: IosLocalPlaylistFileOutput,
     networkStatusOutput: IosNetworkStatusOutput,
     audioRecognitionOutput: IosAudioRecognitionOutput,
 ): UIViewController = ComposeUIViewController {
@@ -30,6 +47,7 @@ fun MainViewController(
         downloadOutput,
         webLoginOutput,
         shareOutput,
+        localPlaylistFileOutput,
         networkStatusOutput,
         audioRecognitionOutput,
     )
@@ -44,6 +62,7 @@ private fun IosApp(
     downloadOutput: IosDownloadOutput,
     webLoginOutput: IosWebLoginOutput,
     shareOutput: IosShareOutput,
+    localPlaylistFileOutput: IosLocalPlaylistFileOutput,
     networkStatusOutput: IosNetworkStatusOutput,
     audioRecognitionOutput: IosAudioRecognitionOutput,
 ) {
@@ -67,6 +86,18 @@ private fun IosApp(
         onRequestMicrophonePermission = container::requestMicrophonePermission,
         onOpenProviderWebLogin = container::openProviderWebLogin,
         onLogoutProvider = container::logoutProvider,
+        onImportLocalPlaylistFile = {
+            localPlaylistFileOutput.importFile { fileName, content ->
+                handleIosLocalPlaylistImportResult(
+                    fileName = fileName,
+                    content = content,
+                    onImport = container.controller::prepareLocalPlaylistImport,
+                    onReadFailure = { container.controller.showMessage("无法读取本地歌单文件") },
+                )
+            }
+        },
+        onExportLocalPlaylistFile = localPlaylistFileOutput::exportFile,
+        onShareLocalPlaylistFile = localPlaylistFileOutput::shareFile,
         onShareText = shareOutput::share,
     )
 }
@@ -83,6 +114,7 @@ private class IosAppContainer(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val providerRepository = IosFuoCoreBridge(pythonRuntime, networkStatusOutput)
     private val localRepository = IosLocalMusicRepository(mediaLibraryOutput)
+    private val localPlaylistRepository = IosLocalPlaylistRepository()
     private val downloadRepository = IosDownloadRepository(providerRepository, downloadOutput)
     private val playbackEngine = IosNativeAudioEngine(scope, audioOutput)
     private val settingsRepository = createIosAppSettingsRepository(scope)
@@ -97,6 +129,7 @@ private class IosAppContainer(
     val controller = FuoPlayerController(
         providerRepository = providerRepository,
         localRepository = localRepository,
+        localPlaylistRepository = localPlaylistRepository,
         downloadRepository = downloadRepository,
         playbackEngine = playbackEngine,
         settingsRepository = settingsRepository,

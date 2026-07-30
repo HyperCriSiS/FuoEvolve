@@ -62,6 +62,7 @@ enum class PlaylistFilter {
     All,
     UserPlaylists,
     FavoritePlaylists,
+    Local,
 }
 
 @Serializable
@@ -76,6 +77,11 @@ data class TrackArtistTarget(
     val mediaItem: ProviderMediaItem? = null,
 )
 
+enum class PlaylistTargetType {
+    Provider,
+    Local,
+}
+
 private const val DYNAMIC_QUEUE_PREFETCH_REMAINING = 2
 private const val LIST_PREFETCH_REMAINING = 8
 private const val PLAYLIST_BACKGROUND_PAGE_INTERVAL_MS = 3_000L
@@ -85,6 +91,7 @@ class FuoPlayerController(
     private val providerRepository: ProviderMusicRepository,
     private val localRepository: LocalMusicRepository,
     private val downloadRepository: DownloadRepository,
+    private val localPlaylistRepository: LocalPlaylistRepository = NoOpLocalPlaylistRepository,
     private val playbackEngine: PlaybackEngine,
     private val settingsRepository: AppSettingsRepository = InMemoryAppSettingsRepository(),
     private val providerSessionRepository: ProviderSessionRepository =
@@ -146,6 +153,14 @@ class FuoPlayerController(
         private set
     var selectedPlaylistError by mutableStateOf<String?>(null)
         private set
+    var localPlaylists by mutableStateOf<List<LocalPlaylist>>(emptyList())
+        private set
+    var selectedLocalPlaylist by mutableStateOf<LocalPlaylist?>(null)
+        private set
+    var selectedLocalPlaylistTracks by mutableStateOf<List<MusicTrack>>(emptyList())
+        private set
+    var selectedLocalPlaylistError by mutableStateOf<String?>(null)
+        private set
     var selectedFeature by mutableStateOf<ProviderFeature?>(null)
         private set
     var selectedFeatureContent by mutableStateOf<ProviderContentSection?>(null)
@@ -188,11 +203,19 @@ class FuoPlayerController(
         private set
     var playlistTargetTrack by mutableStateOf<MusicTrack?>(null)
         private set
+    var playlistTargetType by mutableStateOf(PlaylistTargetType.Provider)
+        private set
+    var playlistTargetPickerShowSwitcher by mutableStateOf(true)
+        private set
     var playlistOperationTargets by mutableStateOf<List<ProviderPlaylist>>(emptyList())
         private set
     var playlistOperationError by mutableStateOf<String?>(null)
         private set
     var playlistOperationFeedback by mutableStateOf<String?>(null)
+        private set
+    var localPlaylistOperationError by mutableStateOf<String?>(null)
+        private set
+    var localPlaylistImportPreview by mutableStateOf<LocalPlaylistImportPreview?>(null)
         private set
     var artistTargetTrack by mutableStateOf<MusicTrack?>(null)
         private set
@@ -254,6 +277,10 @@ class FuoPlayerController(
         private set
     var message by mutableStateOf("正在初始化 FeelUOwn")
         private set
+
+    fun showMessage(text: String) {
+        message = text
+    }
     var downloadStates by mutableStateOf<Map<String, DownloadState>>(emptyMap())
         private set
     var downloadTasks by mutableStateOf<List<DownloadTask>>(emptyList())
@@ -354,6 +381,9 @@ class FuoPlayerController(
     private val settingsUpdates = Channel<AppSettings>(capacity = Channel.UNLIMITED)
 
     init {
+        scope.launch {
+            refreshLocalPlaylistsInternal(showMessage = false)
+        }
         scope.launch {
             for (settings in settingsUpdates) {
                 runCatching { settingsRepository.update { settings } }
@@ -837,6 +867,10 @@ class FuoPlayerController(
                 }
                 AppRoute.Playlist -> {
                     closePlaylist()
+                    true
+                }
+                AppRoute.LocalPlaylist -> {
+                    closeLocalPlaylist()
                     true
                 }
                 AppRoute.Feature -> {
@@ -1367,7 +1401,10 @@ class FuoPlayerController(
         mineSection = value
         persistSettings()
         when (value) {
-            MineSection.Playlists -> if (minePlaylistSections.isEmpty()) refreshMinePlaylistContent()
+            MineSection.Playlists -> {
+                refreshLocalPlaylists()
+                if (minePlaylistSections.isEmpty()) refreshMinePlaylistContent()
+            }
             MineSection.Songs,
             MineSection.Artists,
             MineSection.Albums -> if (mineSections.isEmpty()) refreshMineContent()
@@ -1378,6 +1415,37 @@ class FuoPlayerController(
     fun onPlaylistFilterChange(value: PlaylistFilter) {
         playlistFilter = value
         persistSettings()
+    }
+
+    fun refreshLocalPlaylists() {
+        scope.launch {
+            refreshLocalPlaylistsInternal(showMessage = true)
+        }
+    }
+
+    private suspend fun refreshLocalPlaylistsInternal(showMessage: Boolean) {
+        if (showMessage) {
+            isLoading = true
+            message = "正在加载本地歌单"
+        }
+        runCatching { localPlaylistRepository.list() }
+            .onSuccess { loaded ->
+                localPlaylists = loaded
+                selectedLocalPlaylist?.let { selected ->
+                    val updated = loaded.firstOrNull { it.id == selected.id }
+                    if (updated == null) {
+                        closeLocalPlaylist()
+                    } else {
+                        selectedLocalPlaylist = updated
+                        selectedLocalPlaylistTracks = updated.toMusicTracks()
+                    }
+                }
+                if (showMessage) {
+                    message = if (loaded.isEmpty()) "暂无本地歌单" else "本地歌单 ${loaded.size} 个"
+                }
+            }
+            .onFailure { if (showMessage) setError(it) }
+        if (showMessage) isLoading = false
     }
 
     fun onLocalMusicViewModeChange(value: LocalMusicViewMode) {
@@ -1669,11 +1737,17 @@ class FuoPlayerController(
                 if (refreshCatalog) refreshProviderCatalog()
                 val userPlaylists = loadProviderSections(ProviderFeatureCategory.MinePlaylists, ::isMineProviderFeature)
                 val favoritePlaylists = loadProviderSections(ProviderFeatureCategory.MineFavoritePlaylists, ::isMineProviderFeature)
-                userPlaylists to favoritePlaylists
+                val local = localPlaylistRepository.list()
+                Triple(userPlaylists, favoritePlaylists, local)
             }.onSuccess {
                 minePlaylistSections = it.first
                 mineFavoritePlaylistSections = it.second
-                message = if (it.first.isEmpty() && it.second.isEmpty()) "歌单暂无内容" else "歌单已更新"
+                localPlaylists = it.third
+                message = if (it.first.isEmpty() && it.second.isEmpty() && it.third.isEmpty()) {
+                    "歌单暂无内容"
+                } else {
+                    "歌单已更新"
+                }
             }.onFailure {
                 setError(it)
             }
@@ -1977,6 +2051,230 @@ class FuoPlayerController(
             providerCapabilities[providerId]?.canAddSongToPlaylist == true
     }
 
+    fun canAddTrackToLocalPlaylist(track: MusicTrack): Boolean {
+        return track.isProviderBacked() && track.toLocalPlaylistTrack() != null
+    }
+
+    fun canAddTrackToPlaylist(track: MusicTrack): Boolean {
+        return canAddTrackToProviderPlaylist(track) || canAddTrackToLocalPlaylist(track)
+    }
+
+    fun playlistProviderName(track: MusicTrack): String {
+        val providerId = trackProviderId(track)
+        return playlistOperationTargets.firstOrNull()?.providerName
+            ?.takeIf { it.isNotBlank() }
+            ?: providerId?.let(::providerName)?.takeIf { it.isNotBlank() && it != providerId }
+            ?: track.providerName?.takeIf { it.isNotBlank() }
+            ?: providerId.orEmpty().ifBlank { "Provider" }
+    }
+
+    fun selectPlaylistTargetType(type: PlaylistTargetType) {
+        val track = playlistTargetTrack ?: return
+        if (type == PlaylistTargetType.Provider && !canAddTrackToProviderPlaylist(track)) return
+        if (type == PlaylistTargetType.Local && !canAddTrackToLocalPlaylist(track)) return
+        playlistTargetType = type
+        if (type == PlaylistTargetType.Local) {
+            localPlaylistOperationError = if (localPlaylists.isEmpty()) "请先新建本地歌单" else null
+        }
+    }
+
+    fun openLocalPlaylistTargetPicker(track: MusicTrack) {
+        if (!canAddTrackToLocalPlaylist(track)) return
+        playlistTargetTrack = track
+        playlistTargetType = PlaylistTargetType.Local
+        playlistTargetPickerShowSwitcher = false
+        playlistOperationTargets = emptyList()
+        playlistOperationError = null
+        localPlaylistOperationError = if (localPlaylists.isEmpty()) "请先新建本地歌单" else null
+    }
+
+    fun closeLocalPlaylistTargetPicker() {
+        closePlaylistTargetPicker()
+    }
+
+    fun createLocalPlaylist(title: String) {
+        val normalizedTitle = title.trim()
+        if (normalizedTitle.isBlank()) return
+        scope.launch {
+            isLoading = true
+            message = "正在新建本地歌单"
+            runCatching { localPlaylistRepository.create(normalizedTitle) }
+                .onSuccess { result ->
+                    if (result.success) {
+                        result.playlist?.let { localPlaylists = localPlaylists + it }
+                        localPlaylistOperationError = null
+                        message = result.message
+                    } else {
+                        message = result.message.ifBlank { "新建本地歌单失败" }
+                    }
+                }
+                .onFailure(::setError)
+            isLoading = false
+        }
+    }
+
+    fun addTrackToLocalPlaylist(playlist: LocalPlaylist) {
+        val track = playlistTargetTrack ?: return
+        val localTrack = track.toLocalPlaylistTrack() ?: return
+        scope.launch {
+            isLoading = true
+            message = "正在添加到本地歌单"
+            runCatching { localPlaylistRepository.addTrack(playlist, localTrack) }
+                .onSuccess { result ->
+                    message = result.message.ifBlank { if (result.success) "已添加到：${playlist.title}" else "添加失败" }
+                    localPlaylistOperationError = result.message.takeUnless { result.success }
+                    playlistOperationFeedback = message
+                    if (result.success) {
+                        result.playlist?.let { updated ->
+                            localPlaylists = localPlaylists.map { if (it.id == updated.id) updated else it }
+                            if (selectedLocalPlaylist?.id == updated.id) {
+                                selectedLocalPlaylist = updated
+                                selectedLocalPlaylistTracks = updated.toMusicTracks()
+                            }
+                        }
+                    }
+                    closeLocalPlaylistTargetPicker()
+                }
+                .onFailure {
+                    localPlaylistOperationError = it.message ?: "添加失败"
+                    setError(it)
+                }
+            isLoading = false
+        }
+    }
+
+    fun openLocalPlaylist(playlist: LocalPlaylist) {
+        navigator.navigate(AppRoute.LocalPlaylist)
+        selectedLocalPlaylist = playlist
+        selectedLocalPlaylistTracks = playlist.toMusicTracks()
+        selectedLocalPlaylistError = null
+    }
+
+    fun closeLocalPlaylist() {
+        navigator.pop(AppRoute.LocalPlaylist)
+        selectedLocalPlaylist = null
+        selectedLocalPlaylistTracks = emptyList()
+        selectedLocalPlaylistError = null
+    }
+
+    fun playFromSelectedLocalPlaylist(index: Int) {
+        val track = selectedLocalPlaylistTracks.getOrNull(index) ?: return
+        play(track, selectedLocalPlaylistTracks, index, sourcePlaylistId = selectedLocalPlaylist?.id)
+    }
+
+    fun playAllFromSelectedLocalPlaylist() {
+        if (selectedLocalPlaylistTracks.isEmpty()) return
+        playFirst(selectedLocalPlaylistTracks, sourcePlaylistId = selectedLocalPlaylist?.id)
+    }
+
+    fun canRemoveTrackFromSelectedLocalPlaylist(track: MusicTrack): Boolean {
+        val playlist = selectedLocalPlaylist ?: return false
+        val localTrack = track.toLocalPlaylistTrack() ?: return false
+        return playlist.tracks.any { it.uri == localTrack.uri }
+    }
+
+    fun removeTrackFromSelectedLocalPlaylist(track: MusicTrack) {
+        val playlist = selectedLocalPlaylist ?: return
+        val localTrack = track.toLocalPlaylistTrack() ?: return
+        if (!canRemoveTrackFromSelectedLocalPlaylist(track)) return
+        scope.launch {
+            isLoading = true
+            message = "正在从本地歌单移除"
+            runCatching { localPlaylistRepository.removeTrack(playlist, localTrack.uri) }
+                .onSuccess { result ->
+                    if (result.success) {
+                        val updated = result.playlist ?: playlist.copy(
+                            tracks = playlist.tracks.filterNot { it.uri == localTrack.uri },
+                        )
+                        selectedLocalPlaylist = updated
+                        selectedLocalPlaylistTracks = updated.toMusicTracks()
+                        localPlaylists = localPlaylists.map { if (it.id == updated.id) updated else it }
+                        message = result.message.ifBlank { "已从本地歌单移除" }
+                        playlistOperationFeedback = message
+                    } else {
+                        selectedLocalPlaylistError = result.message.ifBlank { "移除失败" }
+                    }
+                }
+                .onFailure {
+                    selectedLocalPlaylistError = it.message ?: "移除失败"
+                    setError(it)
+                }
+            isLoading = false
+        }
+    }
+
+    fun canDeleteSelectedLocalPlaylist(): Boolean = selectedLocalPlaylist != null
+
+    fun deleteSelectedLocalPlaylist() {
+        val playlist = selectedLocalPlaylist ?: return
+        scope.launch {
+            isLoading = true
+            message = "正在删除本地歌单"
+            runCatching { localPlaylistRepository.delete(playlist) }
+                .onSuccess { result ->
+                    message = result.message.ifBlank { if (result.success) "歌单已删除" else "删除歌单失败" }
+                    if (result.success) {
+                        closeLocalPlaylist()
+                        localPlaylists = localPlaylists.filterNot { it.id == playlist.id }
+                    }
+                }
+                .onFailure(::setError)
+            isLoading = false
+        }
+    }
+
+    fun prepareLocalPlaylistImport(fileName: String, content: String) {
+        val preview = LocalPlaylistFileCodec.decode(fileName, content)
+        localPlaylistImportPreview = preview
+        message = if (preview.skippedLineCount > 0) {
+            "已读取 ${preview.tracks.size} 首歌曲，跳过 ${preview.skippedLineCount} 行"
+        } else {
+            "请选择导入方式"
+        }
+    }
+
+    fun existingLocalPlaylistForImport(preview: LocalPlaylistImportPreview): LocalPlaylist? {
+        return localPlaylists.firstOrNull { it.title.trim() == preview.title.trim() }
+    }
+
+    fun cancelLocalPlaylistImport() {
+        localPlaylistImportPreview = null
+    }
+
+    fun importLocalPlaylist(
+        mode: LocalPlaylistImportMode,
+        replacePlaylistId: String? = null,
+    ) {
+        val preview = localPlaylistImportPreview ?: return
+        val replacePlaylist = replacePlaylistId?.let { id -> localPlaylists.firstOrNull { it.id == id } }
+        scope.launch {
+            isLoading = true
+            message = "正在导入本地歌单"
+            runCatching {
+                localPlaylistRepository.importPlaylist(preview, mode, replacePlaylist)
+            }.onSuccess { result ->
+                message = result.message.ifBlank { if (result.success) "歌单已导入" else "导入失败" }
+                if (result.success) {
+                    localPlaylistImportPreview = null
+                    refreshLocalPlaylistsInternal(showMessage = false)
+                }
+            }.onFailure(::setError)
+            isLoading = false
+        }
+    }
+
+    fun exportSelectedLocalPlaylist(onReady: (LocalPlaylistFile) -> Unit) {
+        val playlist = selectedLocalPlaylist ?: return
+        scope.launch {
+            isLoading = true
+            message = "正在准备导出文件"
+            runCatching { localPlaylistRepository.export(playlist) }
+                .onSuccess(onReady)
+                .onFailure(::setError)
+            isLoading = false
+        }
+    }
+
     fun creatablePlaylistProviders(): List<ProviderInfo> = providers.filter { provider ->
         isProviderLoggedIn(provider.providerId) &&
             providerCapabilities[provider.providerId]?.canCreatePlaylist == true
@@ -2024,10 +2322,18 @@ class FuoPlayerController(
     }
 
     fun openPlaylistTargetPicker(track: MusicTrack) {
-        if (!canAddTrackToProviderPlaylist(track)) return
+        if (!canAddTrackToPlaylist(track)) return
         playlistTargetTrack = track
+        playlistTargetType = if (canAddTrackToProviderPlaylist(track)) {
+            PlaylistTargetType.Provider
+        } else {
+            PlaylistTargetType.Local
+        }
+        playlistTargetPickerShowSwitcher = true
         playlistOperationTargets = emptyList()
         playlistOperationError = null
+        localPlaylistOperationError = if (localPlaylists.isEmpty()) "请先新建本地歌单" else null
+        if (!canAddTrackToProviderPlaylist(track)) return
         scope.launch {
             isLoading = true
             message = "正在加载可添加歌单"
@@ -2047,8 +2353,11 @@ class FuoPlayerController(
 
     fun closePlaylistTargetPicker() {
         playlistTargetTrack = null
+        playlistTargetType = PlaylistTargetType.Provider
+        playlistTargetPickerShowSwitcher = true
         playlistOperationTargets = emptyList()
         playlistOperationError = null
+        localPlaylistOperationError = null
     }
 
     fun addTrackToProviderPlaylist(playlist: ProviderPlaylist) {
@@ -3041,6 +3350,7 @@ class FuoPlayerController(
         }
         val loadedProviders = providerRepository.providers().sortedProvidersByOrder()
         providers = loadedProviders
+        selectedLocalPlaylist?.let { selectedLocalPlaylistTracks = it.toMusicTracks() }
         val providerIds = loadedProviders.map { it.providerId }.toSet()
         if (selectedSettingsProviderId !in providerIds) {
             selectedSettingsProviderId = loadedProviders.firstOrNull()?.providerId
@@ -3112,6 +3422,7 @@ class FuoPlayerController(
         selectedMediaItemTracksLoadMoreJob = null
         selectedMediaItemAlbumsLoadMoreJob = null
         closePlaylistTargetPicker()
+        closeLocalPlaylistTargetPicker()
         closeArtistTargetPicker()
     }
 
@@ -3144,6 +3455,52 @@ class FuoPlayerController(
 
     private fun isProviderLoggedIn(providerId: String): Boolean {
         return providerSessionRepository.state.value.authStates[providerId]?.isLoggedIn == true
+    }
+
+    private fun MusicTrack.toLocalPlaylistTrack(): LocalPlaylistTrack? {
+        if (!isProviderBacked()) return null
+        val providerId = trackProviderId(this) ?: return null
+        val rawId = this.providerId?.takeIf { it.isNotBlank() } ?: id
+        val identifier = rawId.removePrefix("$providerId:").trim()
+        if (
+            !providerId.matches(Regex("[A-Za-z0-9_]+")) ||
+                !identifier.matches(Regex("[A-Za-z0-9_-]+"))
+        ) {
+            return null
+        }
+        return LocalPlaylistTrack(
+            uri = LocalPlaylistFileCodec.normalizeSongUri(providerId, identifier),
+            providerId = providerId,
+            identifier = identifier,
+            title = title,
+            artists = artists,
+            album = album,
+            durationMs = durationMs,
+        )
+    }
+
+    private fun MusicTrack.isProviderBacked(): Boolean {
+        return sourceType == TrackSourceType.Provider || sourceType == TrackSourceType.Downloaded
+    }
+
+    private fun LocalPlaylist.toMusicTracks(): List<MusicTrack> {
+        val knownProviders = providers.associateBy { it.providerId }
+        return tracks.map { localTrack ->
+            val provider = knownProviders[localTrack.providerId]
+            val trackId = "${localTrack.providerId}:${localTrack.identifier}"
+            MusicTrack(
+                id = trackId,
+                title = localTrack.title.ifBlank { localTrack.identifier },
+                artists = localTrack.artists,
+                album = localTrack.album,
+                source = localTrack.providerId,
+                sourceType = TrackSourceType.Provider,
+                durationMs = localTrack.durationMs,
+                providerId = trackId,
+                providerName = provider?.providerName ?: localTrack.providerId,
+                isUnavailable = provider == null,
+            )
+        }
     }
 
     private fun trackProviderId(track: MusicTrack): String? {
