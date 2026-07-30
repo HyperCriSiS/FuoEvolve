@@ -52,6 +52,8 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -63,18 +65,25 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LookaheadScope
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
@@ -108,6 +117,7 @@ fun SettingsScreen(
         }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(loginProvider?.providerName ?: "设置") },
@@ -124,6 +134,9 @@ fun SettingsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             )
         },
     ) { paddingValues ->
@@ -293,120 +306,212 @@ fun ProviderSwitchPanel(
     var configuringProvider by remember { mutableStateOf<ProviderInfo?>(null) }
     var draggingProviderId by remember { mutableStateOf<String?>(null) }
     var dragDistance by remember { mutableStateOf(0f) }
+    var dragStartCenter by remember { mutableStateOf(0f) }
+    val providerItemBounds = remember { mutableStateMapOf<String, Rect>() }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(
-            modifier = Modifier.padding(FuoSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(vertical = FuoSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(FuoSpacing.md),
         ) {
             Text(
+                modifier = Modifier.padding(horizontal = FuoSpacing.lg),
                 text = "音源",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             if (controller.availableProviders.isEmpty()) {
-                ProviderContentMessage("音源正在初始化")
+                Box(modifier = Modifier.padding(horizontal = FuoSpacing.lg)) {
+                    ProviderContentMessage("音源正在初始化")
+                }
             } else {
                 LookaheadScope {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        controller.orderedAvailableProviders().forEach { provider ->
-                            val isEnabled = controller.isProviderEnabled(provider.providerId)
-                            val authState = controller.authStateFor(provider)
-                            val isDragging = draggingProviderId == provider.providerId
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateBounds(this@LookaheadScope, boundsTransform = { _, _ -> tween(180) })
-                                    .graphicsLayer {
-                                        translationY = if (isDragging) dragDistance else 0f
-                                        scaleX = if (isDragging) 1.02f else 1f
-                                        scaleY = if (isDragging) 1.02f else 1f
-                                    }
-                                    .zIndex(if (isDragging) 1f else 0f),
-                                color = if (isDragging) {
-                                    MaterialTheme.colorScheme.secondaryContainer
+                    val providers = controller.orderedAvailableProviders()
+                    Column {
+                        providers.forEachIndexed { index, provider ->
+                            key(provider.providerId) {
+                                val isEnabled = controller.isProviderEnabled(provider.providerId)
+                                val authState = controller.authStateFor(provider)
+                                val isDragging = draggingProviderId == provider.providerId
+                                val itemBounds = providerItemBounds[provider.providerId]
+                                val dragTranslationY = if (isDragging) {
+                                    itemBounds?.let { dragStartCenter + dragDistance - it.center.y } ?: dragDistance
                                 } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                                shape = MaterialTheme.shapes.medium,
-                                shadowElevation = if (isDragging) 8.dp else 0.dp,
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
+                                    0f
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onGloballyPositioned { coordinates ->
+                                            val bounds = coordinates.boundsInParent()
+                                            if (providerItemBounds[provider.providerId] != bounds) {
+                                                providerItemBounds[provider.providerId] = bounds
+                                            }
+                                        }
+                                        .animateBounds(
+                                            this@LookaheadScope,
+                                            boundsTransform = { _, _ -> tween(180) },
+                                        )
+                                        .zIndex(if (isDragging) 1f else 0f),
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = provider.providerName,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium,
-                                        )
-                                        Text(
-                                            text = providerStatusText(isEnabled, authState) + " · " + providerDisplaySummary(controller, provider.providerId),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(
-                                            enabled = !controller.isLoading,
-                                            onClick = { configuringProvider = provider },
-                                        ) {
-                                            Icon(Icons.Filled.Settings, contentDescription = "配置${provider.providerName}")
-                                        }
-                                        IconButton(
-                                            enabled = !controller.isLoading && isEnabled,
-                                            onClick = { onOpenProviderLogin(provider) },
-                                        ) {
-                                            Icon(
-                                                if (authState.isLoggedIn) Icons.Filled.ManageAccounts else Icons.AutoMirrored.Filled.Login,
-                                                contentDescription = if (authState.isLoggedIn) "管理${provider.providerName}" else "登录${provider.providerName}",
-                                            )
-                                        }
-                                        Icon(
-                                            modifier = Modifier
-                                                .fuoInteractive()
-                                                .pointerInput(provider.providerId, controller.isLoading) {
-                                                detectDragGesturesAfterLongPress(
-                                                    onDragStart = {
-                                                        draggingProviderId = provider.providerId
-                                                        dragDistance = 0f
-                                                    },
-                                                    onDragEnd = {
-                                                        draggingProviderId = null
-                                                        dragDistance = 0f
-                                                    },
-                                                    onDragCancel = {
-                                                        draggingProviderId = null
-                                                        dragDistance = 0f
-                                                    },
-                                                    onDrag = { change, amount ->
-                                                        change.consume()
-                                                        if (controller.isLoading) return@detectDragGesturesAfterLongPress
-                                                        dragDistance += amount.y
-                                                        if (dragDistance >= 48f) {
-                                                            controller.moveProvider(provider.providerId, 1)
-                                                            dragDistance -= 48f
-                                                        } else if (dragDistance <= -48f) {
-                                                            controller.moveProvider(provider.providerId, -1)
-                                                            dragDistance += 48f
-                                                        }
-                                                    },
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .graphicsLayer {
+                                                translationY = dragTranslationY
+                                                scaleX = if (isDragging) 1.02f else 1f
+                                                scaleY = if (isDragging) 1.02f else 1f
+                                            },
+                                        color = Color.Transparent,
+                                        contentColor = if (isDragging) {
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        shape = MaterialTheme.shapes.medium,
+                                        tonalElevation = if (isDragging) 3.dp else 0.dp,
+                                        shadowElevation = if (isDragging) 4.dp else 0.dp,
+                                    ) {
+                                        ListItem(
+                                            colors = ListItemDefaults.colors(
+                                                containerColor = if (isDragging) {
+                                                    MaterialTheme.colorScheme.secondaryContainer
+                                                } else {
+                                                    Color.Transparent
+                                                },
+                                                headlineColor = if (isDragging) {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                },
+                                                supportingColor = if (isDragging) {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                                trailingIconColor = if (isDragging) {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                            ),
+                                            headlineContent = {
+                                                Text(
+                                                    text = provider.providerName,
+                                                    fontWeight = FontWeight.Medium,
                                                 )
                                             },
-                                            imageVector = Icons.Filled.DragHandle,
-                                            contentDescription = "长按拖动排序${provider.providerName}",
+                                            supportingContent = {
+                                                Text(
+                                                    text = providerStatusText(isEnabled, authState) +
+                                                        " · " + providerDisplaySummary(controller, provider.providerId),
+                                                )
+                                            },
+                                            trailingContent = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    FuoIconButton(
+                                                        contentDescription = "配置${provider.providerName}",
+                                                        enabled = !controller.isLoading,
+                                                        onClick = { configuringProvider = provider },
+                                                    ) {
+                                                        Icon(Icons.Filled.Settings, contentDescription = null)
+                                                    }
+                                                    FuoIconButton(
+                                                        contentDescription = if (authState.isLoggedIn) {
+                                                            "管理${provider.providerName}"
+                                                        } else {
+                                                            "登录${provider.providerName}"
+                                                        },
+                                                        enabled = !controller.isLoading && isEnabled,
+                                                        onClick = { onOpenProviderLogin(provider) },
+                                                    ) {
+                                                        Icon(
+                                                            if (authState.isLoggedIn) {
+                                                                Icons.Filled.ManageAccounts
+                                                            } else {
+                                                                Icons.AutoMirrored.Filled.Login
+                                                            },
+                                                            contentDescription = null,
+                                                        )
+                                                    }
+                                                    Icon(
+                                                        modifier = Modifier
+                                                            .fuoInteractive()
+                                                            .pointerInput(provider.providerId, controller.isLoading) {
+                                                                detectDragGesturesAfterLongPress(
+                                                                    onDragStart = {
+                                                                        providerItemBounds[provider.providerId]?.let { bounds ->
+                                                                            draggingProviderId = provider.providerId
+                                                                            dragStartCenter = bounds.center.y
+                                                                            dragDistance = 0f
+                                                                        }
+                                                                    },
+                                                                    onDragEnd = {
+                                                                        draggingProviderId = null
+                                                                        dragStartCenter = 0f
+                                                                        dragDistance = 0f
+                                                                    },
+                                                                    onDragCancel = {
+                                                                        draggingProviderId = null
+                                                                        dragStartCenter = 0f
+                                                                        dragDistance = 0f
+                                                                    },
+                                                                    onDrag = { change, amount ->
+                                                                        change.consume()
+                                                                        if (controller.isLoading || draggingProviderId != provider.providerId) {
+                                                                            return@detectDragGesturesAfterLongPress
+                                                                        }
+                                                                        dragDistance += amount.y
+                                                                        val orderedProviders = controller.orderedAvailableProviders()
+                                                                        val currentIndex = orderedProviders.indexOfFirst {
+                                                                            it.providerId == provider.providerId
+                                                                        }
+                                                                        if (currentIndex < 0 || orderedProviders.size < 2) {
+                                                                            return@detectDragGesturesAfterLongPress
+                                                                        }
+                                                                        val dragCenter = dragStartCenter + dragDistance
+                                                                        val targetIndex = orderedProviders
+                                                                            .withIndex()
+                                                                            .firstOrNull { (_, candidate) ->
+                                                                                candidate.providerId != provider.providerId &&
+                                                                                    providerItemBounds[candidate.providerId]
+                                                                                        ?.let { dragCenter < it.center.y } == true
+                                                                            }
+                                                                            ?.let { candidate ->
+                                                                                candidate.index -
+                                                                                    if (candidate.index > currentIndex) 1 else 0
+                                                                            }
+                                                                            ?: orderedProviders.lastIndex
+                                                                        val offset = targetIndex - currentIndex
+                                                                        if (offset != 0) {
+                                                                            controller.moveProvider(provider.providerId, offset)
+                                                                        }
+                                                                    },
+                                                                )
+                                                            },
+                                                        imageVector = Icons.Filled.DragHandle,
+                                                        contentDescription = "长按拖动排序${provider.providerName}",
+                                                    )
+                                                    Switch(
+                                                        checked = isEnabled,
+                                                        enabled = !controller.isLoading &&
+                                                            (isEnabled && controller.enabledProviderIds.size > 1 || !isEnabled),
+                                                        onCheckedChange = {
+                                                            controller.onProviderEnabledChange(provider.providerId, it)
+                                                        },
+                                                    )
+                                                }
+                                            },
                                         )
                                     }
-                                    Switch(
-                                        checked = isEnabled,
-                                        enabled = !controller.isLoading &&
-                                            (isEnabled && controller.enabledProviderIds.size > 1 || !isEnabled),
-                                        onCheckedChange = { controller.onProviderEnabledChange(provider.providerId, it) },
+                                }
+                                if (index < providers.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = FuoSpacing.lg),
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                     )
                                 }
                             }
