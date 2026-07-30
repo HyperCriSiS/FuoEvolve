@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -167,7 +168,7 @@ internal fun FuoMetadataChip(
 ) {
     if (onClick != null) {
         AssistChip(
-            modifier = modifier.fuoInteractive(),
+            modifier = modifier.height(32.dp),
             onClick = onClick,
             label = { Text(label, maxLines = 1) },
             leadingIcon = leadingIcon?.let { icon ->

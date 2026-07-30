@@ -1347,8 +1347,11 @@ fun sourceLabel(track: MusicTrack, downloadState: DownloadState?): String {
 }
 
 fun replacementSourceLabel(track: MusicTrack): String {
-    val source = replacementProviderLabel(track).ifBlank { "音源" }
-    return "替换来源：$source"
+    val source = track.replacementProviderName?.takeIf { it.isNotBlank() }
+        ?: track.providerName?.takeIf { it.isNotBlank() }
+        ?: track.replacementSource?.takeIf { it.isNotBlank() }
+        ?: "音源"
+    return "换源 • $source"
 }
 
 fun replacementProviderLabel(track: MusicTrack): String {
