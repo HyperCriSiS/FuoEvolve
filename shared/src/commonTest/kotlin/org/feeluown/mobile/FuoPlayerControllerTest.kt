@@ -2402,7 +2402,7 @@ class FuoPlayerControllerTest {
                 mineSection = MineSection.LocalMusic,
                 playlistFilter = PlaylistFilter.FavoritePlaylists,
                 localMusicViewMode = LocalMusicViewMode.Album,
-                excludedLocalMusicDirectoryIds = setOf("Podcasts/"),
+                excludedLocalMusicDirectoryIds = setOf("Podcasts"),
                 localMusicMinDurationSeconds = 30,
                 providerLoginMode = ProviderLoginMode.Cookie,
                 providerCookieInputs = mapOf("netease" to """{"MUSIC_U":"saved"}"""),
@@ -2615,6 +2615,59 @@ class FuoPlayerControllerTest {
 
             assertEquals(1, local.refreshDatabaseCount)
             assertEquals(listOf("Local"), controller.localTracks.map { it.title })
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun localMusicDirectorySelectionUsesDirectoryTracksAndSystemBack() = runTest {
+        val directoryA = LocalMusicDirectory("Music/A/", "A", 2)
+        val directoryB = LocalMusicDirectory("Music/B/", "B", 1)
+        val local = FakeLocalMusicRepository(
+            directories = listOf(directoryA, directoryB),
+            tracks = listOf(
+                localTrack("local:1", "A song").copy(localDirectoryId = directoryA.id),
+                localTrack("local:2", "B song").copy(localDirectoryId = directoryB.id),
+            ),
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = FakeProviderRepository(emptyList()),
+                localRepository = local,
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.onLocalMusicPermissionChange(true)
+            controller.onMineSectionChange(MineSection.LocalMusic)
+            advanceUntilIdle()
+
+            controller.openLocalMusicDirectory(directoryA.id)
+
+            assertEquals(directoryA.id, controller.selectedLocalMusicDirectoryId)
+            assertEquals(
+                listOf("A song"),
+                controller.localTracks.filter { it.localDirectoryId == controller.selectedLocalMusicDirectoryId }
+                    .map { it.title },
+            )
+            assertTrue(controller.navigateBack())
+            assertNull(controller.selectedLocalMusicDirectoryId)
+
+            controller.openLocalMusicDirectory(directoryA.id)
+            controller.onLocalMusicViewModeChange(LocalMusicViewMode.Artist)
+            assertNull(controller.selectedLocalMusicDirectoryId)
+
+            controller.openLocalMusicCollection(LocalMusicViewMode.Artist, "歌手 A")
+            assertEquals(
+                LocalMusicCollectionSelection(LocalMusicViewMode.Artist, "歌手 A"),
+                controller.selectedLocalMusicCollection,
+            )
+            assertTrue(controller.navigateBack())
+            assertNull(controller.selectedLocalMusicCollection)
         } finally {
             controllerScope.cancel()
         }
