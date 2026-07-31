@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -29,11 +30,56 @@ private const val REQUIRED_CONTRAST_RATIO = 4.5
 fun FuoTheme(
     themeMode: ThemeMode,
     themeColorScheme: ThemeColorScheme,
-    dynamicCoverColorEnabled: Boolean = false,
-    coverImageUrl: String? = null,
     content: @Composable () -> Unit,
 ) {
     val darkTheme = resolvedDarkTheme(themeMode, isSystemInDarkTheme())
+    FuoExpressiveTheme(
+        colorScheme = fuoColorScheme(themeColorScheme, darkTheme),
+        content = content,
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun PlayerDynamicColorTheme(
+    themeMode: ThemeMode,
+    dynamicCoverColorEnabled: Boolean,
+    coverImageUrl: String?,
+    content: @Composable () -> Unit,
+) {
+    val darkTheme = resolvedDarkTheme(themeMode, isSystemInDarkTheme())
+    val coverColorScheme = rememberCoverColorScheme(
+        dynamicCoverColorEnabled = dynamicCoverColorEnabled,
+        coverImageUrl = coverImageUrl,
+        darkTheme = darkTheme,
+    )
+    FuoExpressiveTheme(
+        colorScheme = coverColorScheme ?: MaterialTheme.colorScheme,
+        content = content,
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun FuoExpressiveTheme(
+    colorScheme: ColorScheme,
+    content: @Composable () -> Unit,
+) {
+    MaterialExpressiveTheme(
+        colorScheme = colorScheme,
+        motionScheme = MotionScheme.expressive(),
+        shapes = FuoShapes,
+        typography = FuoTypography,
+        content = content,
+    )
+}
+
+@Composable
+private fun rememberCoverColorScheme(
+    dynamicCoverColorEnabled: Boolean,
+    coverImageUrl: String?,
+    darkTheme: Boolean,
+): ColorScheme? {
     val normalizedCoverUrl = coverImageUrl?.takeIf { it.isNotBlank() }
     val coverImage = rememberPlatformCoverImage(
         if (dynamicCoverColorEnabled) normalizedCoverUrl else null,
@@ -66,14 +112,7 @@ fun FuoTheme(
         }
         value = scheme
     }
-
-    MaterialExpressiveTheme(
-        colorScheme = fuoColorScheme(themeColorScheme, darkTheme, coverColorScheme),
-        motionScheme = MotionScheme.expressive(),
-        shapes = FuoShapes,
-        typography = FuoTypography,
-        content = content,
-    )
+    return coverColorScheme
 }
 
 private val FuoShapes = Shapes()
@@ -91,9 +130,7 @@ internal fun resolvedDarkTheme(themeMode: ThemeMode, systemDark: Boolean): Boole
 private fun fuoColorScheme(
     themeColorScheme: ThemeColorScheme,
     darkTheme: Boolean,
-    coverColorScheme: ColorScheme?,
 ): ColorScheme {
-    coverColorScheme?.takeIf(::hasAccessibleContrast)?.let { return it }
     if (themeColorScheme == ThemeColorScheme.Dynamic) {
         platformDynamicColorScheme(darkTheme)
             ?.takeIf(::hasAccessibleContrast)

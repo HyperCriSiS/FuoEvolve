@@ -224,8 +224,6 @@ fun AppRoot(
     FuoTheme(
         themeMode = appUiState.settings.settings.themeMode,
         themeColorScheme = appUiState.settings.settings.themeColorScheme,
-        dynamicCoverColorEnabled = controller.dynamicCoverColorEnabled,
-        coverImageUrl = controller.playbackState.currentTrack?.coverUrl,
     ) {
         if (!controller.isSettingsLoaded) {
             AppInitializationLoadingScreen()
