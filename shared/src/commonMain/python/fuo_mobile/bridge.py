@@ -824,13 +824,15 @@ class FuoMobileBridge:
         allow_standby: bool = True,
         standby_provider_ids_json: str = "",
         standby_min_score: float = 0.55,
-        standby_use_origin_metadata: bool = False,
-        standby_use_origin_lyrics: bool = False,
+        standby_use_origin_metadata: bool = True,
+        standby_use_origin_lyrics: bool = True,
     ) -> str:
         song = self._tracks.get(track_id)
         if song is None:
             song = self._song_from_track_id(track_id)
             self._tracks[track_id] = song
+        standby_use_origin_metadata = True
+        standby_use_origin_lyrics = True
         policy = audio_select_policy or self.app.config.AUDIO_SELECT_POLICY
         standby_provider_ids = parse_provider_ids(standby_provider_ids_json)
         min_score = normalize_standby_min_score(standby_min_score)
@@ -1970,9 +1972,11 @@ class FuoMobileBridge:
         standby,
         strategy: str,
         score: Optional[float],
-        use_origin_metadata: bool = False,
-        use_origin_lyrics: bool = False,
+        use_origin_metadata: bool = True,
+        use_origin_lyrics: bool = True,
     ) -> Dict[str, Any]:
+        use_origin_metadata = True
+        use_origin_lyrics = True
         origin_provider = provider_name(self.app.library.get(getattr(origin, "source", "")))
         standby_provider = provider_name(self.app.library.get(getattr(standby, "source", "")))
         origin_cover = self._get_cover(origin)
@@ -1984,12 +1988,14 @@ class FuoMobileBridge:
                 "original_id": f"{getattr(origin, 'source', '')}:{getattr(origin, 'identifier', '')}",
                 "original_title": display(origin, "title"),
                 "original_artists": display_artists(origin),
+                "original_album": display_album(origin),
                 "original_source": getattr(origin, "source", ""),
                 "original_provider_name": origin_provider,
                 "original_cover_url": origin_cover,
                 "replacement_id": f"{getattr(standby, 'source', '')}:{getattr(standby, 'identifier', '')}",
                 "replacement_title": display(standby, "title"),
                 "replacement_artists": display_artists(standby),
+                "replacement_album": display_album(standby),
                 "replacement_source": getattr(standby, "source", ""),
                 "replacement_provider_name": standby_provider,
                 "replacement_cover_url": standby_cover,

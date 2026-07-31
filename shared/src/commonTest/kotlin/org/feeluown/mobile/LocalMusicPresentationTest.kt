@@ -68,9 +68,36 @@ class LocalMusicPresentationTest {
         assertEquals("Music/A/", decoded.localDirectoryId)
 
         val legacy = PlaybackQueueCodec.encode(snapshot).lineSequence().joinToString("\n") { line ->
-            if (line.startsWith("track\t")) line.substringBeforeLast('\t') else line
+            if (line.startsWith("track\t")) {
+                line.split("\t").take(2 + 26).joinToString("\t")
+            } else {
+                line
+            }
         }
         assertNull(PlaybackQueueCodec.decode(legacy).mainQueue.single().localDirectoryId)
+    }
+
+    @Test
+    fun playbackQueueKeepsSmartReplacementDetailTargets() {
+        val track = localTrack(TrackSourceType.Provider).copy(
+            isSmartReplacement = true,
+            originalId = "netease:1",
+            originalArtists = "原始歌手",
+            originalAlbum = "原始专辑",
+            originalSource = "netease",
+            replacementId = "qqmusic:2",
+            replacementAlbum = "替换专辑",
+        )
+        val decoded = PlaybackQueueCodec.decode(
+            PlaybackQueueCodec.encode(PlaybackQueueSnapshot(mainQueue = listOf(track))),
+        ).mainQueue.single()
+
+        assertEquals("netease:1", decoded.originalId)
+        assertEquals("原始歌手", decoded.originalArtists)
+        assertEquals("原始专辑", decoded.originalAlbum)
+        assertEquals("netease", decoded.originalSource)
+        assertEquals("qqmusic:2", decoded.replacementId)
+        assertEquals("替换专辑", decoded.replacementAlbum)
     }
 
     private fun localTrack(sourceType: TrackSourceType) = MusicTrack(

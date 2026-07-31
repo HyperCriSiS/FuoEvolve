@@ -365,11 +365,17 @@ class FuoPlaybackService : MediaSessionService() {
             durationMs = if (parts.isEmpty()) payload.durationMs ?: request.track.durationMs else request.track.durationMs,
             providerName = payload.providerName ?: request.track.providerName,
             isSmartReplacement = payload.isSmartReplacement,
+            originalId = payload.originalId,
             originalTitle = payload.originalTitle,
+            originalArtists = payload.originalArtists,
+            originalAlbum = payload.originalAlbum,
+            originalSource = payload.originalSource,
             originalProviderName = payload.originalProviderName,
             originalCoverUrl = payload.originalCoverUrl,
+            replacementId = payload.replacementId,
             replacementTitle = payload.replacementTitle,
             replacementArtists = payload.replacementArtists,
+            replacementAlbum = payload.replacementAlbum,
             replacementSource = payload.replacementSource,
             replacementProviderName = payload.replacementProviderName,
             replacementCoverUrl = payload.replacementCoverUrl,
@@ -394,8 +400,8 @@ class FuoPlaybackService : MediaSessionService() {
                 request.unavailablePolicy,
                 request.smartReplacementProviderIds,
                 request.smartReplacementMinScore,
-                request.smartReplacementUseOriginalMetadata,
-                request.smartReplacementUseOriginalLyrics,
+                true,
+                true,
             )
     }
 
@@ -414,11 +420,17 @@ class FuoPlaybackService : MediaSessionService() {
             putString("provider_id", track.providerId.orEmpty())
             putString("provider_name", track.providerName.orEmpty())
             putBoolean("smart_replacement", track.isSmartReplacement)
+            putString("original_id", track.originalId.orEmpty())
             putString("original_title", track.originalTitle.orEmpty())
+            putString("original_artists", track.originalArtists.orEmpty())
+            putString("original_album", track.originalAlbum.orEmpty())
+            putString("original_source", track.originalSource.orEmpty())
             putString("original_provider_name", track.originalProviderName.orEmpty())
             putString("original_cover_url", track.originalCoverUrl.orEmpty())
+            putString("replacement_id", track.replacementId.orEmpty())
             putString("replacement_title", track.replacementTitle.orEmpty())
             putString("replacement_artists", track.replacementArtists.orEmpty())
+            putString("replacement_album", track.replacementAlbum.orEmpty())
             putString("replacement_source", track.replacementSource.orEmpty())
             putString("replacement_provider_name", track.replacementProviderName.orEmpty())
             putString("replacement_cover_url", track.replacementCoverUrl.orEmpty())
@@ -534,11 +546,17 @@ class FuoPlaybackService : MediaSessionService() {
         lyrics = lyrics,
         providerName = providerName,
         isSmartReplacement = isSmartReplacement,
+        originalId = originalId,
         originalTitle = originalTitle,
+        originalArtists = originalArtists,
+        originalAlbum = originalAlbum,
+        originalSource = originalSource,
         originalProviderName = originalProviderName,
         originalCoverUrl = originalCoverUrl,
+        replacementId = replacementId,
         replacementTitle = replacementTitle,
         replacementArtists = replacementArtists,
+        replacementAlbum = replacementAlbum,
         replacementSource = replacementSource,
         replacementProviderName = replacementProviderName,
         replacementCoverUrl = replacementCoverUrl,

@@ -840,38 +840,6 @@ fun PlaybackPolicySettingsPanel(controller: FuoPlayerController) {
                         enabled = !controller.isLoading,
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier.weight(1f),
-                        text = "使用替换信息",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = controller.smartReplacementUseReplacementMetadata,
-                        enabled = !controller.isLoading,
-                        onCheckedChange = controller::onSmartReplacementUseReplacementMetadataChange,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        modifier = Modifier.weight(1f),
-                        text = "使用替换歌词",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Switch(
-                        checked = controller.smartReplacementUseReplacementLyrics,
-                        enabled = !controller.isLoading,
-                        onCheckedChange = controller::onSmartReplacementUseReplacementLyricsChange,
-                    )
-                }
             }
         }
     }

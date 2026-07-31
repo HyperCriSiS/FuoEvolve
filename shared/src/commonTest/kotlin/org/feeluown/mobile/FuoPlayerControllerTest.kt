@@ -319,8 +319,6 @@ class FuoPlayerControllerTest {
                     AppSettings(
                         enabledProviderIds = setOf("netease", "qqmusic", "bilibili"),
                         smartReplacementProviderIds = setOf("qqmusic"),
-                        smartReplacementUseReplacementMetadata = false,
-                        smartReplacementUseReplacementLyrics = false,
                     ),
                 ),
                 scope = controllerScope,
@@ -415,6 +413,57 @@ class FuoPlayerControllerTest {
             assertEquals(listOf(comment), controller.selectedTrackComments)
             assertEquals(video, controller.selectedTrackVideo)
             assertEquals("https://example.com/mv.mp4", controller.selectedVideoPayload?.url)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun playbackDetailActionsTargetOriginalAndReplacementProviderTracks() = runTest {
+        val playedTrack = providerTrack("netease:1", "替换后的标题").copy(
+            source = "qqmusic",
+            title = "替换后的标题",
+            artists = "替换歌手",
+            album = "替换专辑",
+            providerId = "netease:1",
+            providerName = "QQ 音乐",
+            isSmartReplacement = true,
+            originalId = "netease:1",
+            originalTitle = "原始标题",
+            originalArtists = "原始歌手",
+            originalAlbum = "原始专辑",
+            originalSource = "netease",
+            originalProviderName = "网易云音乐",
+            replacementId = "qqmusic:2",
+            replacementTitle = "替换后的标题",
+            replacementArtists = "替换歌手",
+            replacementAlbum = "替换专辑",
+            replacementSource = "qqmusic",
+            replacementProviderName = "QQ 音乐",
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = FakeProviderRepository(listOf(playedTrack)),
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.openOriginalTrackDetail(playedTrack)
+            assertEquals("netease:1", controller.selectedTrack?.id)
+            assertEquals("网易云音乐", controller.selectedTrack?.providerName)
+            assertEquals("原始标题", controller.selectedTrack?.title)
+            assertEquals(false, controller.selectedTrack?.isSmartReplacement)
+
+            controller.openReplacementTrackDetail(playedTrack)
+            assertEquals("qqmusic:2", controller.selectedTrack?.id)
+            assertEquals("qqmusic", controller.selectedTrack?.source)
+            assertEquals("替换专辑", controller.selectedTrack?.album)
+            assertEquals("QQ 音乐", controller.selectedTrack?.providerName)
+            assertEquals(false, controller.selectedTrack?.isSmartReplacement)
         } finally {
             controllerScope.cancel()
         }
@@ -632,7 +681,7 @@ class FuoPlayerControllerTest {
     }
 
     @Test
-    fun smartReplacementCanUseReplacementSourceOptions() = runTest {
+    fun smartReplacementAlwaysUsesOriginalMetadataAndLyrics() = runTest {
         val provider = FakeProviderRepository(listOf(providerTrack("provider:1", "First")))
         val engine = FakePlaybackEngine()
         val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
@@ -642,12 +691,6 @@ class FuoPlayerControllerTest {
                 localRepository = FakeLocalMusicRepository(),
                 downloadRepository = FakeDownloadRepository(emptyMap()),
                 playbackEngine = engine,
-                settingsRepository = FakeSettingsStore(
-                    AppSettings(
-                        smartReplacementUseReplacementMetadata = true,
-                        smartReplacementUseReplacementLyrics = true,
-                    ),
-                ),
                 scope = controllerScope,
             )
 
@@ -658,8 +701,8 @@ class FuoPlayerControllerTest {
             controller.playFromSearch(0)
             advanceUntilIdle()
 
-            assertEquals(false, provider.lastSmartReplacementUseOriginalMetadata)
-            assertEquals(false, provider.lastSmartReplacementUseOriginalLyrics)
+            assertEquals(true, provider.lastSmartReplacementUseOriginalMetadata)
+            assertEquals(true, provider.lastSmartReplacementUseOriginalLyrics)
         } finally {
             controllerScope.cancel()
         }
@@ -683,8 +726,6 @@ class FuoPlayerControllerTest {
                         unavailablePlaybackPolicy = UnavailablePlaybackPolicy.SmartReplace,
                         smartReplacementProviderIds = setOf("qqmusic", "bilibili"),
                         smartReplacementMinScore = 0.75,
-                        smartReplacementUseReplacementMetadata = true,
-                        smartReplacementUseReplacementLyrics = true,
                     ),
                 ),
                 scope = controllerScope,
@@ -703,8 +744,8 @@ class FuoPlayerControllerTest {
             assertEquals(UnavailablePlaybackPolicy.SmartReplace, request?.unavailablePolicy)
             assertEquals(setOf("qqmusic", "bilibili"), request?.smartReplacementProviderIds)
             assertEquals(0.75, request?.smartReplacementMinScore)
-            assertEquals(false, request?.smartReplacementUseOriginalMetadata)
-            assertEquals(false, request?.smartReplacementUseOriginalLyrics)
+            assertEquals(true, request?.smartReplacementUseOriginalMetadata)
+            assertEquals(true, request?.smartReplacementUseOriginalLyrics)
         } finally {
             controllerScope.cancel()
         }
@@ -2419,8 +2460,6 @@ class FuoPlayerControllerTest {
                 wifiAudioQualityPolicy = AudioQualityPolicy.Highest,
                 cellularAudioQualityPolicy = AudioQualityPolicy.Low,
                 unavailablePlaybackPolicy = UnavailablePlaybackPolicy.Skip,
-                smartReplacementUseReplacementMetadata = true,
-                smartReplacementUseReplacementLyrics = true,
                 lyricFontSize = LyricFontSize.Large,
                 themeMode = ThemeMode.Dark,
                 themeColorScheme = ThemeColorScheme.OceanBlue,
@@ -2468,8 +2507,6 @@ class FuoPlayerControllerTest {
             assertEquals(AudioQualityPolicy.Highest, controller.wifiAudioQualityPolicy)
             assertEquals(AudioQualityPolicy.Low, controller.cellularAudioQualityPolicy)
             assertEquals(UnavailablePlaybackPolicy.Skip, controller.unavailablePlaybackPolicy)
-            assertEquals(true, controller.smartReplacementUseReplacementMetadata)
-            assertEquals(true, controller.smartReplacementUseReplacementLyrics)
             assertEquals(LyricFontSize.Large, controller.lyricFontSize)
             assertEquals(ThemeMode.Dark, controller.themeMode)
             assertEquals(ThemeColorScheme.OceanBlue, controller.themeColorScheme)
@@ -2489,8 +2526,6 @@ class FuoPlayerControllerTest {
             controller.onWifiAudioQualityPolicyChange(AudioQualityPolicy.High)
             controller.onCellularAudioQualityPolicyChange(AudioQualityPolicy.Standard)
             controller.onUnavailablePlaybackPolicyChange(UnavailablePlaybackPolicy.SmartReplace)
-            controller.onSmartReplacementUseReplacementMetadataChange(false)
-            controller.onSmartReplacementUseReplacementLyricsChange(false)
             controller.onLyricFontSizeChange(LyricFontSize.Medium)
             controller.onThemeModeChange(ThemeMode.Light)
             controller.onThemeColorSchemeChange(ThemeColorScheme.FuoGreen)
@@ -2512,8 +2547,6 @@ class FuoPlayerControllerTest {
             assertEquals(AudioQualityPolicy.High, store.saved.wifiAudioQualityPolicy)
             assertEquals(AudioQualityPolicy.Standard, store.saved.cellularAudioQualityPolicy)
             assertEquals(UnavailablePlaybackPolicy.SmartReplace, store.saved.unavailablePlaybackPolicy)
-            assertEquals(false, store.saved.smartReplacementUseReplacementMetadata)
-            assertEquals(false, store.saved.smartReplacementUseReplacementLyrics)
             assertEquals(LyricFontSize.Medium, store.saved.lyricFontSize)
             assertEquals(ThemeMode.Light, store.saved.themeMode)
             assertEquals(ThemeColorScheme.FuoGreen, store.saved.themeColorScheme)

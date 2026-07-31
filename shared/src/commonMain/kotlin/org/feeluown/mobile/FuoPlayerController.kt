@@ -316,10 +316,6 @@ class FuoPlayerController(
         private set
     var smartReplacementMinScore by mutableStateOf(DEFAULT_SMART_REPLACEMENT_MIN_SCORE)
         private set
-    var smartReplacementUseReplacementMetadata by mutableStateOf(false)
-        private set
-    var smartReplacementUseReplacementLyrics by mutableStateOf(false)
-        private set
     var lyricFontSize by mutableStateOf(LyricFontSize.Small)
         private set
     var themeMode by mutableStateOf(ThemeMode.System)
@@ -1369,16 +1365,6 @@ class FuoPlayerController(
         persistSettings()
     }
 
-    fun onSmartReplacementUseReplacementMetadataChange(value: Boolean) {
-        smartReplacementUseReplacementMetadata = value
-        persistSettings()
-    }
-
-    fun onSmartReplacementUseReplacementLyricsChange(value: Boolean) {
-        smartReplacementUseReplacementLyrics = value
-        persistSettings()
-    }
-
     fun onLyricFontSizeChange(value: LyricFontSize) {
         lyricFontSize = value
         persistSettings()
@@ -1640,8 +1626,8 @@ class FuoPlayerController(
                         unavailablePlaybackPolicy,
                         providerId?.let(::setOf).orEmpty(),
                         smartReplacementMinScore,
-                        smartReplacementUseOriginalMetadata = false,
-                        smartReplacementUseOriginalLyrics = false,
+                        smartReplacementUseOriginalMetadata = true,
+                        smartReplacementUseOriginalLyrics = true,
                     )
                 }
             }.onSuccess { payload ->
@@ -1962,6 +1948,90 @@ class FuoPlayerController(
         selectedTrackVideo = null
         selectedTrackRelatedError = null
         loadSelectedTrackRelated(track)
+    }
+
+    fun openOriginalTrackDetail(track: MusicTrack) {
+        closeFullPlayer()
+        openTrackDetail(track.originalDetailTrack())
+    }
+
+    fun openReplacementTrackDetail(track: MusicTrack) {
+        val detailTrack = track.replacementDetailTrack() ?: return
+        closeFullPlayer()
+        openTrackDetail(detailTrack)
+    }
+
+    private fun MusicTrack.originalDetailTrack(): MusicTrack {
+        if (!isSmartReplacement) return this
+        val detailId = originalId ?: providerId ?: id
+        val detailSource = originalSource
+            ?: detailId.substringBefore(':').takeIf { it.isNotBlank() }
+            ?: source
+        return copy(
+            id = detailId,
+            title = originalTitle ?: title,
+            artists = originalArtists ?: artists,
+            album = originalAlbum ?: album,
+            source = detailSource,
+            sourceType = TrackSourceType.Provider,
+            localUri = null,
+            coverUrl = originalCoverUrl ?: coverUrl,
+            providerId = detailId,
+            providerName = originalProviderName ?: detailSource,
+            isSmartReplacement = false,
+            originalId = null,
+            originalTitle = null,
+            originalArtists = null,
+            originalAlbum = null,
+            originalSource = null,
+            originalProviderName = null,
+            originalCoverUrl = null,
+            replacementId = null,
+            replacementTitle = null,
+            replacementArtists = null,
+            replacementAlbum = null,
+            replacementSource = null,
+            replacementProviderName = null,
+            replacementCoverUrl = null,
+            replacementStrategy = null,
+            replacementScore = null,
+        )
+    }
+
+    private fun MusicTrack.replacementDetailTrack(): MusicTrack? {
+        val detailId = replacementId?.takeIf { it.isNotBlank() } ?: return null
+        val detailSource = replacementSource
+            ?: detailId.substringBefore(':').takeIf { it.isNotBlank() }
+            ?: return null
+        return copy(
+            id = detailId,
+            title = replacementTitle ?: title,
+            artists = replacementArtists ?: artists,
+            album = replacementAlbum ?: album,
+            source = detailSource,
+            sourceType = TrackSourceType.Provider,
+            localUri = null,
+            coverUrl = replacementCoverUrl ?: coverUrl,
+            providerId = detailId,
+            providerName = replacementProviderName ?: detailSource,
+            isSmartReplacement = false,
+            originalId = null,
+            originalTitle = null,
+            originalArtists = null,
+            originalAlbum = null,
+            originalSource = null,
+            originalProviderName = null,
+            originalCoverUrl = null,
+            replacementId = null,
+            replacementTitle = null,
+            replacementArtists = null,
+            replacementAlbum = null,
+            replacementSource = null,
+            replacementProviderName = null,
+            replacementCoverUrl = null,
+            replacementStrategy = null,
+            replacementScore = null,
+        )
     }
 
     fun openSharedResource(text: String) {
@@ -3245,8 +3315,8 @@ class FuoPlayerController(
                     unavailablePlaybackPolicy,
                     selectedSmartReplacementProviderIds(),
                     smartReplacementMinScore,
-                    !smartReplacementUseReplacementMetadata,
-                    !smartReplacementUseReplacementLyrics,
+                    true,
+                    true,
                 )
                 downloadRepository.download(track, payload)
             }
@@ -3639,8 +3709,8 @@ class FuoPlayerController(
                             unavailablePlaybackPolicy,
                             selectedSmartReplacementProviderIds(),
                             smartReplacementMinScore,
-                            !smartReplacementUseReplacementMetadata,
-                            !smartReplacementUseReplacementLyrics,
+                            true,
+                            true,
                         )
                     if (requestSerial != playRequestSerial) return@playRequest
                     val nextParts = payload.parts
@@ -3662,11 +3732,17 @@ class FuoPlayerController(
                         durationMs = if (isMultipartPlayback) playbackTrack.durationMs else payload.durationMs ?: playbackTrack.durationMs,
                         providerName = payload.providerName ?: playbackTrack.providerName,
                         isSmartReplacement = payload.isSmartReplacement,
+                        originalId = payload.originalId,
                         originalTitle = payload.originalTitle,
+                        originalArtists = payload.originalArtists,
+                        originalAlbum = payload.originalAlbum,
+                        originalSource = payload.originalSource,
                         originalProviderName = payload.originalProviderName,
                         originalCoverUrl = payload.originalCoverUrl,
+                        replacementId = payload.replacementId,
                         replacementTitle = payload.replacementTitle,
                         replacementArtists = payload.replacementArtists,
+                        replacementAlbum = payload.replacementAlbum,
                         replacementSource = payload.replacementSource,
                         replacementProviderName = payload.replacementProviderName,
                         replacementCoverUrl = payload.replacementCoverUrl,
@@ -3711,8 +3787,8 @@ class FuoPlayerController(
                             unavailablePolicy = unavailablePlaybackPolicy,
                             smartReplacementProviderIds = selectedSmartReplacementProviderIds(),
                             smartReplacementMinScore = smartReplacementMinScore,
-                            smartReplacementUseOriginalMetadata = !smartReplacementUseReplacementMetadata,
-                            smartReplacementUseOriginalLyrics = !smartReplacementUseReplacementLyrics,
+                            smartReplacementUseOriginalMetadata = true,
+                            smartReplacementUseOriginalLyrics = true,
                         ),
                     )
                     displayQueue()
@@ -3725,8 +3801,8 @@ class FuoPlayerController(
                                     unavailablePolicy = unavailablePlaybackPolicy,
                                     smartReplacementProviderIds = selectedSmartReplacementProviderIds(),
                                     smartReplacementMinScore = smartReplacementMinScore,
-                                    smartReplacementUseOriginalMetadata = !smartReplacementUseReplacementMetadata,
-                                    smartReplacementUseOriginalLyrics = !smartReplacementUseReplacementLyrics,
+                                    smartReplacementUseOriginalMetadata = true,
+                                    smartReplacementUseOriginalLyrics = true,
                                 ),
                             )
                         }
@@ -3961,11 +4037,17 @@ class FuoPlayerController(
             audioQuality = null,
             providerName = providerName,
             isSmartReplacement = isSmartReplacement,
+            originalId = originalId,
             originalTitle = originalTitle,
+            originalArtists = originalArtists,
+            originalAlbum = originalAlbum,
+            originalSource = originalSource,
             originalProviderName = originalProviderName,
             originalCoverUrl = originalCoverUrl,
+            replacementId = replacementId,
             replacementTitle = replacementTitle,
             replacementArtists = replacementArtists,
+            replacementAlbum = replacementAlbum,
             replacementSource = replacementSource,
             replacementProviderName = replacementProviderName,
             replacementCoverUrl = replacementCoverUrl,
@@ -4253,8 +4335,6 @@ class FuoPlayerController(
         unavailablePlaybackPolicy = settings.unavailablePlaybackPolicy
         smartReplacementProviderIds = settings.smartReplacementProviderIds
         smartReplacementMinScore = settings.smartReplacementMinScore.coerceIn(0.0, 1.0)
-        smartReplacementUseReplacementMetadata = settings.smartReplacementUseReplacementMetadata
-        smartReplacementUseReplacementLyrics = settings.smartReplacementUseReplacementLyrics
         lyricFontSize = settings.lyricFontSize
         themeMode = settings.themeMode
         themeColorScheme = settings.themeColorScheme
@@ -4294,8 +4374,6 @@ class FuoPlayerController(
             unavailablePlaybackPolicy = unavailablePlaybackPolicy,
             smartReplacementProviderIds = smartReplacementProviderIds,
             smartReplacementMinScore = smartReplacementMinScore,
-            smartReplacementUseReplacementMetadata = smartReplacementUseReplacementMetadata,
-            smartReplacementUseReplacementLyrics = smartReplacementUseReplacementLyrics,
             lyricFontSize = lyricFontSize,
             themeMode = themeMode,
             themeColorScheme = themeColorScheme,

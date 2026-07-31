@@ -30,8 +30,8 @@ private fun PlaybackRequest.toJsonObject(): JSONObject = JSONObject()
     .put("unavailable_policy", unavailablePolicy.name)
     .put("replacement_provider_ids", JSONArray(smartReplacementProviderIds.toList()))
     .put("replacement_min_score", smartReplacementMinScore)
-    .put("use_original_metadata", smartReplacementUseOriginalMetadata)
-    .put("use_original_lyrics", smartReplacementUseOriginalLyrics)
+    .put("use_original_metadata", true)
+    .put("use_original_lyrics", true)
 
 private fun JSONObject.toPlaybackRequest(): PlaybackRequest = PlaybackRequest(
     track = getJSONObject("track").toMusicTrack(),
@@ -43,8 +43,8 @@ private fun JSONObject.toPlaybackRequest(): PlaybackRequest = PlaybackRequest(
         ?.let { ids -> buildSet { for (index in 0 until ids.length()) add(ids.getString(index)) } }
         .orEmpty(),
     smartReplacementMinScore = optDouble("replacement_min_score", DEFAULT_SMART_REPLACEMENT_MIN_SCORE),
-    smartReplacementUseOriginalMetadata = optBoolean("use_original_metadata"),
-    smartReplacementUseOriginalLyrics = optBoolean("use_original_lyrics"),
+    smartReplacementUseOriginalMetadata = true,
+    smartReplacementUseOriginalLyrics = true,
 )
 
 internal fun MusicTrack.toJsonObject(): JSONObject = JSONObject()
@@ -61,11 +61,17 @@ internal fun MusicTrack.toJsonObject(): JSONObject = JSONObject()
     .put("provider_id", providerId)
     .put("provider_name", providerName)
     .put("smart_replacement", isSmartReplacement)
+    .put("original_id", originalId)
     .put("original_title", originalTitle)
+    .put("original_artists", originalArtists)
+    .put("original_album", originalAlbum)
+    .put("original_source", originalSource)
     .put("original_provider_name", originalProviderName)
     .put("original_cover_url", originalCoverUrl)
+    .put("replacement_id", replacementId)
     .put("replacement_title", replacementTitle)
     .put("replacement_artists", replacementArtists)
+    .put("replacement_album", replacementAlbum)
     .put("replacement_source", replacementSource)
     .put("replacement_provider_name", replacementProviderName)
     .put("replacement_cover_url", replacementCoverUrl)
@@ -88,11 +94,17 @@ internal fun JSONObject.toMusicTrack(): MusicTrack = MusicTrack(
     providerId = optString("provider_id").takeIf { it.isNotBlank() },
     providerName = optString("provider_name").takeIf { it.isNotBlank() },
     isSmartReplacement = optBoolean("smart_replacement"),
+    originalId = optString("original_id").takeIf { it.isNotBlank() },
     originalTitle = optString("original_title").takeIf { it.isNotBlank() },
+    originalArtists = optString("original_artists").takeIf { it.isNotBlank() },
+    originalAlbum = optString("original_album").takeIf { it.isNotBlank() },
+    originalSource = optString("original_source").takeIf { it.isNotBlank() },
     originalProviderName = optString("original_provider_name").takeIf { it.isNotBlank() },
     originalCoverUrl = optString("original_cover_url").takeIf { it.isNotBlank() },
+    replacementId = optString("replacement_id").takeIf { it.isNotBlank() },
     replacementTitle = optString("replacement_title").takeIf { it.isNotBlank() },
     replacementArtists = optString("replacement_artists").takeIf { it.isNotBlank() },
+    replacementAlbum = optString("replacement_album").takeIf { it.isNotBlank() },
     replacementSource = optString("replacement_source").takeIf { it.isNotBlank() },
     replacementProviderName = optString("replacement_provider_name").takeIf { it.isNotBlank() },
     replacementCoverUrl = optString("replacement_cover_url").takeIf { it.isNotBlank() },

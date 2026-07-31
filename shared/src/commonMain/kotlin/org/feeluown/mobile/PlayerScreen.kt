@@ -281,6 +281,7 @@ fun FullPlayer(controller: FuoPlayerController) {
                                         currentPlaybackPartLabel(state),
                                         state.audioFormatInfo,
                                         state.audioDecoderInfo,
+                                        onOpenReplacementDetail = controller::openReplacementTrackDetail,
                                     )
                                     Text(
                                         text = currentTrack?.let(::artistAlbumLabel).orEmpty(),
@@ -374,6 +375,7 @@ fun FullPlayer(controller: FuoPlayerController) {
                     currentPlaybackPartLabel(state),
                     state.audioFormatInfo,
                     state.audioDecoderInfo,
+                    onOpenReplacementDetail = controller::openReplacementTrackDetail,
                 )
                 Text(
                     text = currentTrack?.let(::artistAlbumLabel).orEmpty(),
@@ -417,10 +419,7 @@ fun NowPlayingTrackAction(controller: FuoPlayerController, track: MusicTrack) {
         onOpenArtist = { controller.openTrackArtist(track) },
         onOpenAlbum = { controller.openTrackAlbum(track) },
         onOpenDetail = if (track.sourceType == TrackSourceType.Provider) {
-            {
-                controller.closeFullPlayer()
-                controller.openTrackDetail(track)
-            }
+            { controller.openOriginalTrackDetail(track) }
         } else {
             null
         },
@@ -498,6 +497,7 @@ fun PlayerTitleBlock(
     partLabel: String?,
     audioFormatInfo: AudioFormatInfo?,
     audioDecoderInfo: AudioDecoderInfo?,
+    onOpenReplacementDetail: ((MusicTrack) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -518,7 +518,13 @@ fun PlayerTitleBlock(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        PlayerInfoTags(track, audioQuality, audioFormatInfo, audioDecoderInfo)
+        PlayerInfoTags(
+            track = track,
+            audioQuality = audioQuality,
+            audioFormatInfo = audioFormatInfo,
+            audioDecoderInfo = audioDecoderInfo,
+            onOpenReplacementDetail = onOpenReplacementDetail,
+        )
     }
 }
 
@@ -528,6 +534,7 @@ fun PlayerInfoTags(
     audioQuality: String?,
     audioFormatInfo: AudioFormatInfo?,
     audioDecoderInfo: AudioDecoderInfo?,
+    onOpenReplacementDetail: ((MusicTrack) -> Unit)? = null,
 ) {
     var replacementInfoTrack by remember(track?.id) { mutableStateOf<MusicTrack?>(null) }
     var showAudioFormatInfo by remember(track?.id) { mutableStateOf(false) }
@@ -564,6 +571,9 @@ fun PlayerInfoTags(
         ReplacementInfoDialog(
             track = infoTrack,
             onDismiss = { replacementInfoTrack = null },
+            onOpenDetail = onOpenReplacementDetail
+                ?.takeIf { infoTrack.replacementId?.isNotBlank() == true }
+                ?.let { openDetail -> { openDetail(infoTrack) } },
         )
     }
     if (showAudioFormatInfo) {
@@ -632,7 +642,12 @@ fun InfoTag(text: String, onClick: (() -> Unit)? = null) {
 }
 
 @Composable
-fun ReplacementInfoDialog(track: MusicTrack, onDismiss: () -> Unit) {
+fun ReplacementInfoDialog(
+    track: MusicTrack,
+    onDismiss: () -> Unit,
+    onOpenDetail: (() -> Unit)? = null,
+) {
+    val detailAction = onOpenDetail?.takeIf { track.replacementId?.isNotBlank() == true }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("替换音频") },
@@ -652,9 +667,23 @@ fun ReplacementInfoDialog(track: MusicTrack, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    if (detailAction != null) detailAction()
+                },
+            ) {
+                Text(if (detailAction != null) "歌曲详情" else "关闭")
             }
+        },
+        dismissButton = if (detailAction != null) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+        } else {
+            null
         },
     )
 }

@@ -112,7 +112,7 @@ state, and the exact FeelUOwn provider implementation.
 | --- | --- |
 | 🎛️ Providers | Enable or disable packaged providers, reorder provider priority, manage provider login, and switch login mode per provider. |
 | 🎧 Audio quality | Separate Wi-Fi and cellular policies: highest, high, standard, or low-data. |
-| 🔁 Unavailable tracks | Smart replacement or skip. Smart replacement can choose providers, minimum score, replacement metadata, and replacement lyrics. |
+| 🔁 Unavailable tracks | Smart replacement or skip. Smart replacement can choose providers and minimum score while keeping the original track metadata and lyrics. |
 | 🖼️ Playback display | Lyrics font size, system/light/dark mode, dynamic color, and preset color schemes. |
 | 💽 Local music | Media permission entry, database-backed refresh, grouping by all/artist/album, directory inclusion, and minimum-duration filter. |
 | ✏️ Local metadata | Edit title/artist/album, search provider metadata, and download lyrics into app-private storage. |
