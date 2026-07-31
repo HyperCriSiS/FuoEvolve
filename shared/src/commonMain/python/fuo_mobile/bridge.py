@@ -508,6 +508,22 @@ FEATURE_DEFS = {
             "requires_login": True,
             "action": "current_user_fav_create_playlists_rd",
         },
+        {
+            "id": "bilibili_following_artists",
+            "title": "关注的 UP 主",
+            "category": "Mine",
+            "content_type": "Artists",
+            "requires_login": True,
+            "action": "user_following",
+        },
+        {
+            "id": "bilibili_collected_media",
+            "title": "收藏番剧/影视",
+            "category": "Mine",
+            "content_type": "Albums",
+            "requires_login": True,
+            "action": "media_user_collect",
+        },
     ],
     "ytmusic": [
         {
@@ -1389,6 +1405,14 @@ class FuoMobileBridge:
         if action == "current_user_fav_create_albums_rd":
             page = read_model_page(provider.current_user_fav_create_albums_rd(), offset=offset, limit=limit)
             return [], [], [self._remember_media_item(album, "album") for album in page["items"]], [], "", page
+        if action == "user_following":
+            page = empty_page(offset) if int_offset(offset) > 0 else read_one_shot_page(provider.user_following())
+            return [], [], [self._remember_media_item(artist, "artist") for artist in page["items"]], [], "", page
+        if action == "media_user_collect":
+            page = empty_page(offset) if int_offset(offset) > 0 else read_one_shot_page(
+                unique_models(provider.media_user_collect())
+            )
+            return [], [], [self._remember_media_item(album, "album") for album in page["items"]], [], "", page
         raise RuntimeError(f"unsupported feature action: {action}")
 
     def _playlist_from_id(self, playlist_id: str):
@@ -2231,6 +2255,14 @@ def read_model_page(value, offset: int = 0, limit: int = 60) -> Dict[str, Any]:
         return empty_page(safe_offset)
 
 
+def read_one_shot_page(value) -> Dict[str, Any]:
+    return {
+        "items": list(value or []),
+        "next_offset": 0,
+        "has_more": False,
+    }
+
+
 def page_result(items, offset: int, limit: int) -> Dict[str, Any]:
     values = list(items or [])
     page_items = values[:limit]
@@ -2261,6 +2293,18 @@ def int_limit(value) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 60
+
+
+def unique_models(values) -> List[Any]:
+    result = []
+    seen = set()
+    for value in values or []:
+        key = (getattr(value, "source", ""), getattr(value, "identifier", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 def is_unsupported_search_type(exc: Exception) -> bool:

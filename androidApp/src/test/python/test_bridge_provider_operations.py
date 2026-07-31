@@ -167,6 +167,36 @@ class _SavedLoginProvider:
         return []
 
 
+class _BilibiliContentProvider:
+    identifier = "bilibili"
+    name = "哔哩哔哩"
+
+    def __init__(self, logged_in=True):
+        self.user = object() if logged_in else None
+        self.following = [
+            SimpleNamespace(source="bilibili", identifier="100", name="UP 100", face="https://example.com/100.jpg"),
+            SimpleNamespace(source="bilibili", identifier="200", name="UP 200", face="https://example.com/200.jpg"),
+        ]
+        self.collected = [
+            SimpleNamespace(source="bilibili", identifier="media_1_11", name="番剧 1"),
+            SimpleNamespace(source="bilibili", identifier="media_1_11", name="番剧 1"),
+            SimpleNamespace(source="bilibili", identifier="media_2_22", name="影视 2"),
+        ]
+        self.following_calls = 0
+        self.collected_calls = 0
+
+    def get_current_user_or_none(self):
+        return self.user
+
+    def user_following(self):
+        self.following_calls += 1
+        return self.following
+
+    def media_user_collect(self):
+        self.collected_calls += 1
+        return self.collected
+
+
 class ProviderOperationBridgeTest(unittest.TestCase):
     def bridge(self, provider):
         bridge = FuoMobileBridge.__new__(FuoMobileBridge)
@@ -212,6 +242,40 @@ class ProviderOperationBridgeTest(unittest.TestCase):
         self.assertIn("current_user_dislike_create_songs_rd", [item["action"] for item in FEATURE_DEFS["qqmusic"]])
         self.assertIn("most_popular_videos", [item["action"] for item in FEATURE_DEFS["bilibili"]])
         self.assertIn("weekly_video_playlists", [item["action"] for item in FEATURE_DEFS["bilibili"]])
+        self.assertIn("user_following", [item["action"] for item in FEATURE_DEFS["bilibili"]])
+        self.assertIn("media_user_collect", [item["action"] for item in FEATURE_DEFS["bilibili"]])
+
+    def test_bilibili_content_features_return_one_shot_media_snapshots(self):
+        provider = _BilibiliContentProvider()
+        bridge = self.bridge(provider)
+
+        following = json.loads(bridge.load_feature("bilibili_following_artists", limit=1))
+        collected = json.loads(bridge.load_feature("bilibili_collected_media", limit=1))
+        following_next = json.loads(bridge.load_feature("bilibili_following_artists", offset=2))
+        collected_next = json.loads(bridge.load_feature("bilibili_collected_media", offset=2))
+
+        self.assertEqual(["UP 100", "UP 200"], [item["title"] for item in following["media_items"]])
+        self.assertEqual(["Artist", "Artist"], [item["type"] for item in following["media_items"]])
+        self.assertEqual(["番剧 1", "影视 2"], [item["title"] for item in collected["media_items"]])
+        self.assertEqual(["Album", "Album"], [item["type"] for item in collected["media_items"]])
+        self.assertFalse(following["has_more"])
+        self.assertEqual(0, following["next_offset"])
+        self.assertEqual([], following_next["media_items"])
+        self.assertFalse(following_next["has_more"])
+        self.assertEqual([], collected_next["media_items"])
+        self.assertFalse(collected_next["has_more"])
+        self.assertEqual(1, provider.following_calls)
+        self.assertEqual(1, provider.collected_calls)
+
+    def test_bilibili_content_features_require_login(self):
+        provider = _BilibiliContentProvider(logged_in=False)
+        bridge = self.bridge(provider)
+
+        payload = json.loads(bridge.load_feature("bilibili_following_artists"))
+
+        self.assertTrue(payload["is_login_required"])
+        self.assertEqual([], payload["media_items"])
+        self.assertEqual(0, provider.following_calls)
 
     def test_playlist_targets_require_login(self):
         bridge = self.bridge(_Provider(logged_in=False))

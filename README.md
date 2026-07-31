@@ -98,6 +98,8 @@ exposed in the app today.
 | Favorite playlists | ✅ | ✅ | ✅ | ✅ |
 | Favorite artists | ✅ | ✅ | ➖ | ✅ |
 | Favorite albums | ✅ | ✅ | ➖ | ✅ |
+| Followed Bilibili creators | ➖ | ➖ | ✅ | ➖ |
+| Collected anime / films | ➖ | ➖ | ✅ | ➖ |
 | Add song to user playlist | 🧩 | 🧩 | 🧩 | 🧩 |
 | Remove song from playlist | 🧩 | 🧩 | 🧩 | ➖ |
 | Similar songs / hot comments / song MV | 🧩 | 🧩 | 🧩 | 🧩 |
