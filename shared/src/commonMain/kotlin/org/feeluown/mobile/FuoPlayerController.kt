@@ -322,6 +322,8 @@ class FuoPlayerController(
         private set
     var themeColorScheme by mutableStateOf(ThemeColorScheme.Dynamic)
         private set
+    var dynamicCoverColorEnabled by mutableStateOf(false)
+        private set
     var debugLogLines by mutableStateOf<List<String>>(emptyList())
         private set
     var debugLogLevelFilters by mutableStateOf(DEFAULT_DEBUG_LOG_LEVEL_FILTERS)
@@ -1377,6 +1379,11 @@ class FuoPlayerController(
 
     fun onThemeColorSchemeChange(value: ThemeColorScheme) {
         themeColorScheme = value
+        persistSettings()
+    }
+
+    fun onDynamicCoverColorEnabledChange(value: Boolean) {
+        dynamicCoverColorEnabled = value
         persistSettings()
     }
 
@@ -4338,6 +4345,7 @@ class FuoPlayerController(
         lyricFontSize = settings.lyricFontSize
         themeMode = settings.themeMode
         themeColorScheme = settings.themeColorScheme
+        dynamicCoverColorEnabled = settings.dynamicCoverColorEnabled
     }
 
     private fun persistSettings() {
@@ -4377,6 +4385,7 @@ class FuoPlayerController(
             lyricFontSize = lyricFontSize,
             themeMode = themeMode,
             themeColorScheme = themeColorScheme,
+            dynamicCoverColorEnabled = dynamicCoverColorEnabled,
         )
     }
 

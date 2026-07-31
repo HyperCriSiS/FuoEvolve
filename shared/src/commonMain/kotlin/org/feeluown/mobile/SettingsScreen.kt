@@ -928,6 +928,22 @@ fun PlayerDisplaySettingsPanel(controller: FuoPlayerController) {
                     }
                 }
             }
+            FuoSettingRow(
+                modifier = Modifier.fillMaxWidth(),
+                title = "封面动态取色",
+                supportingText = "根据当前播放封面生成主题色；无封面或加载失败时沿用所选配色",
+                enabled = !controller.isLoading,
+                onClick = {
+                    controller.onDynamicCoverColorEnabledChange(!controller.dynamicCoverColorEnabled)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = controller.dynamicCoverColorEnabled,
+                        enabled = !controller.isLoading,
+                        onCheckedChange = controller::onDynamicCoverColorEnabledChange,
+                    )
+                },
+            )
         }
     }
 }
@@ -1465,14 +1481,16 @@ private fun debugLogLevelLabel(level: DebugLogLevel): String = when (level) {
 @Composable
 private fun debugLogLevelContainerColor(level: DebugLogLevel?) = when (level) {
     DebugLogLevel.Debug -> MaterialTheme.colorScheme.surfaceContainerHigh
-    DebugLogLevel.Info -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.20f)
-    DebugLogLevel.Warning -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
-    DebugLogLevel.Error -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
+    DebugLogLevel.Info -> MaterialTheme.colorScheme.secondaryContainer
+    DebugLogLevel.Warning -> MaterialTheme.colorScheme.tertiaryContainer
+    DebugLogLevel.Error -> MaterialTheme.colorScheme.errorContainer
     null -> MaterialTheme.colorScheme.surface
 }
 
 @Composable
 private fun debugLogLevelContentColor(level: DebugLogLevel?) = when (level) {
+    DebugLogLevel.Info -> MaterialTheme.colorScheme.onSecondaryContainer
+    DebugLogLevel.Warning -> MaterialTheme.colorScheme.onTertiaryContainer
     DebugLogLevel.Error -> MaterialTheme.colorScheme.onErrorContainer
     else -> MaterialTheme.colorScheme.onSurface
 }
@@ -1510,6 +1528,7 @@ fun PermissionPanel(onRequestAudioPermission: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(

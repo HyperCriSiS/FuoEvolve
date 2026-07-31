@@ -29,7 +29,13 @@ import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.skia.ColorAlphaType
+import org.jetbrains.skia.Data
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.Pixmap
+import org.jetbrains.skia.SamplingMode
+import org.jetbrains.skia.impl.use
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSURL
@@ -38,6 +44,8 @@ import platform.Foundation.dataTaskWithURL
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
+private const val MAX_COVER_SIZE_PX = 768
+
 @Composable
 actual fun PlatformCoverArt(
     title: String,
@@ -45,11 +53,7 @@ actual fun PlatformCoverArt(
     modifier: Modifier,
     placeholder: CoverPlaceholder,
 ) {
-    var image by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(imageUrl) {
-        image = imageUrl?.takeIf { it.isNotBlank() }?.let { loadImage(it) }
-    }
-    val bitmap = image
+    val bitmap = rememberPlatformCoverImage(imageUrl)
     if (bitmap != null) {
         Image(bitmap, title, modifier, contentScale = ContentScale.Crop)
     } else {
@@ -73,6 +77,17 @@ actual fun PlatformCoverArt(
     }
 }
 
+@Composable
+internal actual fun rememberPlatformCoverImage(imageUrl: String?): ImageBitmap? {
+    var image by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(imageUrl) {
+        image = imageUrl?.takeIf { it.isNotBlank() }?.let {
+            runCatching { PlatformCoverImageCache.getOrLoad(it) { loadImage(it) } }.getOrNull()
+        }
+    }
+    return image
+}
+
 @OptIn(ExperimentalForeignApi::class)
 private suspend fun loadImage(imageUrl: String): ImageBitmap? = withContext(Dispatchers.Default) {
     val resolvedUrl = when {
@@ -92,7 +107,36 @@ private suspend fun loadImage(imageUrl: String): ImageBitmap? = withContext(Disp
         fetchData(url)
     } ?: return@withContext null
     val bytes = data.bytes?.reinterpret<ByteVar>()?.readBytes(data.length.toInt()) ?: return@withContext null
-    runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+    runCatching {
+        Image.makeFromEncoded(bytes).toCoverImageBitmap()
+    }.getOrNull()
+}
+
+private fun Image.toCoverImageBitmap(): ImageBitmap {
+    if (width <= MAX_COVER_SIZE_PX && height <= MAX_COVER_SIZE_PX) {
+        return toComposeImageBitmap()
+    }
+
+    val scale = minOf(
+        MAX_COVER_SIZE_PX.toFloat() / width,
+        MAX_COVER_SIZE_PX.toFloat() / height,
+    )
+    val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+    val imageInfo = ImageInfo.makeN32(targetWidth, targetHeight, ColorAlphaType.PREMUL)
+    val data = Data.makeUninitialized(imageInfo.computeMinByteSize())
+    return data.use { pixelData ->
+        Pixmap().use { pixmap ->
+            pixmap.reset(
+                info = imageInfo,
+                addr = pixelData.writableData(),
+                rowBytes = imageInfo.minRowBytes,
+                underlyingMemoryOwner = pixelData,
+            )
+            check(scalePixels(pixmap, SamplingMode.MITCHELL, cache = false))
+            Image.makeFromPixmap(pixmap).toComposeImageBitmap()
+        }
+    }
 }
 
 private suspend fun fetchData(url: NSURL): NSData? = suspendCoroutine { continuation ->
