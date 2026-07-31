@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -166,29 +167,49 @@ internal fun FuoMetadataChip(
     leadingIcon: ImageVector? = null,
     onClick: (() -> Unit)? = null,
 ) {
+    val chipModifier = modifier.height(AssistChipDefaults.Height)
+    val chipShape = AssistChipDefaults.shape
+    val chipColors = AssistChipDefaults.assistChipColors()
+    val chipBorder = AssistChipDefaults.assistChipBorder(enabled = true)
     if (onClick != null) {
         AssistChip(
-            modifier = modifier.height(32.dp),
+            modifier = chipModifier,
             onClick = onClick,
             label = { Text(label, maxLines = 1) },
             leadingIcon = leadingIcon?.let { icon ->
-                { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                { Icon(icon, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize)) }
             },
+            shape = chipShape,
+            colors = chipColors,
+            border = chipBorder,
         )
     } else {
         Surface(
-            modifier = modifier,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            shape = MaterialTheme.shapes.extraLarge,
+            modifier = chipModifier,
+            color = chipColors.containerColor,
+            contentColor = chipColors.labelColor,
+            shape = chipShape,
+            border = chipBorder,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                leadingIcon?.let { Icon(it, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                leadingIcon?.let {
+                    Icon(
+                        it,
+                        contentDescription = null,
+                        tint = chipColors.leadingIconContentColor,
+                        modifier = Modifier.size(AssistChipDefaults.IconSize),
+                    )
+                }
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = chipColors.labelColor,
+                    maxLines = 1,
+                )
             }
         }
     }
