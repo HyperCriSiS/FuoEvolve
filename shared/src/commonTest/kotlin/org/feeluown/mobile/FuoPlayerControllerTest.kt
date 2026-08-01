@@ -2463,6 +2463,7 @@ class FuoPlayerControllerTest {
                 lyricFontSize = LyricFontSize.Large,
                 themeMode = ThemeMode.Dark,
                 themeColorScheme = ThemeColorScheme.OceanBlue,
+                dynamicCoverColorEnabled = true,
             ),
         )
         val provider = FakeProviderRepository(emptyList())
@@ -2510,6 +2511,7 @@ class FuoPlayerControllerTest {
             assertEquals(LyricFontSize.Large, controller.lyricFontSize)
             assertEquals(ThemeMode.Dark, controller.themeMode)
             assertEquals(ThemeColorScheme.OceanBlue, controller.themeColorScheme)
+            assertTrue(controller.dynamicCoverColorEnabled)
             assertEquals(AudioQualityPolicy.Highest, provider.lastWifiAudioQualityPolicy)
             assertEquals(AudioQualityPolicy.Low, provider.lastCellularAudioQualityPolicy)
 
@@ -2529,6 +2531,7 @@ class FuoPlayerControllerTest {
             controller.onLyricFontSizeChange(LyricFontSize.Medium)
             controller.onThemeModeChange(ThemeMode.Light)
             controller.onThemeColorSchemeChange(ThemeColorScheme.FuoGreen)
+            controller.onDynamicCoverColorEnabledChange(false)
             advanceUntilIdle()
 
             assertEquals(ProviderLoginMode.WebView, store.saved.providerLoginMode)
@@ -2550,6 +2553,7 @@ class FuoPlayerControllerTest {
             assertEquals(LyricFontSize.Medium, store.saved.lyricFontSize)
             assertEquals(ThemeMode.Light, store.saved.themeMode)
             assertEquals(ThemeColorScheme.FuoGreen, store.saved.themeColorScheme)
+            assertFalse(store.saved.dynamicCoverColorEnabled)
             assertEquals(AudioQualityPolicy.High, provider.lastWifiAudioQualityPolicy)
             assertEquals(AudioQualityPolicy.Standard, provider.lastCellularAudioQualityPolicy)
         } finally {

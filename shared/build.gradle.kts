@@ -29,6 +29,7 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.animation)
             implementation(libs.compose.material3.expressive)
+            implementation(libs.material.kolor)
             implementation(compose.materialIconsExtended)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)

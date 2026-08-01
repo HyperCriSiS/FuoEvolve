@@ -89,6 +89,18 @@ import kotlin.math.roundToInt
 @Composable
 @OptIn(ExperimentalSharedTransitionApi::class)
 fun MiniPlayer(controller: FuoPlayerController) {
+    PlayerDynamicColorTheme(
+        themeMode = controller.themeMode,
+        dynamicCoverColorEnabled = controller.dynamicCoverColorEnabled,
+        coverImageUrl = controller.playbackState.currentTrack?.coverUrl,
+    ) {
+        MiniPlayerContent(controller)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalSharedTransitionApi::class)
+private fun MiniPlayerContent(controller: FuoPlayerController) {
     val state = controller.playbackState
     val isLoadingAudio = state.status == PlayerStatus.Loading
     val isWideLayout = LocalAppLayoutInfo.current.useWideLayout
@@ -194,8 +206,19 @@ private fun PlayingProgressIndicator(
 }
 
 @Composable
-@OptIn(ExperimentalSharedTransitionApi::class)
 fun FullPlayer(controller: FuoPlayerController) {
+    PlayerDynamicColorTheme(
+        themeMode = controller.themeMode,
+        dynamicCoverColorEnabled = controller.dynamicCoverColorEnabled,
+        coverImageUrl = controller.playbackState.currentTrack?.coverUrl,
+    ) {
+        FullPlayerContent(controller)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalSharedTransitionApi::class)
+private fun FullPlayerContent(controller: FuoPlayerController) {
     val state = controller.playbackState
     val currentTrack = state.currentTrack
     val pagerState = rememberPagerState(

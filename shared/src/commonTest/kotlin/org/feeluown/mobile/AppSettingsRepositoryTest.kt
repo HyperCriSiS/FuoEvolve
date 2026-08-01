@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AppSettingsRepositoryTest {
@@ -92,6 +93,25 @@ class AppSettingsRepositoryTest {
         repository.update { it.copy(themeMode = ThemeMode.Dark) }
 
         assertEquals(ThemeMode.Dark, repository.state.value.settings.themeMode)
+    }
+
+    @Test
+    fun missingDynamicCoverSettingUsesDisabledDefault() = runTest {
+        val dataStore = FakePreferencesDataStore(
+            mutablePreferencesOf(
+                stringPreferencesKey("app_settings_json_v1") to "{\"onboardingCompleted\":true}",
+            ),
+        )
+        val repository = DataStoreAppSettingsRepository(
+            dataStore = dataStore,
+            legacyLoader = null,
+            scope = backgroundScope,
+        )
+
+        val settings = repository.awaitSettings()
+
+        assertTrue(settings.onboardingCompleted)
+        assertFalse(settings.dynamicCoverColorEnabled)
     }
 
     private class FakePreferencesDataStore(

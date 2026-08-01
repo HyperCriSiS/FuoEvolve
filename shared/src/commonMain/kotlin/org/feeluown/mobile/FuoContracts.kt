@@ -70,7 +70,7 @@ enum class RepeatMode(
 enum class ThemeColorScheme(
     val label: String,
 ) {
-    Dynamic("动态颜色"),
+    Dynamic("系统动态"),
     ExpressiveDefault("Expressive 默认"),
     FuoGreen("青绿"),
     OceanBlue("海蓝"),
@@ -111,6 +111,7 @@ data class AppSettings(
     val lyricFontSize: LyricFontSize = LyricFontSize.Small,
     val themeMode: ThemeMode = ThemeMode.System,
     val themeColorScheme: ThemeColorScheme = ThemeColorScheme.Dynamic,
+    val dynamicCoverColorEnabled: Boolean = false,
 )
 
 @Serializable

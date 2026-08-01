@@ -47,16 +47,7 @@ actual fun PlatformCoverArt(
     modifier: Modifier,
     placeholder: CoverPlaceholder,
 ) {
-    val context = LocalContext.current
-    var image by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
-
-    LaunchedEffect(imageUrl) {
-        image = imageUrl?.takeIf { it.isNotBlank() }?.let {
-            runCatching { loadCover(context, it) }.getOrNull()
-        }
-    }
-
-    val bitmap = image
+    val bitmap = rememberPlatformCoverImage(imageUrl)
     if (bitmap != null) {
         Image(
             bitmap = bitmap,
@@ -67,6 +58,21 @@ actual fun PlatformCoverArt(
     } else {
         CoverFallback(placeholder = placeholder, modifier = modifier)
     }
+}
+
+@Composable
+internal actual fun rememberPlatformCoverImage(imageUrl: String?): ImageBitmap? {
+    val context = LocalContext.current
+    var image by remember(imageUrl) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(imageUrl) {
+        image = imageUrl?.takeIf { it.isNotBlank() }?.let {
+            runCatching {
+                PlatformCoverImageCache.getOrLoad(it) { loadCover(context, it) }
+            }.getOrNull()
+        }
+    }
+    return image
 }
 
 private suspend fun loadCover(context: Context, imageUrl: String): ImageBitmap? = withContext(Dispatchers.IO) {
