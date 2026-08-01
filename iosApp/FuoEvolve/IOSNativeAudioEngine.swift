@@ -217,7 +217,7 @@ final class IOSNativeAudioEngine: NSObject, NativeAudioEngine, IosAudioOutput {
     private func handleAudioSessionInterruption(_ notification: Notification) {
         guard
             pauseOnOtherAppPlayback,
-            let rawType = notification.userInfo?[AVAudioSession.interruptionTypeKey] as? UInt,
+            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
             AVAudioSession.InterruptionType(rawValue: rawType) == .began
         else {
             return

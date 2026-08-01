@@ -91,13 +91,7 @@ import kotlin.math.roundToInt
 @Composable
 @OptIn(ExperimentalSharedTransitionApi::class)
 fun MiniPlayer(controller: FuoPlayerController) {
-    PlayerDynamicColorTheme(
-        themeMode = controller.themeMode,
-        dynamicCoverColorEnabled = controller.dynamicCoverColorEnabled,
-        coverImageUrl = controller.playbackState.currentTrack?.coverUrl,
-    ) {
-        MiniPlayerContent(controller)
-    }
+    MiniPlayerContent(controller)
 }
 
 @Composable
