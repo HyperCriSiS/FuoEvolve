@@ -123,6 +123,7 @@ private fun MiniPlayerContent(controller: FuoPlayerController) {
                         track = it,
                         heroEnabled = !controller.isFullPlayerOpen,
                         transitionDirection = controller.trackChangeDirection,
+                        isLoading = isLoadingAudio,
                         cornerRadius = if (isWideLayout) 10.dp else 12.dp,
                         modifier = Modifier.size(if (isWideLayout) 44.dp else 56.dp),
                     )
@@ -265,6 +266,7 @@ fun FullPlayer(controller: FuoPlayerController) {
         themeMode = controller.themeMode,
         dynamicCoverColorEnabled = controller.dynamicCoverColorEnabled,
         coverImageUrl = controller.playbackState.currentTrack?.coverUrl,
+        isLoading = controller.playbackState.status == PlayerStatus.Loading,
     ) {
         FullPlayerContent(controller)
     }
@@ -534,6 +536,7 @@ fun PlayerCoverPage(
                 track = track ?: emptyDisplayTrack(),
                 heroEnabled = controller.isFullPlayerOpen,
                 transitionDirection = controller.trackChangeDirection,
+                isLoading = controller.playbackState.status == PlayerStatus.Loading,
                 cornerRadius = 22.dp,
                 modifier = Modifier.size(coverSize),
             )
@@ -547,9 +550,18 @@ fun PlayerSharedCover(
     track: MusicTrack,
     heroEnabled: Boolean,
     transitionDirection: TrackChangeDirection = TrackChangeDirection.Next,
+    isLoading: Boolean = false,
     cornerRadius: androidx.compose.ui.unit.Dp = 8.dp,
     modifier: Modifier = Modifier,
 ) {
+    val targetCoverImage = rememberPlatformCoverImage(track.coverUrl)
+    val hasCoverUrl = !track.coverUrl.isNullOrBlank()
+    var displayedTrack by remember { mutableStateOf(track) }
+    LaunchedEffect(track.id, track.coverUrl, isLoading, targetCoverImage) {
+        if (!isLoading || (hasCoverUrl && targetCoverImage != null)) {
+            displayedTrack = track
+        }
+    }
     val sharedTransitionScope = LocalPlayerSharedTransitionScope.current
     val sharedModifier = if (!heroEnabled || sharedTransitionScope == null) {
         modifier
@@ -563,10 +575,10 @@ fun PlayerSharedCover(
     }
     Box(modifier = sharedModifier) {
         AnimatedContent(
-            targetState = track,
+            targetState = displayedTrack,
             transitionSpec = { playerCoverTransition(transitionDirection) },
             modifier = Modifier.fillMaxSize(),
-            contentKey = { it.id to it.coverUrl },
+            contentKey = { it.coverUrl },
             label = "player cover transition",
         ) { animatedTrack ->
             CoverBox(

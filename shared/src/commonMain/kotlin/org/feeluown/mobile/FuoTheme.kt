@@ -48,6 +48,7 @@ internal fun PlayerDynamicColorTheme(
     themeMode: ThemeMode,
     dynamicCoverColorEnabled: Boolean,
     coverImageUrl: String?,
+    isLoading: Boolean,
     content: @Composable () -> Unit,
 ) {
     val darkTheme = resolvedDarkTheme(themeMode, isSystemInDarkTheme())
@@ -56,9 +57,10 @@ internal fun PlayerDynamicColorTheme(
         dynamicCoverColorEnabled = dynamicCoverColorEnabled,
         coverImageUrl = coverImageUrl,
         darkTheme = darkTheme,
+        preserveWhileLoading = isLoading,
     )
     val hasCoverColor = dynamicCoverColorEnabled &&
-        !coverImageUrl.isNullOrBlank() &&
+        (isLoading || !coverImageUrl.isNullOrBlank()) &&
         coverColorSeed != null
     val animatedCoverColorSeed by animateColorAsState(
         targetValue = coverColorSeed ?: baseColorScheme.primary,
@@ -98,6 +100,7 @@ private fun rememberCoverColorSeed(
     dynamicCoverColorEnabled: Boolean,
     coverImageUrl: String?,
     darkTheme: Boolean,
+    preserveWhileLoading: Boolean,
 ): Color? {
     val normalizedCoverUrl = coverImageUrl?.takeIf { it.isNotBlank() }
     val coverImage = rememberPlatformCoverImage(
@@ -108,12 +111,18 @@ private fun rememberCoverColorSeed(
         dynamicCoverColorEnabled,
         normalizedCoverUrl,
         darkTheme,
+        preserveWhileLoading,
         coverImage,
     ) {
-        if (!dynamicCoverColorEnabled || normalizedCoverUrl == null || coverImage == null) {
-            if (!dynamicCoverColorEnabled || normalizedCoverUrl == null) {
-                value = null
-            }
+        if (!dynamicCoverColorEnabled) {
+            value = null
+            return@produceState
+        }
+        if (normalizedCoverUrl == null) {
+            if (!preserveWhileLoading) value = null
+            return@produceState
+        }
+        if (coverImage == null) {
             return@produceState
         }
 
