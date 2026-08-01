@@ -15,12 +15,21 @@ final class IOSNativeAudioEngine: NSObject, NativeAudioEngine, IosAudioOutput {
     private var didReachEnd = false
     private var playbackError: String?
     private var endObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
     private var periodicTimeObserver: Any?
+    private var pauseOnOtherAppPlayback = true
 
     override init() {
         super.init()
         configureAudioSession()
         configureRemoteCommands()
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleAudioSessionInterruption(notification)
+        }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
@@ -41,6 +50,9 @@ final class IOSNativeAudioEngine: NSObject, NativeAudioEngine, IosAudioOutput {
     deinit {
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
+        }
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
         }
         if let periodicTimeObserver {
             player.removeTimeObserver(periodicTimeObserver)
@@ -67,6 +79,11 @@ final class IOSNativeAudioEngine: NSObject, NativeAudioEngine, IosAudioOutput {
 
     func play(url: String, headers: [String: String], title: String, artists: String, album: String) {
         play(PlaybackPayload(url: url, title: title, artists: artists, album: album, source: "", headers: headers, coverUrl: nil))
+    }
+
+    func setPauseOnOtherAppPlayback(enabled: Bool) {
+        pauseOnOtherAppPlayback = enabled
+        configureAudioSession()
     }
 
     func pause() {
@@ -189,11 +206,24 @@ final class IOSNativeAudioEngine: NSObject, NativeAudioEngine, IosAudioOutput {
 
     private func configureAudioSession() {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            let options: AVAudioSession.CategoryOptions = pauseOnOtherAppPlayback ? [] : [.mixWithOthers]
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: options)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             assertionFailure(error.localizedDescription)
         }
+    }
+
+    private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard
+            pauseOnOtherAppPlayback,
+            let rawType = notification.userInfo?[AVAudioSession.interruptionTypeKey] as? UInt,
+            AVAudioSession.InterruptionType(rawValue: rawType) == .began
+        else {
+            return
+        }
+        player.pause()
+        updateNowPlaying()
     }
 
     private func configureRemoteCommands() {

@@ -1,6 +1,7 @@
 package org.feeluown.mobile
 
 interface IosAudioOutput {
+    fun setPauseOnOtherAppPlayback(enabled: Boolean)
     fun play(url: String, headers: Map<String, String>, title: String, artists: String, album: String)
     fun pause()
     fun resume()

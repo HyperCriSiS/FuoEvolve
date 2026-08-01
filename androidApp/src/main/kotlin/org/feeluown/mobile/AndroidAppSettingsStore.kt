@@ -51,6 +51,10 @@ internal class AndroidLegacySettingsLoader(context: Context) {
                 KEY_SMART_REPLACEMENT_MIN_SCORE,
                 DEFAULT_SMART_REPLACEMENT_MIN_SCORE.toFloat(),
             ).toDouble(),
+            pauseOnOtherAppPlayback = preferences.getBoolean(
+                KEY_PAUSE_ON_OTHER_APP_PLAYBACK,
+                DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK,
+            ),
             lyricFontSize = enumValue(KEY_LYRIC_FONT_SIZE, LyricFontSize.Small),
             themeMode = enumValue(KEY_THEME_MODE, ThemeMode.System),
             themeColorScheme = enumValue(KEY_THEME_COLOR_SCHEME, ThemeColorScheme.Dynamic),
@@ -157,6 +161,7 @@ internal class AndroidLegacySettingsLoader(context: Context) {
         private const val KEY_UNAVAILABLE_PLAYBACK_POLICY = "unavailable_playback_policy"
         private const val KEY_SMART_REPLACEMENT_PROVIDER_IDS = "smart_replacement_provider_ids"
         private const val KEY_SMART_REPLACEMENT_MIN_SCORE = "smart_replacement_min_score"
+        private const val KEY_PAUSE_ON_OTHER_APP_PLAYBACK = "pause_on_other_app_playback"
         private const val KEY_LYRIC_FONT_SIZE = "lyric_font_size"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_THEME_COLOR_SCHEME = "theme_color_scheme"

@@ -788,6 +788,22 @@ fun PlaybackPolicySettingsPanel(controller: FuoPlayerController) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
+            FuoSettingRow(
+                modifier = Modifier.fillMaxWidth(),
+                title = "其他应用播放时自动暂停",
+                supportingText = "检测到其他应用开始播放时暂停当前播放",
+                enabled = !controller.isLoading,
+                onClick = {
+                    controller.onPauseOnOtherAppPlaybackChange(!controller.pauseOnOtherAppPlayback)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = controller.pauseOnOtherAppPlayback,
+                        enabled = !controller.isLoading,
+                        onCheckedChange = controller::onPauseOnOtherAppPlaybackChange,
+                    )
+                },
+            )
             Text(
                 text = "资源不可用时",
                 style = MaterialTheme.typography.bodyMedium,

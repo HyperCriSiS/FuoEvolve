@@ -10,12 +10,20 @@ import kotlinx.coroutines.launch
 class IosNativeAudioEngine(
     scope: CoroutineScope,
     private val output: IosAudioOutput,
+    settingsRepository: AppSettingsRepository,
 ) : PlaybackEngine {
     private val mutableState = MutableStateFlow(PlaybackState())
 
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
 
     init {
+        scope.launch {
+            settingsRepository.state.collect { settingsState ->
+                if (settingsState.isLoaded) {
+                    output.setPauseOnOtherAppPlayback(settingsState.settings.pauseOnOtherAppPlayback)
+                }
+            }
+        }
         scope.launch {
             while (true) {
                 updateFromOutput()

@@ -108,6 +108,7 @@ data class AppSettings(
     val unavailablePlaybackPolicy: UnavailablePlaybackPolicy = DEFAULT_UNAVAILABLE_PLAYBACK_POLICY,
     val smartReplacementProviderIds: Set<String> = emptySet(),
     val smartReplacementMinScore: Double = DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
+    val pauseOnOtherAppPlayback: Boolean = DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK,
     val lyricFontSize: LyricFontSize = LyricFontSize.Small,
     val themeMode: ThemeMode = ThemeMode.System,
     val themeColorScheme: ThemeColorScheme = ThemeColorScheme.Dynamic,
@@ -124,6 +125,7 @@ const val DEFAULT_AUDIO_CACHE_LIMIT_MB = 512
 const val DEFAULT_IMAGE_CACHE_LIMIT_MB = 128
 const val DEFAULT_DOWNLOAD_PARALLELISM = 2
 const val DEFAULT_LOCAL_MUSIC_MIN_DURATION_SECONDS = 0
+const val DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK = true
 val DEFAULT_ENABLED_PROVIDER_IDS = setOf("netease")
 val DEFAULT_PROVIDER_ORDER_IDS = listOf("netease", "qqmusic", "bilibili", "ytmusic")
 val DEFAULT_WIFI_AUDIO_QUALITY_POLICY = AudioQualityPolicy.High

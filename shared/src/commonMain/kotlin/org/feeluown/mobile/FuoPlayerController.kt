@@ -324,6 +324,8 @@ class FuoPlayerController(
         private set
     var dynamicCoverColorEnabled by mutableStateOf(false)
         private set
+    var pauseOnOtherAppPlayback by mutableStateOf(DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK)
+        private set
     var debugLogLines by mutableStateOf<List<String>>(emptyList())
         private set
     var debugLogLevelFilters by mutableStateOf(DEFAULT_DEBUG_LOG_LEVEL_FILTERS)
@@ -1344,6 +1346,11 @@ class FuoPlayerController(
 
     fun onUnavailablePlaybackPolicyChange(value: UnavailablePlaybackPolicy) {
         unavailablePlaybackPolicy = value
+        persistSettings()
+    }
+
+    fun onPauseOnOtherAppPlaybackChange(value: Boolean) {
+        pauseOnOtherAppPlayback = value
         persistSettings()
     }
 
@@ -4346,6 +4353,7 @@ class FuoPlayerController(
         themeMode = settings.themeMode
         themeColorScheme = settings.themeColorScheme
         dynamicCoverColorEnabled = settings.dynamicCoverColorEnabled
+        pauseOnOtherAppPlayback = settings.pauseOnOtherAppPlayback
     }
 
     private fun persistSettings() {
@@ -4386,6 +4394,7 @@ class FuoPlayerController(
             themeMode = themeMode,
             themeColorScheme = themeColorScheme,
             dynamicCoverColorEnabled = dynamicCoverColorEnabled,
+            pauseOnOtherAppPlayback = pauseOnOtherAppPlayback,
         )
     }
 

@@ -112,6 +112,7 @@ class AppSettingsRepositoryTest {
 
         assertTrue(settings.onboardingCompleted)
         assertFalse(settings.dynamicCoverColorEnabled)
+        assertTrue(settings.pauseOnOtherAppPlayback)
     }
 
     private class FakePreferencesDataStore(

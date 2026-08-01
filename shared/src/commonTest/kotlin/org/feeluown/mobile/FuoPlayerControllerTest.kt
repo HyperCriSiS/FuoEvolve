@@ -2464,6 +2464,7 @@ class FuoPlayerControllerTest {
                 themeMode = ThemeMode.Dark,
                 themeColorScheme = ThemeColorScheme.OceanBlue,
                 dynamicCoverColorEnabled = true,
+                pauseOnOtherAppPlayback = true,
             ),
         )
         val provider = FakeProviderRepository(emptyList())
@@ -2532,6 +2533,7 @@ class FuoPlayerControllerTest {
             controller.onThemeModeChange(ThemeMode.Light)
             controller.onThemeColorSchemeChange(ThemeColorScheme.FuoGreen)
             controller.onDynamicCoverColorEnabledChange(false)
+            controller.onPauseOnOtherAppPlaybackChange(false)
             advanceUntilIdle()
 
             assertEquals(ProviderLoginMode.WebView, store.saved.providerLoginMode)
@@ -2554,6 +2556,7 @@ class FuoPlayerControllerTest {
             assertEquals(ThemeMode.Light, store.saved.themeMode)
             assertEquals(ThemeColorScheme.FuoGreen, store.saved.themeColorScheme)
             assertFalse(store.saved.dynamicCoverColorEnabled)
+            assertFalse(store.saved.pauseOnOtherAppPlayback)
             assertEquals(AudioQualityPolicy.High, provider.lastWifiAudioQualityPolicy)
             assertEquals(AudioQualityPolicy.Standard, provider.lastCellularAudioQualityPolicy)
         } finally {

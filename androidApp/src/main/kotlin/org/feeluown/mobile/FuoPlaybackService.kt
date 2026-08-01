@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -36,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,6 +50,7 @@ class FuoPlaybackService : MediaSessionService() {
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var settingsJob: Job? = null
     private var loadJob: Job? = null
     private var preloadJob: Job? = null
     private val pendingLock = Any()
@@ -67,6 +71,7 @@ class FuoPlaybackService : MediaSessionService() {
             .setEnableDecoderFallback(true)
         val exoPlayer = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
+            .setAudioAttributes(MEDIA_AUDIO_ATTRIBUTES, DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK)
             .build()
             .also { player ->
                 player.addAnalyticsListener(object : AnalyticsListener {
@@ -133,6 +138,19 @@ class FuoPlaybackService : MediaSessionService() {
                 })
             }
         player = exoPlayer
+        settingsJob = (application as? FuoEvolveApplication)?.settingsRepository?.let { settingsRepository ->
+            serviceScope.launch {
+                settingsRepository.state.collect { settingsState ->
+                    if (!settingsState.isLoaded) return@collect
+                    withContext(Dispatchers.Main.immediate) {
+                        player?.setAudioAttributes(
+                            MEDIA_AUDIO_ATTRIBUTES,
+                            settingsState.settings.pauseOnOtherAppPlayback,
+                        )
+                    }
+                }
+            }
+        }
         val sessionPlayer = QueueCommandPlayer(exoPlayer)
         mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setCallback(object : MediaSession.Callback {
@@ -188,6 +206,8 @@ class FuoPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        settingsJob?.cancel()
+        settingsJob = null
         loadJob?.cancel()
         preloadJob?.cancel()
         synchronized(pendingLock) {
@@ -684,6 +704,10 @@ class FuoPlaybackService : MediaSessionService() {
         private const val EXTRA_PLAN = "plan"
         private const val PLAYBACK_RESOLVE_TIMEOUT_MS = 30_000L
         private const val TAG = "FuoPlaybackService"
+        private val MEDIA_AUDIO_ATTRIBUTES = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
         private val queueNavigationCommands = setOf(
             Player.COMMAND_SEEK_TO_PREVIOUS,
             Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,

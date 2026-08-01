@@ -32,7 +32,7 @@ class FuoEvolveApplication : PyApplication() {
         AndroidNativeAudioEngine(applicationContext, appScope)
     }
 
-    private val settingsRepository: AppSettingsRepository by lazy {
+    internal val settingsRepository: AppSettingsRepository by lazy {
         createAndroidAppSettingsRepository(applicationContext, appScope)
     }
 
