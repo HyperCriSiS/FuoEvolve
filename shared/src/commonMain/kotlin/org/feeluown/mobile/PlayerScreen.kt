@@ -1,6 +1,7 @@
 package org.feeluown.mobile
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
@@ -10,6 +11,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -150,14 +152,7 @@ private fun MiniPlayerContent(controller: FuoPlayerController) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    state.audioQuality?.takeIf { it.isNotBlank() }?.let { quality ->
-                        Text(
-                            text = quality.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    }
+                    MiniPlayerLyricLine(state)
                 }
                 PlayerControls(
                     state = state,
@@ -175,15 +170,56 @@ private fun MiniPlayerContent(controller: FuoPlayerController) {
 @Composable
 private fun MiniPlayerProgress(state: PlaybackState, isLoadingAudio: Boolean) {
     val duration = state.durationMs.takeIf { it > 0 }
-    when {
-        isLoadingAudio -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        duration != null -> PlayingProgressIndicator(
-            progress = { state.positionMs.coerceIn(0, duration).toFloat() / duration },
-            isPlaying = state.status == PlayerStatus.Playing,
-            modifier = Modifier.fillMaxWidth(),
+    if (isLoadingAudio || duration != null) {
+        LinearProgressIndicator(
+            progress = {
+                duration?.let { state.positionMs.coerceIn(0, it).toFloat() / it } ?: 0f
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp),
         )
     }
 }
+
+@Composable
+private fun MiniPlayerLyricLine(state: PlaybackState) {
+    val lines = remember(state.lyrics) { parseLrc(state.lyrics) }
+    val currentIndex = currentLyricIndex(lines, state.positionMs)
+    val currentLine = lines.getOrNull(currentIndex)?.text?.takeIf { it.isNotBlank() } ?: return
+
+    AnimatedContent(
+        targetState = MiniPlayerLyricState(currentIndex, currentLine),
+        transitionSpec = {
+            val direction = if (targetState.index >= initialState.index) 1 else -1
+            val enterOffset: (Int) -> Int = { height -> if (direction > 0) height else -height }
+            val exitOffset: (Int) -> Int = { height -> if (direction > 0) -height else height }
+            (slideInVertically(
+                animationSpec = tween(180),
+                initialOffsetY = enterOffset,
+            ) + fadeIn(animationSpec = tween(180))) togetherWith
+                (slideOutVertically(
+                    animationSpec = tween(180),
+                    targetOffsetY = exitOffset,
+                ) + fadeOut(animationSpec = tween(180)))
+        },
+        modifier = Modifier.fillMaxWidth(),
+        label = "mini player lyric line",
+    ) { lyric ->
+        Text(
+            text = lyric.text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private data class MiniPlayerLyricState(
+    val index: Int,
+    val text: String,
+)
 
 @Composable
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
