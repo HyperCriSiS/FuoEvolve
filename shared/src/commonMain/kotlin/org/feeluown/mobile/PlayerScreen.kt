@@ -1171,6 +1171,11 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
         LyricFontSize.Medium -> MaterialTheme.typography.bodyLarge
         LyricFontSize.Large -> MaterialTheme.typography.titleMedium
     }
+    val translationStyle = when (fontSize) {
+        LyricFontSize.Small -> MaterialTheme.typography.bodySmall
+        LyricFontSize.Medium -> MaterialTheme.typography.bodyMedium
+        LyricFontSize.Large -> MaterialTheme.typography.bodyLarge
+    }
     val linePadding = when (fontSize) {
         LyricFontSize.Small -> 6.dp
         LyricFontSize.Medium -> 7.dp
@@ -1195,15 +1200,30 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
             val displayLines = lines.takeIf { it.isNotEmpty() } ?: listOf(LyricLine(0, "暂无歌词"))
             itemsIndexed(displayLines) { index, line ->
                 val active = index == currentIndex
-                Text(
-                    text = line.text,
-                    style = if (active) activeStyle else inactiveStyle,
-                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = linePadding),
-                )
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = line.text,
+                        style = if (active) activeStyle else inactiveStyle,
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
+                        Text(
+                            text = translation,
+                            style = translationStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                alpha = if (active) 0.88f else 0.72f,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
         }
     }
@@ -1480,24 +1500,53 @@ fun formatMs(value: Long): String {
 data class LyricLine(
     val timeMs: Long,
     val text: String,
+    val translation: String? = null,
+)
+
+private data class RawLyricLine(
+    val timeMs: Long,
+    val text: String,
+    val order: Int,
 )
 
 fun parseLrc(raw: String?): List<LyricLine> {
     if (raw.isNullOrBlank()) return emptyList()
-    val timedLines = mutableListOf<LyricLine>()
-    raw.lines().forEach { line ->
+    val parsedLines = mutableListOf<RawLyricLine>()
+    raw.lines().forEachIndexed { order, line ->
         val matches = lrcTimeRegex.findAll(line).toList()
         val text = line.replace(lrcTimeRegex, "").trim()
-        if (text.isBlank()) return@forEach
+        if (text.isBlank()) return@forEachIndexed
         if (matches.isEmpty()) {
-            timedLines += LyricLine(Long.MAX_VALUE, text)
+            if (!lrcMetadataRegex.matches(line.trim())) {
+                parsedLines += RawLyricLine(Long.MAX_VALUE, text, order)
+            }
         } else {
             matches.forEach { match ->
-                timedLines += LyricLine(parseLrcTime(match.groupValues[1]), text)
+                parsedLines += RawLyricLine(parseLrcTime(match.groupValues[1]), text, order)
             }
         }
     }
-    return timedLines.sortedWith(compareBy<LyricLine> { it.timeMs }.thenBy { it.text })
+
+    val timedLines = parsedLines
+        .filter { it.timeMs != Long.MAX_VALUE }
+        .sortedWith(compareBy<RawLyricLine> { it.timeMs }.thenBy { it.order })
+    val mergedLines = timedLines
+        .groupBy { it.timeMs }
+        .values
+        .flatMap { sameTimeLines ->
+            if (sameTimeLines.size == 2) {
+                val original = sameTimeLines[0]
+                val translation = sameTimeLines[1].text.takeIf { it != original.text }
+                listOf(LyricLine(original.timeMs, original.text, translation))
+            } else {
+                sameTimeLines.map { LyricLine(it.timeMs, it.text) }
+            }
+        }
+    val untimedLines = parsedLines
+        .filter { it.timeMs == Long.MAX_VALUE }
+        .sortedBy { it.order }
+        .map { LyricLine(it.timeMs, it.text) }
+    return mergedLines + untimedLines
 }
 
 fun parseLrcTime(value: String): Long {
@@ -1523,3 +1572,4 @@ fun currentLyricIndex(lines: List<LyricLine>, positionMs: Long): Int {
 }
 
 val lrcTimeRegex = Regex("""\[(\d{1,3}:\d{1,2}(?:\.\d{1,3})?)]""")
+val lrcMetadataRegex = Regex("""^\[[A-Za-z]+:.*]$""")
