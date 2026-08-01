@@ -298,6 +298,8 @@ class FuoPlayerController(
         private set
     var playbackState by mutableStateOf(PlaybackState())
         private set
+    var trackChangeDirection by mutableStateOf(TrackChangeDirection.Next)
+        private set
     var cacheUsage by mutableStateOf(CacheUsage())
         private set
     var audioCacheLimitMb by mutableStateOf(DEFAULT_AUDIO_CACHE_LIMIT_MB)
@@ -3118,6 +3120,7 @@ class FuoPlayerController(
     }
 
     fun playQueueIndex(index: Int) {
+        trackChangeDirection = TrackChangeDirection.Next
         val currentOffset = if (currentQueueTrack() != null) 1 else 0
         if (index == 0 && currentOffset == 1) {
             currentQueueTrack()?.let(::startPlayback)
@@ -3161,6 +3164,7 @@ class FuoPlayerController(
     }
 
     fun next() {
+        trackChangeDirection = TrackChangeDirection.Next
         if (_repeatMode == RepeatMode.SINGLE) {
             if (playPlaybackPartOffset(1, wrap = true)) return
             (currentQueueTrack() ?: playbackState.currentTrack)?.let { startPlayback(it) }
@@ -3199,6 +3203,7 @@ class FuoPlayerController(
     }
 
     fun previous() {
+        trackChangeDirection = TrackChangeDirection.Previous
         if (_repeatMode == RepeatMode.SINGLE) {
             if (playPlaybackPartOffset(-1, wrap = true)) return
             (currentQueueTrack() ?: playbackState.currentTrack)?.let { startPlayback(it) }
@@ -3670,6 +3675,7 @@ class FuoPlayerController(
         sourcePlaylistId: String? = null,
         skippedUnavailableCount: Int = 0,
     ) {
+        trackChangeDirection = TrackChangeDirection.Next
         var playbackIndex = index
         if (skippedUnavailableCount == 0) {
             playbackIndex = replaceMainQueue(
@@ -3831,6 +3837,7 @@ class FuoPlayerController(
         sourcePlaylistId: String? = null,
     ) {
         if (sourceQueue.isEmpty()) return
+        trackChangeDirection = TrackChangeDirection.Next
         val playbackIndex = replaceMainQueue(
             sourceQueue,
             0,

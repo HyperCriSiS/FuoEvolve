@@ -2,8 +2,10 @@ package org.feeluown.mobile
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -120,6 +122,7 @@ private fun MiniPlayerContent(controller: FuoPlayerController) {
                     PlayerSharedCover(
                         track = it,
                         heroEnabled = !controller.isFullPlayerOpen,
+                        transitionDirection = controller.trackChangeDirection,
                         cornerRadius = if (isWideLayout) 10.dp else 12.dp,
                         modifier = Modifier.size(if (isWideLayout) 44.dp else 56.dp),
                     )
@@ -165,10 +168,16 @@ private fun MiniPlayerContent(controller: FuoPlayerController) {
 private fun MiniPlayerProgress(state: PlaybackState, isLoadingAudio: Boolean) {
     val duration = state.durationMs.takeIf { it > 0 }
     if (isLoadingAudio || duration != null) {
+        val targetProgress = duration?.let {
+            state.positionMs.coerceIn(0, it).toFloat() / it
+        } ?: 0f
+        val progress by animateFloatAsState(
+            targetValue = targetProgress,
+            animationSpec = tween(FuoMotion.progressAnimationMillis),
+            label = "mini player progress",
+        )
         LinearProgressIndicator(
-            progress = {
-                duration?.let { state.positionMs.coerceIn(0, it).toFloat() / it } ?: 0f
-            },
+            progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(4.dp),
@@ -233,6 +242,21 @@ private fun PlayingProgressIndicator(
             }
         },
     )
+}
+
+private fun playerCoverTransition(direction: TrackChangeDirection): ContentTransform {
+    val directionMultiplier = if (direction == TrackChangeDirection.Next) 1 else -1
+    return (
+        slideInHorizontally(
+            initialOffsetX = { width -> width * directionMultiplier },
+            animationSpec = tween(FuoMotion.coverTransitionMillis),
+        ) + fadeIn(animationSpec = tween(FuoMotion.coverFadeMillis))
+        ) togetherWith (
+        slideOutHorizontally(
+            targetOffsetX = { width -> -width * directionMultiplier },
+            animationSpec = tween(FuoMotion.coverTransitionMillis),
+        ) + fadeOut(animationSpec = tween(FuoMotion.coverFadeMillis))
+        )
 }
 
 @Composable
@@ -509,6 +533,7 @@ fun PlayerCoverPage(
             PlayerSharedCover(
                 track = track ?: emptyDisplayTrack(),
                 heroEnabled = controller.isFullPlayerOpen,
+                transitionDirection = controller.trackChangeDirection,
                 cornerRadius = 22.dp,
                 modifier = Modifier.size(coverSize),
             )
@@ -521,6 +546,7 @@ fun PlayerCoverPage(
 fun PlayerSharedCover(
     track: MusicTrack,
     heroEnabled: Boolean,
+    transitionDirection: TrackChangeDirection = TrackChangeDirection.Next,
     cornerRadius: androidx.compose.ui.unit.Dp = 8.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -535,7 +561,21 @@ fun PlayerSharedCover(
             )
         }
     }
-    CoverBox(track = track, cornerRadius = cornerRadius, modifier = sharedModifier)
+    Box(modifier = sharedModifier) {
+        AnimatedContent(
+            targetState = track,
+            transitionSpec = { playerCoverTransition(transitionDirection) },
+            modifier = Modifier.fillMaxSize(),
+            contentKey = { it.id to it.coverUrl },
+            label = "player cover transition",
+        ) { animatedTrack ->
+            CoverBox(
+                track = animatedTrack,
+                cornerRadius = cornerRadius,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 }
 
 enum class PlayerVisualTab(val title: String) {
@@ -1144,6 +1184,12 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
     var seekPosition by remember(state.currentTrack?.id) {
         mutableStateOf(state.positionMs.coerceIn(0, duration).toFloat())
     }
+    val animatedSeekPosition by animateFloatAsState(
+        targetValue = seekPosition.coerceIn(0f, duration.toFloat()),
+        animationSpec = tween(FuoMotion.progressAnimationMillis),
+        label = "player progress",
+    )
+    val displayedSeekPosition = if (isSeeking) seekPosition else animatedSeekPosition
 
     LaunchedEffect(state.positionMs, duration, isSeeking, canSeek) {
         if (!isSeeking || !canSeek) {
@@ -1153,7 +1199,7 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
     }
 
     Slider(
-        value = seekPosition.coerceIn(0f, duration.toFloat()),
+        value = displayedSeekPosition.coerceIn(0f, duration.toFloat()),
         onValueChange = {
             isSeeking = true
             seekPosition = it

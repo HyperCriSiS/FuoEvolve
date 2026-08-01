@@ -50,6 +50,10 @@ internal object FuoSpacing {
 internal object FuoMotion {
     const val pageTransitionMillis = 300
     const val pageFadeMillis = 180
+    const val coverTransitionMillis = 360
+    const val coverFadeMillis = 220
+    const val coverColorTransitionMillis = 420
+    const val progressAnimationMillis = 180
     const val overlayEnterMillis = 240
     const val overlayExitMillis = 200
     const val overlayFadeMillis = 160

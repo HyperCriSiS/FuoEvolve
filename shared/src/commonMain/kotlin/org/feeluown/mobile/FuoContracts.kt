@@ -277,6 +277,11 @@ enum class PlayerStatus {
     Ended,
 }
 
+enum class TrackChangeDirection {
+    Next,
+    Previous,
+}
+
 enum class PlayMode {
     ListLoop,
     SingleLoop,

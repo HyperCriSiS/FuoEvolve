@@ -8,8 +8,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import com.materialkolor.PaletteStyle
@@ -48,13 +51,29 @@ internal fun PlayerDynamicColorTheme(
     content: @Composable () -> Unit,
 ) {
     val darkTheme = resolvedDarkTheme(themeMode, isSystemInDarkTheme())
-    val coverColorScheme = rememberCoverColorScheme(
+    val baseColorScheme = MaterialTheme.colorScheme
+    val coverColorSeed = rememberCoverColorSeed(
         dynamicCoverColorEnabled = dynamicCoverColorEnabled,
         coverImageUrl = coverImageUrl,
         darkTheme = darkTheme,
     )
+    val hasCoverColor = dynamicCoverColorEnabled &&
+        !coverImageUrl.isNullOrBlank() &&
+        coverColorSeed != null
+    val animatedCoverColorSeed by animateColorAsState(
+        targetValue = coverColorSeed ?: baseColorScheme.primary,
+        animationSpec = tween(FuoMotion.coverColorTransitionMillis),
+        label = "player cover color",
+    )
+    val coverColorScheme = remember(animatedCoverColorSeed, darkTheme, hasCoverColor) {
+        if (hasCoverColor) {
+            expressiveColorScheme(animatedCoverColorSeed, darkTheme)
+        } else {
+            null
+        }
+    }
     FuoExpressiveTheme(
-        colorScheme = coverColorScheme ?: MaterialTheme.colorScheme,
+        colorScheme = coverColorScheme ?: baseColorScheme,
         content = content,
     )
 }
@@ -75,44 +94,48 @@ private fun FuoExpressiveTheme(
 }
 
 @Composable
-private fun rememberCoverColorScheme(
+private fun rememberCoverColorSeed(
     dynamicCoverColorEnabled: Boolean,
     coverImageUrl: String?,
     darkTheme: Boolean,
-): ColorScheme? {
+): Color? {
     val normalizedCoverUrl = coverImageUrl?.takeIf { it.isNotBlank() }
     val coverImage = rememberPlatformCoverImage(
         if (dynamicCoverColorEnabled) normalizedCoverUrl else null,
     )
-    val coverColorScheme by produceState<ColorScheme?>(
+    val coverColorSeed by produceState<Color?>(
         initialValue = null,
         dynamicCoverColorEnabled,
         normalizedCoverUrl,
         darkTheme,
         coverImage,
     ) {
-        value = null
         if (!dynamicCoverColorEnabled || normalizedCoverUrl == null || coverImage == null) {
+            if (!dynamicCoverColorEnabled || normalizedCoverUrl == null) {
+                value = null
+            }
             return@produceState
         }
 
         val cacheKey = "$normalizedCoverUrl|$darkTheme"
-        CoverThemeSchemeCache.get(cacheKey)?.let {
+        CoverThemeSeedCache.get(cacheKey)?.let {
             value = it
             return@produceState
         }
 
-        val scheme = withContext(Dispatchers.Default) {
+        val seedColor = withContext(Dispatchers.Default) {
             coverImage.themeColorOrNull(maxColors = COVER_THEME_MAX_COLORS)
-                ?.let { seedColor -> expressiveColorScheme(seedColor, darkTheme) }
-        }?.takeIf(::hasAccessibleContrast)
-
-        if (scheme != null) {
-            CoverThemeSchemeCache.put(cacheKey, scheme)
         }
-        value = scheme
+        val validSeedColor = seedColor?.takeIf {
+            hasAccessibleContrast(expressiveColorScheme(it, darkTheme))
+        }
+
+        if (validSeedColor != null) {
+            CoverThemeSeedCache.put(cacheKey, validSeedColor)
+            value = validSeedColor
+        }
     }
-    return coverColorScheme
+    return coverColorSeed
 }
 
 private val FuoShapes = Shapes()
@@ -227,15 +250,15 @@ private fun relativeLuminance(color: Color): Double {
         linearize(color.blue) * 0.0722
 }
 
-private object CoverThemeSchemeCache {
+private object CoverThemeSeedCache {
     private const val MAX_ENTRIES = 8
     private val mutex = Mutex()
-    private val values = mutableMapOf<String, ColorScheme>()
+    private val values = mutableMapOf<String, Color>()
     private val order = mutableListOf<String>()
 
-    suspend fun get(key: String): ColorScheme? = mutex.withLock { values[key] }
+    suspend fun get(key: String): Color? = mutex.withLock { values[key] }
 
-    suspend fun put(key: String, value: ColorScheme) {
+    suspend fun put(key: String, value: Color) {
         mutex.withLock {
             values.remove(key)
             order.remove(key)
