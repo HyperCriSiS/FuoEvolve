@@ -435,7 +435,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                     PlayerVisualTab.entries.forEach { tab ->
                         Tab(
                             selected = pagerState.currentPage == tab.ordinal,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
+                            onClick = { scope.launch { pagerState.animateScrollToPage(tab.ordinal) },
                             text = { Text(tab.title) },
                         )
                     }
@@ -1375,7 +1375,22 @@ private fun KaraokeLyricText(
     val progress = karaokeFillProgress(words, renderPositionMs, wordWidths)
     val textStyle = style.copy(fontWeight = FontWeight.SemiBold)
 
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
+        val layoutResult = remember(text, textStyle, constraints.maxWidth, textMeasurer) {
+            textMeasurer.measure(
+                text = text,
+                style = textStyle,
+                constraints = Constraints(maxWidth = constraints.maxWidth),
+            )
+        }
+        val totalVisualWidth = remember(layoutResult) {
+            (0 until layoutResult.lineCount).sumOf { lineIndex ->
+                (layoutResult.getLineRight(lineIndex) - layoutResult.getLineLeft(lineIndex))
+                    .coerceAtLeast(0f)
+                    .toDouble()
+            }.toFloat()
+        }
+
         Text(
             text = text,
             style = textStyle,
@@ -1388,10 +1403,28 @@ private fun KaraokeLyricText(
             color = activeColor,
             softWrap = true,
             modifier = Modifier.drawWithContent {
-                val clipRight = size.width * progress.coerceIn(0f, 1f)
-                if (clipRight <= 0f || !clipRight.isFinite()) return@drawWithContent
-                clipRect(left = 0f, top = 0f, right = clipRight, bottom = size.height) {
-                    this@drawWithContent.drawContent()
+                var remainingWidth = totalVisualWidth * progress.coerceIn(0f, 1f)
+                if (remainingWidth <= 0f || !remainingWidth.isFinite()) return@drawWithContent
+
+                for (lineIndex in 0 until layoutResult.lineCount) {
+                    val lineLeft = layoutResult.getLineLeft(lineIndex)
+                    val lineRight = layoutResult.getLineRight(lineIndex)
+                    val lineWidth = (lineRight - lineLeft).coerceAtLeast(0f)
+                    if (lineWidth <= 0f) continue
+
+                    val lineFillWidth = minOf(remainingWidth, lineWidth)
+                    if (lineFillWidth > 0f) {
+                        clipRect(
+                            left = lineLeft,
+                            top = layoutResult.getLineTop(lineIndex),
+                            right = lineLeft + lineFillWidth,
+                            bottom = layoutResult.getLineBottom(lineIndex),
+                        ) {
+                            this@drawWithContent.drawContent()
+                        }
+                    }
+                    remainingWidth -= lineWidth
+                    if (remainingWidth <= 0f) break
                 }
             },
         )
