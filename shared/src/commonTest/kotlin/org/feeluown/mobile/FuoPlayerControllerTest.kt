@@ -2834,15 +2834,8 @@ class FuoPlayerControllerTest {
             assertEquals(listOf("netease", "qqmusic", "bilibili", "ytmusic"), controller.availableProviders.map { it.providerId })
             val ytmusic = controller.availableProviders.first { it.providerId == "ytmusic" }
             assertEquals(
-                setOf(ProviderLoginMode.WebView, ProviderLoginMode.Headers),
+                setOf(ProviderLoginMode.Headers),
                 ytmusic.supportedLoginModes,
-            )
-            assertEquals(
-                ProviderLoginConfig(
-                    loginUrl = "https://music.youtube.com",
-                    cookieKeyGroups = listOf(listOf("__Secure-3PAPISID")),
-                ),
-                ytmusic.loginConfig,
             )
             assertEquals(setOf("netease"), provider.lastEnabledProviderIds)
 
@@ -3647,6 +3640,37 @@ class FuoPlayerControllerTest {
     }
 
     @Test
+    fun microphonePermissionGrantStartsRecognitionForOpenScreen() = runTest {
+        val recognition = FakeAudioRecognitionRepository(suspendForever = true)
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = FakeProviderRepository(emptyList()),
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                audioRecognitionRepository = recognition,
+                scope = controllerScope,
+            )
+            advanceUntilIdle()
+
+            controller.openRecognition()
+            controller.onMicrophonePermissionChange(true)
+            runCurrent()
+
+            assertEquals(
+                RecognitionUiState.Capturing(
+                    capturedMs = 0,
+                    windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
+                ),
+                controller.recognitionUiState,
+            )
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
     fun recognitionContinuesAfterNoMatch() = runTest {
         val recognition = FakeAudioRecognitionRepository(
             events = listOf(
@@ -4136,11 +4160,7 @@ class FuoPlayerControllerTest {
             ProviderInfo(
                 providerId = "ytmusic",
                 providerName = "YouTube Music",
-                loginConfig = ProviderLoginConfig(
-                    loginUrl = "https://music.youtube.com",
-                    cookieKeyGroups = listOf(listOf("__Secure-3PAPISID")),
-                ),
-                supportedLoginModes = setOf(ProviderLoginMode.WebView, ProviderLoginMode.Headers),
+                supportedLoginModes = setOf(ProviderLoginMode.Headers),
             ),
         ),
         initialIsLoggedIn: Boolean = true,

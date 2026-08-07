@@ -17,8 +17,6 @@ jobs:
     name: Build debug iOS app
     runs-on: macos-26
     timeout-minutes: 45
-    env:
-      PYTHON_APPLE_SUPPORT_TAG: 3.12-b8
 
     steps:
       - name: Checkout
@@ -29,13 +27,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: iosApp/python/requirements-ios.txt
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -50,16 +41,15 @@ jobs:
           path: ~/.konan
           key: ${{ runner.os }}-${{ runner.arch }}-konan-${{ hashFiles('gradle/libs.versions.toml') }}
 
-      - name: Cache iOS Python distribution
-        uses: actions/cache@v4
-        with:
-          path: build/ios-python
-          key: ${{ runner.os }}-${{ runner.arch }}-python-apple-support-${{ env.PYTHON_APPLE_SUPPORT_TAG }}
-
-      - name: Prepare iOS Python runtime
-        run: bash scripts/prepare-ios-python.sh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Resolve Swift package dependencies
+        run: |
+          defaults write com.apple.dt.Xcode IDEPackageSupportUseBuiltinSCM YES
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project iosApp/FuoEvolve.xcodeproj \
+            -scheme FuoEvolve \
+            -derivedDataPath build/ios-ci \
+            -clonedSourcePackagesDirPath build/ios-ci/SourcePackages
 
       - name: Build debug simulator app
         run: |
@@ -69,6 +59,7 @@ jobs:
             -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath build/ios-ci \
+            -clonedSourcePackagesDirPath build/ios-ci/SourcePackages \
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -83,6 +74,7 @@ jobs:
             -configuration Debug \
             -sdk iphoneos \
             -derivedDataPath build/ios-ci \
+            -clonedSourcePackagesDirPath build/ios-ci/SourcePackages \
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

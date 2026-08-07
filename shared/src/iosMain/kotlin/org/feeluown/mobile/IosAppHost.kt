@@ -28,7 +28,6 @@ internal fun handleIosLocalPlaylistImportResult(
 }
 
 fun MainViewController(
-    pythonRuntime: IosPythonRuntime,
     audioOutput: IosAudioOutput,
     videoOutput: IosVideoOutput,
     mediaLibraryOutput: IosMediaLibraryOutput,
@@ -38,9 +37,9 @@ fun MainViewController(
     localPlaylistFileOutput: IosLocalPlaylistFileOutput,
     networkStatusOutput: IosNetworkStatusOutput,
     audioRecognitionOutput: IosAudioRecognitionOutput,
+    oauthDeviceCodeOutput: IosOAuthDeviceCodeOutput,
 ): UIViewController = ComposeUIViewController {
     IosApp(
-        pythonRuntime,
         audioOutput,
         videoOutput,
         mediaLibraryOutput,
@@ -50,12 +49,12 @@ fun MainViewController(
         localPlaylistFileOutput,
         networkStatusOutput,
         audioRecognitionOutput,
+        oauthDeviceCodeOutput,
     )
 }
 
 @Composable
 private fun IosApp(
-    pythonRuntime: IosPythonRuntime,
     audioOutput: IosAudioOutput,
     videoOutput: IosVideoOutput,
     mediaLibraryOutput: IosMediaLibraryOutput,
@@ -65,17 +64,18 @@ private fun IosApp(
     localPlaylistFileOutput: IosLocalPlaylistFileOutput,
     networkStatusOutput: IosNetworkStatusOutput,
     audioRecognitionOutput: IosAudioRecognitionOutput,
+    oauthDeviceCodeOutput: IosOAuthDeviceCodeOutput,
 ) {
     IosVideoOutputHolder.output = videoOutput
     val container = remember {
         IosAppContainer(
-            pythonRuntime,
             audioOutput,
             mediaLibraryOutput,
             downloadOutput,
             webLoginOutput,
             networkStatusOutput,
             audioRecognitionOutput,
+            oauthDeviceCodeOutput,
         )
     }
     AppRoot(
@@ -103,16 +103,20 @@ private fun IosApp(
 }
 
 private class IosAppContainer(
-    pythonRuntime: IosPythonRuntime,
     audioOutput: IosAudioOutput,
     mediaLibraryOutput: IosMediaLibraryOutput,
     downloadOutput: IosDownloadOutput,
     private val webLoginOutput: IosWebLoginOutput,
     networkStatusOutput: IosNetworkStatusOutput,
     private val audioRecognitionOutput: IosAudioRecognitionOutput,
+    oauthDeviceCodeOutput: IosOAuthDeviceCodeOutput,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val providerRepository = IosFuoCoreBridge(pythonRuntime, networkStatusOutput)
+    private val providerRepository = createKotlinProviderRepository(
+        credentials = IosProviderCredentialStore(),
+        persistentCache = IosProviderCacheStore(),
+        isCellularConnection = networkStatusOutput::isCellularConnection,
+    )
     private val localRepository = IosLocalMusicRepository(mediaLibraryOutput)
     private val localPlaylistRepository = IosLocalPlaylistRepository()
     private val downloadRepository = IosDownloadRepository(providerRepository, downloadOutput)
@@ -138,6 +142,7 @@ private class IosAppContainer(
         playbackQueueStore = playbackQueueStore,
         resourceCacheRepository = resourceCacheRepository,
         audioRecognitionRepository = audioRecognitionRepository,
+        oauthDeviceCodeAssistant = IosOAuthDeviceCodeAssistant(oauthDeviceCodeOutput),
         scope = scope,
     )
 
@@ -161,6 +166,7 @@ private class IosAppContainer(
     fun requestMicrophonePermission() {
         audioRecognitionOutput.requestPermission { granted ->
             hasMicrophonePermission = granted
+            controller.onMicrophonePermissionChange(granted)
         }
     }
 

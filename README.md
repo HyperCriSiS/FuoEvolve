@@ -18,17 +18,17 @@ FuoEvolve is an open-source music player based on the
 today. Experimental iOS build support is available, but iOS is not released.
 
 The project uses Kotlin Multiplatform and Compose Multiplatform for shared UI,
-state, and player contracts. On Android it packages the FeelUOwn Python core and
-provider plugins with Chaquopy, then plays audio and video through AndroidX
-Media3.
+state, player contracts, and provider implementations. The provider layer is
+implemented in Kotlin with Ktor and uses AndroidX Media3 for audio and video
+playback on Android.
 
 ## Download
 
 | Channel | Link | Packages |
 | --- | --- | --- |
-| Stable | [Latest GitHub Release](https://github.com/feeluown/FuoEvolve/releases/latest) | Signed release APKs for `arm64-v8a`, `x86_64`, and universal devices. |
-| F-Droid | [Official self-hosted repository](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | The five latest stable `arm64-v8a` releases, updated automatically after each GitHub Release. |
-| Canary | [Latest master Android APK workflow](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | Artifacts from the newest successful master build: signed debug APK for development debugging, plus signed release APKs for `arm64-v8a`, `x86_64`, and universal devices. |
+| Stable | [Latest GitHub Release](https://github.com/feeluown/FuoEvolve/releases/latest) | One signed multi-ABI release APK containing `arm64-v8a` and `x86_64`. |
+| F-Droid | [Official self-hosted repository](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | The five latest stable multi-ABI releases, updated automatically after each GitHub Release. |
+| Canary | [Latest master Android APK workflow](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | Artifacts from the newest successful master build: signed debug APK and signed multi-ABI release APK. |
 
 iOS builds are experimental debug artifacts only. They are not published as
 GitHub Releases or supported for end-user installation.
@@ -68,17 +68,31 @@ option.
 
 ## Provider Support
 
-Provider packages currently bundled in the Android app:
+Provider implementations currently bundled in the shared Kotlin module:
 
-| Provider | Package | Default | Login modes |
+| Provider | Implementation | Default | Login modes |
 | --- | --- | --- | --- |
-| NetEase Cloud Music | `fuo_netease==1.0.8` | Enabled | WebView, Cookie |
-| QQ Music | `fuo-qqmusic==1.0.16` | Available in Settings | WebView, Cookie |
-| Bilibili | `feeluown-bilibili==0.5.5` | Available in Settings | WebView, Cookie |
-| YouTube Music | `fuo-ytmusic==0.4.18` | Available in Settings | WebView, Headers |
+| NetEase Cloud Music | `NeteaseProvider` | Enabled | Cookie |
+| QQ Music | `QQMusicProvider` | Available in Settings | Cookie |
+| Bilibili | `BilibiliProvider` | Available in Settings | Cookie |
+| YouTube Music | `YtMusicProvider` | Available in Settings | OAuth (TV) / Headers |
 
 The app loads NetEase by default. QQ Music, Bilibili, and YouTube Music are
 packaged and can be enabled, disabled, or reordered from Settings.
+
+YouTube Music supports two login modes:
+
+1. **Google OAuth (TV / Limited Input device-code)** — same flow as
+   [ytmusicapi OAuth](https://ytmusicapi.readthedocs.io/en/stable/setup/oauth.html).
+   Create a Google Cloud OAuth client of type **TVs and Limited Input devices**,
+   enable the YouTube Data API, enter or import the Console `client_secret_*.json`
+   in Settings, then tap **Sign in with Google (TV)** and complete the browser
+   verification code. You can also import an `oauth.json` produced by
+   `ytmusicapi oauth` (client credentials are still required for refresh).
+2. **Headers / Cookie** — import `ytmusic_header.json` or paste Authorization +
+   Cookie manually.
+
+Local `oauth.json` and `client_secret*.json` files are gitignored.
 
 Legend: ✅ supported, including features that require login; 🧩 supported only
 when the upstream provider exposes the required method or result type; ➖ not
@@ -125,11 +139,11 @@ state, and the exact FeelUOwn provider implementation.
 ## Project Structure
 
 - `shared`: shared Compose UI, domain contracts, player state, common tests, and
-  the shared Python bridge.
-- `androidApp`: Android application, Chaquopy packaging, Media3 playback,
-  assets, resources, and provider bridge wiring.
-- `shared/src/commonMain/python/fuo_mobile`: Python adapter around the FeelUOwn
-  core and provider plugins.
+  the Kotlin provider/network layer.
+- `androidApp`: Android application, Media3 playback, assets, resources, and
+  Android credential/cache stores.
+- `shared/src/commonMain/kotlin/org/feeluown/mobile/provider`: Kotlin provider
+  implementations, request policies, cache, retry, and domain mapping.
 - `shared/src/commonMain/resources/audio_recognition`: bundled fingerprint runtime
   assets used by mobile audio recognition.
 - `iosApp/FuoEvolve`: Swift app shell for experimental iOS builds.
@@ -140,7 +154,6 @@ state, and the exact FeelUOwn provider implementation.
 
 - JDK 17 or newer.
 - Android Studio or Android command-line tools for Android builds.
-- Python 3.12 when a local Chaquopy build Python is needed.
 - Xcode on macOS for experimental iOS builds.
 
 ## Android Build
@@ -157,24 +170,17 @@ Install it on a connected device or emulator:
 ./gradlew :androidApp:installDebug
 ```
 
-The Android build packages FeelUOwn and provider plugins through Chaquopy. The
-default FeelUOwn source is the PyPI `5.1.2` sdist, and provider packages are
-declared in `androidApp/build.gradle.kts`.
+The Android build includes the Kotlin provider implementations and their Ktor
+network stack directly; it does not download or package a scripting runtime.
 
 ## iOS Status
 
 The iOS project under `iosApp/FuoEvolve.xcodeproj` has experimental debug-build
-support, including shared UI integration, Python runtime preparation, and audio
-recognition integration. Every push to `master` builds a simulator debug artifact
+support, including shared UI integration and audio recognition integration. Every
+push to `master` builds a simulator debug artifact
 in GitHub Actions. iOS is not released: do not treat its artifacts as
 production-ready or expect a GitHub Release, App Store distribution, or end-user
 installation support.
-
-Prepare the Python runtime locally before building in Xcode:
-
-```bash
-bash scripts/prepare-ios-python.sh
-```
 
 Provider and playback integration remain experimental.
 
@@ -194,10 +200,10 @@ Run Android lint checks:
 
 ## Provider Extensions
 
-To add a provider, declare the Python dependency in `androidApp/build.gradle.kts`,
-add it to the Android provider registry, expose it from Settings, and wire any
-provider-specific login or feature definitions in the bridge. The default enabled
-provider set is NetEase:
+To add a provider, implement the shared `KotlinMusicProvider` contract under
+`shared/src/commonMain/kotlin/org/feeluown/mobile/provider`, register it in
+`KotlinProviderRepository`, expose it from Settings, and add focused contract
+tests. The default enabled provider set is NetEase:
 
 ```json
 {

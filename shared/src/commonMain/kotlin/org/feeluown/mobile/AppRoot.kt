@@ -211,6 +211,7 @@ fun AppRoot(
     onOpenProviderWebLogin: (ProviderInfo) -> Unit,
     onLogoutProvider: (ProviderInfo) -> Unit,
     onImportYtmusicHeaderFile: (() -> Unit)? = null,
+    onImportYtmusicOAuthFile: (() -> Unit)? = null,
     onImportLocalPlaylistFile: (() -> Unit)? = null,
     onExportLocalPlaylistFile: ((String, String) -> Unit)? = null,
     onShareLocalPlaylistFile: ((String, String) -> Unit)? = null,
@@ -235,6 +236,7 @@ fun AppRoot(
                 onOpenProviderWebLogin = onOpenProviderWebLogin,
                 onLogoutProvider = onLogoutProvider,
                 onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
+                onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
             )
             return@FuoTheme
         }
@@ -340,11 +342,12 @@ fun AppRoot(
                                             AppRoute.DebugLogs -> DebugLogScreen(controller)
                                             AppRoute.DownloadManager -> DownloadManagerScreen(controller)
                                             AppRoute.Settings -> SettingsScreen(
-                                                controller,
-                                                onOpenProviderWebLogin,
-                                                onLogoutProvider,
-                                                onImportYtmusicHeaderFile,
-                                                appVersionInfo,
+                                                controller = controller,
+                                                onOpenProviderWebLogin = onOpenProviderWebLogin,
+                                                onLogoutProvider = onLogoutProvider,
+                                                appVersionInfo = appVersionInfo,
+                                                onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
+                                                onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
                                             )
                                             AppRoute.Search -> SearchScreen(
                                                 controller = controller,
