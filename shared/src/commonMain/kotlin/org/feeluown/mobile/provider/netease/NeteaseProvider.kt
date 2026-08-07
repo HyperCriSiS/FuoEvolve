@@ -87,10 +87,15 @@ class NeteaseProvider(
             headers = mapOf("Referer" to "https://music.163.com/"),
             coverUrl = track.coverUrl,
             durationMs = data.long("time") ?: track.durationMs,
-            lyrics = lyric(id),
             audioQuality = data.stringOrNull("type") ?: qualityPolicy,
             providerName = NAME,
         )
+    }
+
+    override suspend fun lyrics(track: org.feeluown.mobile.MusicTrack): String? {
+        val (_, identifier) = splitResourceId(track.providerId ?: track.id)
+        val id = identifier.ifBlank { track.id.substringAfterLast(':') }
+        return lyric(id)
     }
 
     override suspend fun authState(): ProviderAuthState {
@@ -598,12 +603,29 @@ class NeteaseProvider(
     private suspend fun lyric(identifier: String): String? = runCatching {
         val root = http.getText(
             ID,
-            queryUrl("$BASE/api/song/lyric", mapOf("id" to identifier, "lv" to "-1", "kv" to "1", "tv" to "-1")),
+            queryUrl(
+                "$BASE/api/song/lyric",
+                mapOf(
+                    "id" to identifier,
+                    "lv" to "-1",
+                    "kv" to "-1",
+                    "tv" to "-1",
+                    "yv" to "-1",
+                ),
+            ),
             neteaseAuthenticatedHeaders(),
-            cacheKey = "netease:lyric:$identifier",
+            cacheKey = "netease:lyric-yrc-tr:$identifier",
             cachePolicy = ProviderCachePolicies.lyric,
         ).value.let { parseNeteaseResponse(it) }
-        root.obj("lrc")?.stringOrNull("lyric")
+        val yrc = root.obj("yrc")?.stringOrNull("lyric")
+        val lrc = root.obj("lrc")?.stringOrNull("lyric")
+        val main = yrc ?: lrc ?: return@runCatching null
+        val translation = when {
+            yrc != null -> root.obj("ytlrc")?.stringOrNull("lyric")
+                ?: root.obj("tlyric")?.stringOrNull("lyric")
+            else -> root.obj("tlyric")?.stringOrNull("lyric")
+        }
+        org.feeluown.mobile.composeLyricsWithTranslation(main, translation)
     }.getOrNull()
 
     private suspend fun currentUserId(): String? = runCatching { requestCurrentUserId() }.getOrNull()

@@ -88,7 +88,6 @@ class QQMusicProvider(
                 headers = mapOf("Referer" to "https://y.qq.com/"),
                 coverUrl = track.coverUrl,
                 durationMs = track.durationMs,
-                lyrics = lyric(songMid),
                 audioQuality = quality.label,
                 providerName = NAME,
             )
@@ -746,6 +745,12 @@ class QQMusicProvider(
         ).value.let { providerJson.parseToJsonElement(it).asObject() }
         return root.array("data").firstOrNull()?.asObject()
             ?: root.array("songlist").firstOrNull()?.asObject()
+    }
+
+    override suspend fun lyrics(track: org.feeluown.mobile.MusicTrack): String? {
+        val (_, identifier) = splitResourceId(track.providerId ?: track.id)
+        val id = identifier.ifBlank { track.id.substringAfterLast(':') }
+        return lyric(id)
     }
 
     private suspend fun lyric(identifier: String): String? = runCatching {

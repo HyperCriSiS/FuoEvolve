@@ -76,16 +76,24 @@ import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -188,7 +196,7 @@ private fun MiniPlayerProgress(state: PlaybackState, isLoadingAudio: Boolean) {
 
 @Composable
 private fun MiniPlayerLyricLine(state: PlaybackState) {
-    val lines = remember(state.lyrics) { parseLrc(state.lyrics) }
+    val lines = remember(state.lyrics) { parseLyrics(state.lyrics) }
     val currentIndex = currentLyricIndex(lines, state.positionMs)
     val currentLine = lines.getOrNull(currentIndex)?.text?.takeIf { it.isNotBlank() } ?: return
 
@@ -643,8 +651,7 @@ fun PlayerInfoTags(
 ) {
     var replacementInfoTrack by remember(track?.id) { mutableStateOf<MusicTrack?>(null) }
     var showAudioFormatInfo by remember(track?.id) { mutableStateOf(false) }
-    var showAudioDecoderInfo by remember(track?.id) { mutableStateOf(false) }
-    val canShowAudioFormatInfo = audioFormatInfo?.hasDisplayableValue() == true
+    val canShowAudioInfo = audioFormatInfo?.hasDisplayableValue() == true || audioDecoderInfo != null
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -662,13 +669,7 @@ fun PlayerInfoTags(
         audioQuality?.takeIf { it.isNotBlank() }?.let {
             InfoTag(
                 text = it.uppercase(),
-                onClick = if (canShowAudioFormatInfo) ({ showAudioFormatInfo = true }) else null,
-            )
-        }
-        audioDecoderInfo?.let { decoderInfo ->
-            InfoTag(
-                text = if (decoderInfo.type == AudioDecoderType.Software) "SW" else "HW",
-                onClick = { showAudioDecoderInfo = true },
+                onClick = if (canShowAudioInfo) ({ showAudioFormatInfo = true }) else null,
             )
         }
     }
@@ -684,32 +685,18 @@ fun PlayerInfoTags(
     if (showAudioFormatInfo) {
         AudioFormatInfoDialog(
             info = audioFormatInfo,
+            decoderInfo = audioDecoderInfo,
             onDismiss = { showAudioFormatInfo = false },
-        )
-    }
-    audioDecoderInfo?.let { decoderInfo ->
-        if (!showAudioDecoderInfo) return@let
-        AlertDialog(
-            onDismissRequest = { showAudioDecoderInfo = false },
-            title = { Text("音频解码") },
-            text = {
-                Text(
-                    text = "当前音频正在使用${
-                        if (decoderInfo.type == AudioDecoderType.Software) "软件解码" else "硬件解码"
-                    }\n解码器：${decoderInfo.name}",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showAudioDecoderInfo = false }) {
-                    Text("知道了")
-                }
-            },
         )
     }
 }
 
 @Composable
-fun AudioFormatInfoDialog(info: AudioFormatInfo?, onDismiss: () -> Unit) {
+fun AudioFormatInfoDialog(
+    info: AudioFormatInfo?,
+    decoderInfo: AudioDecoderInfo? = null,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("音频信息") },
@@ -719,6 +706,15 @@ fun AudioFormatInfoDialog(info: AudioFormatInfo?, onDismiss: () -> Unit) {
                 info?.codec?.takeIf { it.isNotBlank() }?.let { ReplacementInfoLine("编码", it) }
                 formatAudioBitrate(info?.averageBitrate)?.let { ReplacementInfoLine("平均比特率", it) }
                 formatAudioBitrate(info?.peakBitrate)?.let { ReplacementInfoLine("峰值比特率", it) }
+                decoderInfo?.let { decoder ->
+                    ReplacementInfoLine(
+                        "解码方式",
+                        if (decoder.type == AudioDecoderType.Software) "软件解码" else "硬件解码",
+                    )
+                    decoder.name.takeIf { it.isNotBlank() }?.let {
+                        ReplacementInfoLine("解码器", it)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1246,7 +1242,7 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
 
 @Composable
 fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifier) {
-    val lines = remember(state.lyrics) { parseLrc(state.lyrics) }
+    val lines = remember(state.lyrics) { parseLyrics(state.lyrics) }
     val listState = rememberLazyListState()
     val currentIndex = currentLyricIndex(lines, state.positionMs)
     val activeStyle = when (fontSize) {
@@ -1294,19 +1290,36 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
                         .padding(vertical = linePadding),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        text = line.text,
-                        style = if (active) activeStyle else inactiveStyle,
-                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (active && !line.words.isNullOrEmpty()) {
+                        KaraokeLyricText(
+                            words = line.words,
+                            positionMs = state.positionMs,
+                            isPlaying = state.status == PlayerStatus.Playing,
+                            style = activeStyle,
+                            activeColor = MaterialTheme.colorScheme.primary,
+                            // Keep the unsung portion clearly muted so primary fill pops.
+                            inactiveColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = line.text,
+                            style = if (active) activeStyle else inactiveStyle,
+                            color = if (active) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f)
+                            },
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
                         Text(
                             text = translation,
                             style = translationStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = if (active) 0.88f else 0.72f,
+                            color = MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (active) 0.52f else 0.38f,
                             ),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -1314,6 +1327,74 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun rememberKaraokePositionMs(positionMs: Long, isPlaying: Boolean): Long {
+    var renderPositionMs by remember { mutableLongStateOf(positionMs) }
+    LaunchedEffect(positionMs, isPlaying) {
+        renderPositionMs = positionMs
+        if (!isPlaying) return@LaunchedEffect
+        val anchorPosition = positionMs
+        val anchorFrame = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { frame ->
+                val elapsedMs = (frame - anchorFrame) / 1_000_000L
+                renderPositionMs = anchorPosition + elapsedMs
+            }
+        }
+    }
+    return renderPositionMs
+}
+
+@Composable
+private fun KaraokeLyricText(
+    words: List<LyricWord>,
+    positionMs: Long,
+    isPlaying: Boolean,
+    style: TextStyle,
+    activeColor: Color,
+    inactiveColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val renderPositionMs = rememberKaraokePositionMs(positionMs, isPlaying)
+    val text = remember(words) { words.joinToString("") { it.text } }
+    val textMeasurer = rememberTextMeasurer()
+    val fontSize = style.fontSize
+    val wordWidths = remember(words, fontSize, textMeasurer) {
+        val measureStyle = style.copy(fontWeight = FontWeight.SemiBold)
+        words.map { word ->
+            textMeasurer.measure(
+                text = word.text,
+                style = measureStyle,
+                constraints = Constraints(),
+            ).size.width.toFloat()
+        }
+    }
+    val progress = karaokeFillProgress(words, renderPositionMs, wordWidths)
+    val textStyle = style.copy(fontWeight = FontWeight.SemiBold)
+
+    Box(modifier = modifier) {
+        Text(
+            text = text,
+            style = textStyle,
+            color = inactiveColor,
+            softWrap = true,
+        )
+        Text(
+            text = text,
+            style = textStyle,
+            color = activeColor,
+            softWrap = true,
+            modifier = Modifier.drawWithContent {
+                val clipRight = size.width * progress.coerceIn(0f, 1f)
+                if (clipRight <= 0f || !clipRight.isFinite()) return@drawWithContent
+                clipRect(left = 0f, top = 0f, right = clipRight, bottom = size.height) {
+                    this@drawWithContent.drawContent()
+                }
+            },
+        )
     }
 }
 
@@ -1585,10 +1666,17 @@ fun formatMs(value: Long): String {
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
+data class LyricWord(
+    val startMs: Long,
+    val durationMs: Long,
+    val text: String,
+)
+
 data class LyricLine(
     val timeMs: Long,
     val text: String,
     val translation: String? = null,
+    val words: List<LyricWord>? = null,
 )
 
 private data class RawLyricLine(
@@ -1596,6 +1684,73 @@ private data class RawLyricLine(
     val text: String,
     val order: Int,
 )
+
+const val LYRIC_TRANSLATION_MARKER = "\n__FUO_LYRIC_TRANSLATION__\n"
+
+fun composeLyricsWithTranslation(main: String, translation: String?): String {
+    val trimmedMain = main.trimEnd()
+    val trimmedTranslation = translation?.trim()?.takeIf { it.isNotBlank() } ?: return trimmedMain
+    return trimmedMain + LYRIC_TRANSLATION_MARKER + trimmedTranslation
+}
+
+fun parseLyrics(raw: String?): List<LyricLine> {
+    if (raw.isNullOrBlank()) return emptyList()
+    val parts = raw.split(LYRIC_TRANSLATION_MARKER, limit = 2)
+    val main = parts[0]
+    val translationRaw = parts.getOrNull(1)
+    val lines = if (main.lineSequence().any { yrcLineHeaderRegex.containsMatchIn(it.trim()) }) {
+        parseYrc(main)
+    } else {
+        parseLrc(main)
+    }
+    return attachLyricTranslations(lines, translationRaw)
+}
+
+fun attachLyricTranslations(lines: List<LyricLine>, translationRaw: String?): List<LyricLine> {
+    if (translationRaw.isNullOrBlank() || lines.isEmpty()) return lines
+    val translationLines = parseLrc(translationRaw).filter { it.timeMs != Long.MAX_VALUE }
+    if (translationLines.isEmpty()) return lines
+    val byTime = translationLines
+        .groupBy { it.timeMs }
+        .mapValues { (_, value) -> value.first().text }
+    return lines.map { line ->
+        if (line.timeMs == Long.MAX_VALUE || !line.translation.isNullOrBlank()) return@map line
+        val exact = byTime[line.timeMs]
+        val nearest = translationLines
+            .minByOrNull { kotlin.math.abs(it.timeMs - line.timeMs) }
+            ?.takeIf { kotlin.math.abs(it.timeMs - line.timeMs) <= 50 }
+            ?.text
+        line.copy(translation = exact ?: nearest)
+    }
+}
+
+fun parseYrc(raw: String?): List<LyricLine> {
+    if (raw.isNullOrBlank()) return emptyList()
+    val lines = mutableListOf<LyricLine>()
+    raw.lineSequence().forEach { rawLine ->
+        val trimmed = rawLine.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith('{')) return@forEach
+        val headerMatch = yrcLineHeaderRegex.find(trimmed) ?: return@forEach
+        val startMs = headerMatch.groupValues[1].toLongOrNull() ?: return@forEach
+        val body = trimmed.substring(headerMatch.range.last + 1)
+        val words = yrcWordRegex.findAll(body).mapNotNull { match ->
+            val wordStart = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+            val duration = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+            val text = match.groupValues[3]
+            if (text.isEmpty()) null else LyricWord(wordStart, duration, text)
+        }.toList()
+        val text = words.joinToString("") { it.text }.ifBlank {
+            body.replace(yrcWordRegex, "").trim()
+        }
+        if (text.isBlank()) return@forEach
+        lines += LyricLine(
+            timeMs = startMs,
+            text = text,
+            words = words.takeIf { it.isNotEmpty() },
+        )
+    }
+    return lines.sortedBy { it.timeMs }
+}
 
 fun parseLrc(raw: String?): List<LyricLine> {
     if (raw.isNullOrBlank()) return emptyList()
@@ -1659,5 +1814,34 @@ fun currentLyricIndex(lines: List<LyricLine>, positionMs: Long): Int {
     return index.coerceAtLeast(0)
 }
 
+fun karaokeFillProgress(
+    words: List<LyricWord>,
+    positionMs: Long,
+    wordWidths: List<Float>,
+): Float {
+    if (words.isEmpty() || wordWidths.isEmpty()) return 0f
+    val totalWidth = wordWidths.sum()
+    if (totalWidth <= 0f) return 0f
+    var filledWidth = 0f
+    val count = minOf(words.size, wordWidths.size)
+    for (index in 0 until count) {
+        val word = words[index]
+        val width = wordWidths[index]
+        val durationMs = word.durationMs.coerceAtLeast(1L)
+        when {
+            positionMs < word.startMs -> return (filledWidth / totalWidth).coerceIn(0f, 1f)
+            positionMs >= word.startMs + durationMs -> filledWidth += width
+            else -> {
+                val fraction = ((positionMs - word.startMs).toFloat() / durationMs).coerceIn(0f, 1f)
+                filledWidth += width * fraction
+                return (filledWidth / totalWidth).coerceIn(0f, 1f)
+            }
+        }
+    }
+    return (filledWidth / totalWidth).coerceIn(0f, 1f)
+}
+
 val lrcTimeRegex = Regex("""\[(\d{1,3}:\d{1,2}(?:\.\d{1,3})?)]""")
 val lrcMetadataRegex = Regex("""^\[[A-Za-z]+:.*]$""")
+val yrcLineHeaderRegex = Regex("""^\[(\d+),(\d+)]""")
+val yrcWordRegex = Regex("""\((\d+),(\d+),\d+\)([^(]*)""")

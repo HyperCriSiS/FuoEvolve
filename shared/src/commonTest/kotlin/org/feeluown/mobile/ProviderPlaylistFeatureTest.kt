@@ -205,6 +205,7 @@ class ProviderPlaylistFeatureTest {
                             }
                             "/api/song/lyric" -> {
                                 assertEquals("-1", request.url.parameters["lv"])
+                                assertEquals("-1", request.url.parameters["yv"])
                                 respond("""{"code":200,"lrc":{"lyric":"[00:00.00]FM"}}""")
                             }
                             else -> error("unexpected NetEase request: ${request.url.encodedPath}")
@@ -832,6 +833,301 @@ class ProviderPlaylistFeatureTest {
                                 """{"code":200,"data":[{"id":456,"url":"https://example.test/song.mp3","freeTrialInfo":null,"time":180000,"type":"mp3"}]}""",
                             )
                             else -> error("lyric request should be best effort: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val provider = NeteaseProvider(client, InMemoryProviderCredentialStore())
+        val track = MusicTrack(
+            id = "netease:456",
+            title = "可播放歌曲",
+            artists = "歌手",
+            album = "专辑",
+            source = "netease",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:456",
+        )
+
+        val payload = provider.resolve(track, AudioQualityPolicy.High.policy)
+
+        assertEquals("https://example.test/song.mp3", payload?.url)
+        assertEquals(null, payload?.lyrics)
+        client.close()
+    }
+
+    @Test
+    fun neteasePrefersYrcLyricsAndFallsBackToLrc() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        when (request.url.encodedPath) {
+                            "/api/song/lyric" -> {
+                                assertEquals("-1", request.url.parameters["yv"])
+                                val id = request.url.parameters["id"]
+                                if (id == "456") {
+                                    respond(
+                                        """{"code":200,"yrc":{"lyric":"[1000,2000](1000,500,0)逐(1500,500,0)字"},"lrc":{"lyric":"[00:01.00]普通"}}""",
+                                    )
+                                } else {
+                                    respond("""{"code":200,"lrc":{"lyric":"[00:02.00]回退"}}""")
+                                }
+                            }
+                            else -> error("unexpected NetEase request: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val provider = NeteaseProvider(client, InMemoryProviderCredentialStore())
+        val withYrc = MusicTrack(
+            id = "netease:456",
+            title = "逐字歌曲",
+            artists = "歌手",
+            album = "专辑",
+            source = "netease",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:456",
+        )
+        val withoutYrc = withYrc.copy(id = "netease:789", providerId = "netease:789", title = "普通歌曲")
+
+        assertEquals(
+            composeLyricsWithTranslation(
+                "[1000,2000](1000,500,0)逐(1500,500,0)字",
+                null,
+            ),
+            provider.lyrics(withYrc),
+        )
+        assertEquals("[00:02.00]回退", provider.lyrics(withoutYrc))
+        client.close()
+    }
+
+    @Test
+    fun neteaseCombinesYrcWithYtlrcTranslation() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        when (request.url.encodedPath) {
+                            "/api/song/lyric" -> respond(
+                                """{"code":200,"yrc":{"lyric":"[11820,2220](11820,120,0)The (11940,420,0)club"},"ytlrc":{"lyric":"[00:11.820]这俱乐部"},"tlyric":{"lyric":"[00:11.82]备用翻译"},"lrc":{"lyric":"[00:11.82]The club"}}""",
+                            )
+                            else -> error("unexpected NetEase request: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val provider = NeteaseProvider(client, InMemoryProviderCredentialStore())
+        val track = MusicTrack(
+            id = "netease:452601986",
+            title = "Shape Of You",
+            artists = "Ed Sheeran",
+            album = "÷",
+            source = "netease",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:452601986",
+        )
+
+        val lyrics = provider.lyrics(track)
+        val lines = parseLyrics(lyrics)
+
+        assertTrue(lyrics.orEmpty().contains(LYRIC_TRANSLATION_MARKER.trim()))
+        assertEquals("The club", lines.single().text)
+        assertEquals("这俱乐部", lines.single().translation)
+        assertEquals(2, lines.single().words?.size)
+        client.close()
+    }
+
+    @Test
+    fun neteaseCombinesLrcWithTlyricTranslation() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        when (request.url.encodedPath) {
+                            "/api/song/lyric" -> respond(
+                                """{"code":200,"lrc":{"lyric":"[00:11.82]The club isn't the best place"},"tlyric":{"lyric":"[00:11.82]这俱乐部不是个能找到安慰的地方"}}""",
+                            )
+                            else -> error("unexpected NetEase request: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val provider = NeteaseProvider(client, InMemoryProviderCredentialStore())
+        val track = MusicTrack(
+            id = "netease:451703096",
+            title = "Shape of You",
+            artists = "Ed Sheeran",
+            album = "÷",
+            source = "netease",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:451703096",
+        )
+
+        val lines = parseLyrics(provider.lyrics(track))
+
+        assertEquals("The club isn't the best place", lines.single().text)
+        assertEquals("这俱乐部不是个能找到安慰的地方", lines.single().translation)
+        client.close()
+    }
+
+    @Test
+    fun smartReplacementDoesNotBlockOnOriginalLyricsFetch() = runTest {
+        val lyricRequests = mutableListOf<String>()
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        when (request.url.encodedPath) {
+                            "/weapi/song/enhance/player/url" -> respond(
+                                """{"code":200,"data":[{"id":456,"url":null,"freeTrialInfo":{"start":0,"end":30},"time":180000,"type":"mp3"}]}""",
+                            )
+                            "/api/song/lyric" -> {
+                                lyricRequests += request.url.parameters["id"].orEmpty()
+                                respond(
+                                    """{"code":200,"yrc":{"lyric":"[1000,2000](1000,500,0)原(1500,500,0)词"},"lrc":{"lyric":"[00:01.00]原文"}}""",
+                                )
+                            }
+                            "/x/web-interface/search/type" -> respond(
+                                """{"code":0,"data":{"result":[{"bvid":"BVdemo","title":"人间芳菲","author":"音阙诗听","duration":"3:36","pic":"//example.test/cover.jpg"}]}}""",
+                            )
+                            "/x/web-interface/view" -> respond(
+                                """{"code":0,"data":{"bvid":"BVdemo","cid":123,"title":"人间芳菲","duration":216,"pages":[{"cid":123,"page":1,"part":"人间芳菲","duration":216}]}}""",
+                            )
+                            "/x/web-interface/nav" -> respond(
+                                """{"code":0,"data":{"wbi_img":{"img_url":"https://example.test/wbi/abcdefghijklmnopqrstuvwxyz.png","sub_url":"https://example.test/wbi/0123456789abcdefghijklmnopqrstuvwxyz.png"}}}""",
+                            )
+                            "/x/player/playurl" -> respond(
+                                """{"code":0,"data":{"dash":{"audio":[{"baseUrl":"https://example.test/bilibili.m4s","bandwidth":192000,"length":216000}]}}}""",
+                            )
+                            else -> error("unexpected request: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val repository = KotlinProviderRepository(client, InMemoryProviderCredentialStore())
+        val track = MusicTrack(
+            id = "netease:456",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+            album = "人间芳菲",
+            source = "netease",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:456",
+            providerName = "网易云音乐",
+            durationMs = 216_000,
+        )
+
+        val payload = repository.resolve(
+            track = track,
+            unavailablePolicy = UnavailablePlaybackPolicy.SmartReplace,
+            smartReplacementProviderIds = setOf("bilibili"),
+            smartReplacementMinScore = 0.5,
+            smartReplacementUseOriginalMetadata = true,
+            smartReplacementUseOriginalLyrics = true,
+        )
+
+        assertEquals(true, payload.isSmartReplacement)
+        assertEquals("https://example.test/bilibili.m4s", payload.url)
+        assertEquals("哔哩哔哩", payload.replacementProviderName)
+        assertEquals(null, payload.lyrics)
+        assertEquals(emptyList(), lyricRequests)
+
+        val replaced = track.copy(
+            isSmartReplacement = true,
+            originalId = payload.originalId,
+            originalSource = payload.originalSource,
+            originalProviderName = payload.originalProviderName,
+            source = payload.source,
+            providerName = payload.providerName,
+        )
+        assertEquals("[1000,2000](1000,500,0)原(1500,500,0)词", repository.lyrics(replaced))
+        assertEquals(listOf("456"), lyricRequests)
+        client.close()
+    }
+
+    @Test
+    fun smartReplacementReusesKnownReplacementWithoutResolvingWrongProvider() = runTest {
+        val requestedPaths = mutableListOf<String>()
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        requestedPaths += request.url.encodedPath
+                        when (request.url.encodedPath) {
+                            "/weapi/song/enhance/player/url" -> error("should not resolve original NetEase media first")
+                            "/x/web-interface/view" -> {
+                                assertEquals("BVdemo", request.url.parameters["bvid"])
+                                respond(
+                                    """{"code":0,"data":{"bvid":"BVdemo","cid":123,"title":"人间芳菲","duration":216,"pages":[{"cid":123,"page":1,"part":"人间芳菲","duration":216}]}}""",
+                                )
+                            }
+                            "/x/web-interface/nav" -> respond(
+                                """{"code":0,"data":{"wbi_img":{"img_url":"https://example.test/wbi/abcdefghijklmnopqrstuvwxyz.png","sub_url":"https://example.test/wbi/0123456789abcdefghijklmnopqrstuvwxyz.png"}}}""",
+                            )
+                            "/x/player/playurl" -> respond(
+                                """{"code":0,"data":{"dash":{"audio":[{"baseUrl":"https://example.test/bilibili.m4s","bandwidth":192000,"length":216000}]}}}""",
+                            )
+                            else -> error("unexpected request: ${request.url.encodedPath}")
+                        }
+                    }
+                }
+            },
+        )
+        val repository = KotlinProviderRepository(client, InMemoryProviderCredentialStore())
+        val persisted = MusicTrack(
+            id = "netease:456",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+            album = "人间芳菲",
+            source = "bilibili",
+            sourceType = TrackSourceType.Provider,
+            providerId = "netease:456",
+            providerName = "哔哩哔哩",
+            durationMs = 216_000,
+            isSmartReplacement = true,
+            originalId = "netease:456",
+            originalSource = "netease",
+            originalProviderName = "网易云音乐",
+            replacementId = "bilibili:BVdemo",
+            replacementSource = "bilibili",
+            replacementProviderName = "哔哩哔哩",
+            replacementTitle = "人间芳菲",
+        )
+
+        val payload = repository.resolve(
+            track = persisted,
+            unavailablePolicy = UnavailablePlaybackPolicy.SmartReplace,
+            smartReplacementProviderIds = setOf("bilibili"),
+            smartReplacementMinScore = 0.5,
+            smartReplacementUseOriginalMetadata = true,
+            smartReplacementUseOriginalLyrics = true,
+        )
+
+        assertEquals(true, payload.isSmartReplacement)
+        assertEquals("https://example.test/bilibili.m4s", payload.url)
+        assertEquals("netease", payload.originalSource)
+        assertEquals("bilibili:BVdemo", payload.replacementId)
+        assertTrue("/weapi/song/enhance/player/url" !in requestedPaths)
+        client.close()
+    }
+
+    @Test
+    fun neteaseResolveDoesNotWaitForLyrics() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler { request ->
+                        when (request.url.encodedPath) {
+                            "/weapi/song/enhance/player/url" -> respond(
+                                """{"code":200,"data":[{"id":456,"url":"https://example.test/song.mp3","freeTrialInfo":null,"time":180000,"type":"mp3"}]}""",
+                            )
+                            "/api/song/lyric" -> error("lyric must not block resolve")
+                            else -> error("unexpected NetEase request: ${request.url.encodedPath}")
                         }
                     }
                 }
