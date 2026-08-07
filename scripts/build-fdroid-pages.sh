@@ -17,13 +17,6 @@ readonly ANDROID_SDK_ROOT
 export ANDROID_HOME="$ANDROID_SDK_ROOT"
 export ANDROID_SDK_ROOT
 
-for name in FUO_SIGNING_KEYSTORE_BASE64 FUO_SIGNING_STORE_PASSWORD FUO_SIGNING_KEY_ALIAS FUO_SIGNING_KEY_PASSWORD; do
-    if [[ -z "${!name:-}" ]]; then
-        echo "Missing required F-Droid signing secret: $name" >&2
-        exit 1
-    fi
-done
-
 if [[ ! "$RELEASE_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
     echo "FDROID_RELEASE_LIMIT must be a positive integer" >&2
     exit 1
@@ -85,8 +78,7 @@ cp "$PROJECT_ROOT/fdroid/config.yml.template" "$WORK_DIR/config.yml"
 cp -a "$PROJECT_ROOT/fdroid/config" "$WORK_DIR/config"
 cp "$PROJECT_ROOT/fdroid/metadata/org.feeluown.mobile.yml" "$WORK_DIR/metadata/"
 cp "$PROJECT_ROOT/androidApp/src/main/res/mipmap-xxxhdpi/ic_launcher.png" "$WORK_DIR/icon.png"
-printf '%s' "$FUO_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$WORK_DIR/fuo-evolve.jks"
-chmod 0600 "$WORK_DIR/config.yml" "$WORK_DIR/fuo-evolve.jks"
+chmod 0600 "$WORK_DIR/config.yml"
 
 mapfile -t release_tags < <(
     gh release list \
@@ -127,6 +119,7 @@ if (( downloaded == 0 )); then
 fi
 
 declare -A version_codes=()
+repo_pubkey_hex=""
 for apk in "$WORK_DIR"/repo/*.apk; do
     badging="$($AAPT dump badging "$apk")"
     actual_package="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$badging")"
@@ -146,12 +139,28 @@ for apk in "$WORK_DIR"/repo/*.apk; do
         exit 1
     fi
     version_codes[$version_code]="$apk"
+
+    if [[ -z "$repo_pubkey_hex" ]]; then
+        repo_pubkey_hex="$(
+            "$APKSIGNER" verify --print-certs-pem "$apk" \
+                | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' \
+                | openssl x509 -outform DER \
+                | od -An -v -tx1 \
+                | tr -d ' \n'
+        )"
+        if [[ -z "$repo_pubkey_hex" ]]; then
+            echo "Unable to extract repository public key from $apk" >&2
+            exit 1
+        fi
+    fi
 done
+
+printf '\nrepo_pubkey: "%s"\n' "$repo_pubkey_hex" >> "$WORK_DIR/config.yml"
 
 (
     cd "$WORK_DIR"
     run_fdroid lint "$PACKAGE_NAME"
-    run_fdroid update --verbose
+    run_fdroid update --verbose --nosign
 )
 
 cp -a "$PROJECT_ROOT/docs/." "$PAGES_DIR/"
