@@ -435,7 +435,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                     PlayerVisualTab.entries.forEach { tab ->
                         Tab(
                             selected = pagerState.currentPage == tab.ordinal,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(tab.ordinal) },
+                            onClick = { scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
                             text = { Text(tab.title) },
                         )
                     }
