@@ -4639,7 +4639,8 @@ class FuoPlayerController(
         map { section -> section.copy(tracks = section.tracks.filterNot { it.id == trackId }) }
 
     private fun ProviderFeature.isDeferredHomeFeature(): Boolean {
-        return category == ProviderFeatureCategory.Music ||
+        return (category == ProviderFeatureCategory.Music &&
+            (contentType == ProviderContentType.Songs || contentType == ProviderContentType.Videos)) ||
             (category == ProviderFeatureCategory.Recommend &&
                 (id.endsWith("_daily_songs") || isDynamicQueueFeature() || isBilibiliRecommendedVideos()))
     }
