@@ -259,6 +259,9 @@ class BilibiliProvider(
         val csrf = csrfToken()
             ?: return ProviderMutationResult(false, "缺少哔哩哔哩 csrf Cookie")
         val (_, mediaId) = splitResourceId(playlist.id, "playlist")
+        if (mediaId.startsWith(COLLECTION_PREFIX)) {
+            return ProviderMutationResult(false, "哔哩哔哩合集不支持收藏夹增删操作")
+        }
         val field = if (add) "add_media_ids" else "del_media_ids"
         val root = http.postForm(
             providerId = ID,
@@ -294,30 +297,49 @@ class BilibiliProvider(
     }
 
     override suspend fun playlistDetail(playlist: ProviderPlaylist, offset: Int, limit: Int): ProviderPlaylistDetail {
-        val (_, mediaId) = splitResourceId(playlist.id, "playlist")
+        val (_, encodedId) = splitResourceId(playlist.id, "playlist")
+        val isCollection = encodedId.startsWith(COLLECTION_PREFIX)
+        val resourceId = encodedId.removePrefix(COLLECTION_PREFIX)
         val pageSize = limit.coerceIn(1, MAX_FAVORITE_PAGE_SIZE)
+        val pageNumber = offset / pageSize + 1
         val root = http.getText(
             providerId = ID,
-            url = queryUrl(
-                "$BASE/x/v3/fav/resource/list",
-                mapOf(
-                    "media_id" to mediaId,
-                    "pn" to (offset / pageSize + 1).toString(),
-                    "ps" to pageSize.toString(),
-                    "keyword" to "",
-                    "order" to "mtime",
-                    "type" to "0",
-                    "tid" to "0",
-                    "platform" to "web",
-                ),
-            ),
+            url = if (isCollection) {
+                queryUrl(
+                    "$BASE/x/space/fav/season/list",
+                    mapOf(
+                        "season_id" to resourceId,
+                        "pn" to pageNumber.toString(),
+                        "ps" to pageSize.toString(),
+                    ),
+                )
+            } else {
+                queryUrl(
+                    "$BASE/x/v3/fav/resource/list",
+                    mapOf(
+                        "media_id" to resourceId,
+                        "pn" to pageNumber.toString(),
+                        "ps" to pageSize.toString(),
+                        "keyword" to "",
+                        "order" to "mtime",
+                        "type" to "0",
+                        "tid" to "0",
+                        "platform" to "web",
+                    ),
+                )
+            },
             headers = headers(),
-            cacheKey = "bilibili:favorite:$mediaId:${offset / pageSize}:$pageSize",
+            cacheKey = "bilibili:${if (isCollection) "collection" else "favorite"}:$resourceId:$pageNumber:$pageSize",
             cachePolicy = ProviderCachePolicies.detail,
         ).value.let { providerJson.parseToJsonElement(it).asObject() }
         val data = root.obj("data") ?: return ProviderPlaylistDetail(playlist)
-        val actualPlaylist = data.obj("info")?.toFavoritePlaylist() ?: playlist
-        val tracks = data.array("medias").mapNotNull { searchItemToTrack(it.asObject()) }
+        val actualPlaylist = if (isCollection) {
+            playlist
+        } else {
+            data.obj("info")?.toFavoritePlaylist() ?: playlist
+        }
+        val tracks = data.array(if (isCollection) "items" else "medias")
+            .mapNotNull { searchItemToTrack(it.asObject()) }
         val total = actualPlaylist.trackCount ?: playlist.trackCount
         val nextOffset = offset + tracks.size
         return ProviderPlaylistDetail(
@@ -389,7 +411,9 @@ class BilibiliProvider(
             }
         }
         val data = root.obj("data")
-        val folders = data?.array("list").orEmpty().mapNotNull { it.asObject().toFavoritePlaylist() }
+        val folders = data?.array("list").orEmpty().mapNotNull {
+            it.asObject().toFavoritePlaylist(isCollection = collected)
+        }
         val page = if (collected) folders else folders.drop(offset).take(pageSize)
         val total = data?.int("count") ?: folders.size
         val nextOffset = offset + page.size
@@ -461,8 +485,11 @@ class BilibiliProvider(
         )
     }
 
-    private fun kotlinx.serialization.json.JsonObject.toFavoritePlaylist(): ProviderPlaylist? {
-        val identifier = stringOrNull("id") ?: stringOrNull("media_id") ?: return null
+    private fun kotlinx.serialization.json.JsonObject.toFavoritePlaylist(
+        isCollection: Boolean = false,
+    ): ProviderPlaylist? {
+        val rawIdentifier = stringOrNull("id") ?: stringOrNull("media_id") ?: return null
+        val identifier = if (isCollection) "$COLLECTION_PREFIX$rawIdentifier" else rawIdentifier
         val title = stringOrNull("title") ?: return null
         val ownerMid = stringOrNull("mid") ?: obj("upper")?.stringOrNull("mid")
         return playlist(
@@ -472,7 +499,7 @@ class BilibiliProvider(
             description = string("intro"),
             playCount = obj("cnt_info")?.long("play"),
             trackCount = int("media_count"),
-            providerUrl = ownerMid?.let { "https://space.bilibili.com/$it/favlist?fid=$identifier" },
+            providerUrl = ownerMid?.let { "https://space.bilibili.com/$it/favlist?fid=$rawIdentifier" },
         )
     }
 
@@ -604,6 +631,7 @@ class BilibiliProvider(
         const val ID = "bilibili"
         const val NAME = "哔哩哔哩"
         const val BASE = "https://api.bilibili.com"
+        const val COLLECTION_PREFIX = "collection_"
         const val MAX_FAVORITE_PAGE_SIZE = 20
         const val AUDIO_LOW_MAX_BANDWIDTH = 120_000L
         const val AUDIO_STANDARD_MAX_BANDWIDTH = 256_000L
