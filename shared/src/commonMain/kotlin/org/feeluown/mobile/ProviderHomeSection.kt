@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -412,11 +415,13 @@ fun PrivateFmButton(
             .padding(vertical = if (isWideLayout) 2.dp else 6.dp),
         title = "私人 FM",
         providerName = section.feature.providerName,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
         Icon(
-            Icons.Filled.PlayArrow,
+            imageVector = Icons.Filled.Radio,
             contentDescription = "播放${section.feature.providerName}私人 FM",
-            modifier = Modifier.size(if (isWideLayout) 28.dp else 32.dp),
+            modifier = Modifier.size(if (isWideLayout) 40.dp else 44.dp),
         )
     }
 }
@@ -436,11 +441,13 @@ fun DailyRecommendationButton(
             .padding(vertical = if (isWideLayout) 2.dp else 6.dp),
         title = feature.title.ifBlank { "每日推荐" },
         providerName = feature.providerName,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     ) {
         Icon(
             imageVector = Icons.Filled.CalendarMonth,
             contentDescription = "${feature.providerName}每日推荐",
-            modifier = Modifier.size(if (isWideLayout) 28.dp else 32.dp),
+            modifier = Modifier.size(if (isWideLayout) 40.dp else 44.dp),
         )
     }
 }
@@ -460,11 +467,13 @@ fun RecommendationEntryButton(
             .padding(vertical = if (isWideLayout) 2.dp else 6.dp),
         title = feature.title.ifBlank { "推荐视频" },
         providerName = feature.providerName,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
         Icon(
             Icons.Filled.PlayArrow,
             contentDescription = "打开${feature.providerName}${feature.title}",
-            modifier = Modifier.size(if (isWideLayout) 28.dp else 32.dp),
+            modifier = Modifier.size(if (isWideLayout) 40.dp else 44.dp),
         )
     }
 }
@@ -473,6 +482,8 @@ fun RecommendationEntryButton(
 fun RecommendationButton(
     title: String,
     providerName: String,
+    containerColor: Color,
+    contentColor: Color,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -482,8 +493,8 @@ fun RecommendationButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            color = containerColor,
+            contentColor = contentColor,
             shape = MaterialTheme.shapes.medium,
         ) {
             Box(
@@ -542,18 +553,10 @@ fun ProviderPlaylistGrid(
                 row.forEach { cell ->
                     when (cell) {
                         PlaylistGridCell.More -> {
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clickable(role = Role.Button) { onMore?.invoke() },
-                                shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("更多", style = MaterialTheme.typography.titleMedium)
-                                }
-                            }
+                            ProviderPlaylistMoreCard(
+                                onClick = { onMore?.invoke() },
+                                modifier = Modifier.weight(1f),
+                            )
                         }
                         is PlaylistGridCell.Playlist -> {
                             ProviderPlaylistCard(
@@ -575,6 +578,51 @@ fun ProviderPlaylistGrid(
 private sealed interface PlaylistGridCell {
     data class Playlist(val value: ProviderPlaylist) : PlaylistGridCell
     data object More : PlaylistGridCell
+}
+
+@Composable
+fun ProviderPlaylistMoreCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isWideLayout = LocalAppLayoutInfo.current.useWideLayout
+    Column(
+        modifier = modifier
+            .fuoInteractive()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = if (isWideLayout) 2.dp else 6.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.LibraryMusic,
+                    contentDescription = null,
+                    modifier = Modifier.size(if (isWideLayout) 40.dp else 44.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(if (isWideLayout) 4.dp else 8.dp))
+        Text(
+            text = "查看更多",
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = "全部歌单",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
