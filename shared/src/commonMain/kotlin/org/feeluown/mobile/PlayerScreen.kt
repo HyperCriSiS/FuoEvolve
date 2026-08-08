@@ -1173,7 +1173,7 @@ fun PlayPauseButton(
     RoundControlButton(
         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
         contentDescription = if (isPlaying) "暂停" else "播放",
-        onClick = onClick,
+        onClick = onToggle,
         size = size,
         iconSize = iconSize,
         prominent = prominent,
@@ -1244,7 +1244,15 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
 fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifier) {
     val lines = remember(state.lyrics) { parseLyrics(state.lyrics) }
     val listState = rememberLazyListState()
-    val currentIndex = currentLyricIndex(lines, state.positionMs)
+    val renderPositionMs = rememberKaraokePositionMs(
+        positionMs = state.positionMs,
+        isPlaying = state.status == PlayerStatus.Playing,
+    )
+    val currentIndex by remember(lines, renderPositionMs) {
+        androidx.compose.runtime.derivedStateOf {
+            currentLyricIndex(lines, renderPositionMs.value)
+        }
+    }
     val activeStyle = when (fontSize) {
         LyricFontSize.Small -> MaterialTheme.typography.titleMedium
         LyricFontSize.Medium -> MaterialTheme.typography.titleLarge
@@ -1293,8 +1301,7 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
                     if (active && !line.words.isNullOrEmpty()) {
                         KaraokeLyricText(
                             words = line.words,
-                            positionMs = state.positionMs,
-                            isPlaying = state.status == PlayerStatus.Playing,
+                            positionMs = renderPositionMs,
                             style = activeStyle,
                             activeColor = MaterialTheme.colorScheme.primary,
                             // Keep the unsung portion clearly muted so primary fill pops.
@@ -1331,17 +1338,20 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
 }
 
 @Composable
-private fun rememberKaraokePositionMs(positionMs: Long, isPlaying: Boolean): Long {
-    var renderPositionMs by remember { mutableLongStateOf(positionMs) }
+private fun rememberKaraokePositionMs(
+    positionMs: Long,
+    isPlaying: Boolean,
+): androidx.compose.runtime.State<Long> {
+    val renderPositionMs = remember { mutableLongStateOf(positionMs) }
     LaunchedEffect(positionMs, isPlaying) {
-        renderPositionMs = positionMs
+        renderPositionMs.longValue = positionMs
         if (!isPlaying) return@LaunchedEffect
         val anchorPosition = positionMs
         val anchorFrame = withFrameNanos { it }
         while (true) {
             withFrameNanos { frame ->
                 val elapsedMs = (frame - anchorFrame) / 1_000_000L
-                renderPositionMs = anchorPosition + elapsedMs
+                renderPositionMs.longValue = anchorPosition + elapsedMs
             }
         }
     }
@@ -1351,14 +1361,12 @@ private fun rememberKaraokePositionMs(positionMs: Long, isPlaying: Boolean): Lon
 @Composable
 private fun KaraokeLyricText(
     words: List<LyricWord>,
-    positionMs: Long,
-    isPlaying: Boolean,
+    positionMs: androidx.compose.runtime.State<Long>,
     style: TextStyle,
     activeColor: Color,
     inactiveColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    val renderPositionMs = rememberKaraokePositionMs(positionMs, isPlaying)
     val text = remember(words) { words.joinToString("") { it.text } }
     val textMeasurer = rememberTextMeasurer()
     val fontSize = style.fontSize
@@ -1372,7 +1380,7 @@ private fun KaraokeLyricText(
             ).size.width.toFloat()
         }
     }
-    val progress = karaokeFillProgress(words, renderPositionMs, wordWidths)
+    val progress = karaokeFillProgress(words, positionMs.value, wordWidths)
     val textStyle = style.copy(fontWeight = FontWeight.SemiBold)
 
     BoxWithConstraints(modifier = modifier) {
