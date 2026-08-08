@@ -1173,7 +1173,7 @@ fun PlayPauseButton(
     RoundControlButton(
         imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
         contentDescription = if (isPlaying) "暂停" else "播放",
-        onClick = onToggle,
+        onClick = onClick,
         size = size,
         iconSize = iconSize,
         prominent = prominent,
