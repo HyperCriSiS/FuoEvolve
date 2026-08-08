@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
+import org.feeluown.mobile.provider.core.network.currentTimeMillis
 
 @Serializable
 enum class SearchScope {
@@ -91,6 +92,11 @@ private const val DYNAMIC_QUEUE_PREFETCH_REMAINING = 2
 private const val LIST_PREFETCH_REMAINING = 8
 private const val PLAYBACK_PLAN_LOOKAHEAD = 8
 private const val PLAYLIST_BACKGROUND_PAGE_INTERVAL_MS = 3_000L
+private const val MAX_PLAYLIST_PLAYBACK_STATS = 500
+private const val MAX_PLAYLIST_STATS_KEY_LENGTH = 2_048
+private const val MAX_PLAYLIST_PLAY_COUNT = 1_000_000_000L
+private const val PLAYLIST_PLAYBACK_STATS_VERSION = 1
+private const val PLAYLIST_STATS_KEY_SEPARATOR = "::"
 private val DEFAULT_DEBUG_LOG_LEVEL_FILTERS = setOf(DebugLogLevel.Info, DebugLogLevel.Warning, DebugLogLevel.Error)
 
 class FuoPlayerController(
@@ -131,6 +137,8 @@ class FuoPlayerController(
     var providerCookieInputs by mutableStateOf<Map<String, String>>(emptyMap())
         private set
     var providerHeaderInputs by mutableStateOf<Map<String, ProviderHeaderInput>>(emptyMap())
+    var playlistPlaybackStats by mutableStateOf<Map<String, PlaylistPlaybackStat>>(emptyMap())
+        private set
     var providerOAuthInputs by mutableStateOf<Map<String, ProviderOAuthInput>>(emptyMap())
     var ytmusicOAuthFlow by mutableStateOf<YtMusicOAuthFlowUiState?>(null)
         private set
@@ -3257,6 +3265,7 @@ class FuoPlayerController(
         val loadedTracks = selectedPlaylistTracks
         val track = loadedTracks.getOrNull(index) ?: return
         selectedPlaylistBackgroundLoadJob?.cancel()
+        recordPlaylistPlayback(playlist)
         play(track, loadedTracks, index, sourcePlaylistId = playlist.id)
         if (selectedPlaylistTracksHasMore && queuePlaylistId == playlist.id) {
             selectedPlaylistBackgroundLoadJob = scope.launch {
@@ -3279,6 +3288,48 @@ class FuoPlayerController(
                 }
             }
         }
+    }
+
+    fun sortedMinePlaylists(playlists: List<ProviderPlaylist>): List<ProviderPlaylist> =
+        playlists.withIndex().sortedWith(
+            compareByDescending<IndexedValue<ProviderPlaylist>> {
+                playlistPlaybackStats[it.value.playbackStatsKey()]?.lastPlayedAtMillis ?: 0
+            }.thenBy { it.index },
+        ).map { it.value }
+
+    fun frequentlyPlayedPlaylists(): List<ProviderPlaylist> {
+        val playlists = (minePlaylistSections + mineFavoritePlaylistSections)
+            .filterNot { it.isLoginRequired }
+            .flatMap { it.playlists }
+            .distinctBy { it.playbackStatsKey() }
+        return playlists.sortedWith(
+            compareByDescending<ProviderPlaylist> {
+                playlistPlaybackStats[it.playbackStatsKey()]?.playCount ?: 0
+            }.thenByDescending {
+                playlistPlaybackStats[it.playbackStatsKey()]?.lastPlayedAtMillis ?: 0
+            },
+        ).filter { (playlistPlaybackStats[it.playbackStatsKey()]?.playCount ?: 0) > 0 }
+    }
+
+    fun categoryForMinePlaylist(playlist: ProviderPlaylist): ProviderFeatureCategory =
+        if (mineFavoritePlaylistSections.any { section ->
+                section.playlists.any { it.playbackStatsKey() == playlist.playbackStatsKey() }
+            }
+        ) ProviderFeatureCategory.MineFavoritePlaylists else ProviderFeatureCategory.MinePlaylists
+
+    private fun recordPlaylistPlayback(playlist: ProviderPlaylist) {
+        val key = playlist.playbackStatsKey()
+        val previous = playlistPlaybackStats[key] ?: PlaylistPlaybackStat()
+        playlistPlaybackStats = (playlistPlaybackStats + (
+            key to previous.copy(
+                playCount = previous.playCount + 1,
+                lastPlayedAtMillis = currentTimeMillis(),
+            )
+        )).entries
+            .sortedByDescending { it.value.lastPlayedAtMillis }
+            .take(MAX_PLAYLIST_PLAYBACK_STATS)
+            .associate { it.toPair() }
+        persistSettings()
     }
 
     fun playFromSelectedFeature(index: Int) {
@@ -4648,6 +4699,7 @@ class FuoPlayerController(
         themeMode = settings.themeMode
         themeColorScheme = settings.themeColorScheme
         dynamicCoverColorEnabled = settings.dynamicCoverColorEnabled
+        playlistPlaybackStats = normalizedPlaylistPlaybackStats(settings)
         pauseOnOtherAppPlayback = settings.pauseOnOtherAppPlayback
     }
 
@@ -4689,9 +4741,14 @@ class FuoPlayerController(
             themeMode = themeMode,
             themeColorScheme = themeColorScheme,
             dynamicCoverColorEnabled = dynamicCoverColorEnabled,
+            playlistPlaybackStatsVersion = PLAYLIST_PLAYBACK_STATS_VERSION,
+            playlistPlaybackStats = playlistPlaybackStats,
             pauseOnOtherAppPlayback = pauseOnOtherAppPlayback,
         )
     }
+
+    private fun ProviderPlaylist.playbackStatsKey(): String =
+        "$providerId$PLAYLIST_STATS_KEY_SEPARATOR$id"
 
     private suspend fun updateResourceCacheLimit() {
         resourceCacheRepository.updateLimit(
@@ -4886,4 +4943,20 @@ class FuoPlayerController(
         contains("media not found", ignoreCase = true) || contains("MediaNotFound", ignoreCase = true)
 
     private fun Int.mbToBytes(): Long = this.toLong() * 1024L * 1024L
+}
+
+internal fun normalizedPlaylistPlaybackStats(settings: AppSettings): Map<String, PlaylistPlaybackStat> {
+    if (settings.playlistPlaybackStatsVersion != PLAYLIST_PLAYBACK_STATS_VERSION) return emptyMap()
+    return settings.playlistPlaybackStats.entries
+        .asSequence()
+        .filter { (key, stat) ->
+            key.isNotBlank() &&
+                key.length <= MAX_PLAYLIST_STATS_KEY_LENGTH &&
+                key.none(Char::isISOControl) &&
+                stat.playCount in 1..MAX_PLAYLIST_PLAY_COUNT &&
+                stat.lastPlayedAtMillis > 0
+        }
+        .sortedByDescending { it.value.lastPlayedAtMillis }
+        .take(MAX_PLAYLIST_PLAYBACK_STATS)
+        .associate { it.toPair() }
 }

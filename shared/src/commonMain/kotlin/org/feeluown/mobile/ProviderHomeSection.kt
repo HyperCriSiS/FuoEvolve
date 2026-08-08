@@ -161,6 +161,7 @@ fun ProviderContentHomeSection(
                                     ProviderPlaylistGrid(
                                         playlists = contentSection.playlists,
                                         onClick = { controller.openPlaylist(it, contentSection.feature.category) },
+                                        onMore = { controller.openFeature(contentSection.feature) },
                                     )
                                 }
                             }
@@ -513,25 +514,55 @@ fun RecommendationButton(
 fun ProviderPlaylistGrid(
     playlists: List<ProviderPlaylist>,
     onClick: (ProviderPlaylist) -> Unit,
+    onMore: (() -> Unit)? = null,
+    maxRows: Int? = null,
 ) {
     val layoutInfo = LocalAppLayoutInfo.current
-    val columns = layoutInfo.gridColumns
+    val columns = layoutInfo.gridColumns.coerceAtLeast(1)
     val spacing = if (layoutInfo.useWideLayout) 8.dp else 12.dp
+    val capacity = columns * (maxRows ?: 2)
+    val isLimited = maxRows != null || onMore != null
+    val hasMore = isLimited && playlists.size > capacity
+    val visiblePlaylists = when {
+        hasMore && onMore != null -> playlists.take(capacity - 1)
+        hasMore -> playlists.take(capacity)
+        else -> playlists
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(spacing),
     ) {
-        playlists.chunked(columns).forEach { row ->
+        val cells = visiblePlaylists.map<ProviderPlaylist, PlaylistGridCell> { PlaylistGridCell.Playlist(it) } +
+            if (hasMore && onMore != null) listOf(PlaylistGridCell.More) else emptyList()
+        cells.chunked(columns).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(spacing),
             ) {
-                row.forEach { playlist ->
-                    ProviderPlaylistCard(
-                        playlist = playlist,
-                        onClick = { onClick(playlist) },
-                        modifier = Modifier.weight(1f),
-                    )
+                row.forEach { cell ->
+                    when (cell) {
+                        PlaylistGridCell.More -> {
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clickable(role = Role.Button) { onMore?.invoke() },
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("更多", style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                        is PlaylistGridCell.Playlist -> {
+                            ProviderPlaylistCard(
+                                playlist = cell.value,
+                                onClick = { onClick(cell.value) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
                 repeat(columns - row.size) {
                     Spacer(Modifier.weight(1f))
@@ -539,6 +570,11 @@ fun ProviderPlaylistGrid(
             }
         }
     }
+}
+
+private sealed interface PlaylistGridCell {
+    data class Playlist(val value: ProviderPlaylist) : PlaylistGridCell
+    data object More : PlaylistGridCell
 }
 
 @Composable
