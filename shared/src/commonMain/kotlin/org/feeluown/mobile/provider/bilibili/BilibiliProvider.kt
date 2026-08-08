@@ -311,6 +311,11 @@ class BilibiliProvider(
                         "season_id" to resourceId,
                         "pn" to pageNumber.toString(),
                         "ps" to pageSize.toString(),
+                        "keyword" to "",
+                        "order" to "mtime",
+                        "type" to "0",
+                        "tid" to "0",
+                        "platform" to "web",
                     ),
                 )
             } else {
@@ -338,15 +343,15 @@ class BilibiliProvider(
         } else {
             data.obj("info")?.toFavoritePlaylist() ?: playlist
         }
-        val tracks = data.array(if (isCollection) "items" else "medias")
-            .mapNotNull { searchItemToTrack(it.asObject()) }
+        val medias = data.array("medias")
+        val tracks = medias.mapNotNull { searchItemToTrack(it.asObject()) }
         val total = actualPlaylist.trackCount ?: playlist.trackCount
-        val nextOffset = offset + tracks.size
+        val nextOffset = offset + medias.size
         return ProviderPlaylistDetail(
             playlist = actualPlaylist,
             tracks = tracks,
             tracksNextOffset = nextOffset,
-            tracksHasMore = data.boolean("has_more") || (total != null && nextOffset < total),
+            tracksHasMore = medias.isNotEmpty() && (data.boolean("has_more") || (total != null && nextOffset < total)),
         )
     }
 
