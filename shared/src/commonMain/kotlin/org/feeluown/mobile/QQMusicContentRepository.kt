@@ -1,14 +1,17 @@
 package org.feeluown.mobile
 
 import org.feeluown.mobile.provider.qqmusic.QQMusicContentProvider
+import org.feeluown.mobile.provider.qqmusic.QQMusicUserLibrary
 
 /**
  * Adds QQ Music discovery/search surfaces without changing the core provider repository.
- * Playback, authentication and user-library mutations continue to use the base QQ provider.
+ * Playback and mutations still go through [delegate]; QQ-specific discovery and
+ * user-library presentation are routed to their dedicated helpers.
  */
 internal class QQMusicContentRepository(
     private val delegate: ProviderMusicRepository,
     private val qqmusic: QQMusicContentProvider,
+    private val userLibrary: QQMusicUserLibrary,
 ) : ProviderMusicRepository by delegate {
     override suspend fun features(): List<ProviderFeature> {
         val base = delegate.features()
@@ -46,6 +49,30 @@ internal class QQMusicContentRepository(
         )
     }
 
+    override suspend fun authState(providerId: String): ProviderAuthState {
+        val base = delegate.authState(providerId)
+        return if (providerId == QQMUSIC_PROVIDER_ID) enrichQQMusicAuth(base) else base
+    }
+
+    override suspend fun refreshAuthState(providerId: String): ProviderAuthState {
+        val base = delegate.refreshAuthState(providerId)
+        return if (providerId == QQMUSIC_PROVIDER_ID) enrichQQMusicAuth(base) else base
+    }
+
+    override suspend fun loginWithCookies(providerId: String, cookiesJson: String): ProviderAuthState {
+        val base = delegate.loginWithCookies(providerId, cookiesJson)
+        return if (providerId == QQMUSIC_PROVIDER_ID) enrichQQMusicAuth(base) else base
+    }
+
+    override suspend fun loginWithHeaders(
+        providerId: String,
+        authorization: String,
+        cookie: String,
+    ): ProviderAuthState {
+        val base = delegate.loginWithHeaders(providerId, authorization, cookie)
+        return if (providerId == QQMUSIC_PROVIDER_ID) enrichQQMusicAuth(base) else base
+    }
+
     override suspend fun loadFeature(feature: ProviderFeature): ProviderContentSection =
         loadFeaturePage(feature, 0, PROVIDER_PAGE_SIZE)
 
@@ -54,7 +81,16 @@ internal class QQMusicContentRepository(
         offset: Int,
         limit: Int,
     ): ProviderContentSection = if (feature.providerId == QQMUSIC_PROVIDER_ID) {
-        qqmusic.loadFeature(feature, offset, limit)
+        if (ProviderFeatureFilterCodec.requestId(feature.id) == QQMUSIC_USER_PLAYLISTS_FEATURE_ID) {
+            val auth = delegate.authState(QQMUSIC_PROVIDER_ID)
+            if (!auth.isLoggedIn) {
+                ProviderContentSection(feature = feature, isLoginRequired = true)
+            } else {
+                userLibrary.loadPlaylists(feature, offset, limit)
+            }
+        } else {
+            qqmusic.loadFeature(feature, offset, limit)
+        }
     } else {
         delegate.loadFeaturePage(feature, offset, limit)
     }
@@ -86,6 +122,14 @@ internal class QQMusicContentRepository(
             delegate.playlistTracks(playlist)
         }
 
+    private suspend fun enrichQQMusicAuth(base: ProviderAuthState): ProviderAuthState {
+        if (!base.isLoggedIn) return base
+        val userName = runCatching { userLibrary.userName() }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: return base
+        return base.copy(userName = userName)
+    }
+
     private fun <T> replaceQQMusic(
         base: List<T>,
         qqItems: List<T>,
@@ -94,5 +138,6 @@ internal class QQMusicContentRepository(
 
     private companion object {
         const val QQMUSIC_PROVIDER_ID = "qqmusic"
+        const val QQMUSIC_USER_PLAYLISTS_FEATURE_ID = "qqmusic_user_playlists"
     }
 }
