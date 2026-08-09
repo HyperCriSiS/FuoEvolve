@@ -13,205 +13,127 @@
 
 [中文](README.zh-CN.md) | English
 
-FuoEvolve is an open-source music player based on the
-[FeelUOwn](https://github.com/feeluown/FeelUOwn) ecosystem. Android is usable
-today. Experimental iOS build support is available, but iOS is not released.
+FuoEvolve is an open-source music player built around the [FeelUOwn](https://github.com/feeluown/FeelUOwn) ecosystem. It brings multiple online music services, local music, playlists, downloads, lyrics, and video into one app with a modern Material 3 experience.
 
-The project uses Kotlin Multiplatform and Compose Multiplatform for shared UI,
-state, player contracts, and provider implementations. The provider layer is
-implemented in Kotlin with Ktor and uses AndroidX Media3 for audio and video
-playback on Android.
+Android is the primary supported platform. iOS builds are available for experimentation and development, but are not currently released for end users.
 
 ## Download
 
-| Channel | Link | Packages |
+| Channel | Link | Notes |
 | --- | --- | --- |
-| Stable | [Latest GitHub Release](https://github.com/feeluown/FuoEvolve/releases/latest) | One signed multi-ABI release APK containing `arm64-v8a` and `x86_64`. |
-| F-Droid | [Official self-hosted repository](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | The five latest stable multi-ABI releases, updated automatically after each GitHub Release. |
-| Canary | [Latest master Android APK workflow](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | Artifacts from the newest successful master build: signed debug APK and signed multi-ABI release APK. |
-
-iOS builds are experimental debug artifacts only. They are not published as
-GitHub Releases or supported for end-user installation.
+| Stable | [Latest GitHub Release](https://github.com/feeluown/FuoEvolve/releases/latest) | Signed multi-ABI Android APK for `arm64-v8a` and `x86_64`. |
+| F-Droid | [Official self-hosted repository](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | Keeps the latest stable releases and updates automatically after GitHub Releases. |
+| Canary | [Latest master Android build](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | Signed release APK built from the latest successful `master` workflow. |
 
 ## Highlights
 
-- 🎵 FeelUOwn-based online music provider integration on Android.
-- 🔎 Search across enabled providers and local music, with provider filtering.
-- 🧭 Typed provider search tabs for songs, artists, albums, playlists, and videos
-  where the upstream provider supports those result types.
-- 🏠 Provider home sections for recommendations, exploration, user playlists, and
-  favorites.
-- ▶️ Media3 audio playback, video/MV playback, queue management, shuffle, repeat,
-  up-next, multi-part tracks, covers, LRC lyrics, and artist/album detail
-  navigation from the full player.
-- 🎙️ Audio recognition on Android and experimental iOS builds, with recognized
-  song results, direct search, and NetEase detail links.
-- 📚 Playlist playback starts from loaded tracks and incrementally loads the
-  remaining tracks in the background, including large shuffled playlists.
-- 🔁 Smart replacement for unavailable tracks, with configurable provider pool,
-  score threshold, metadata policy, and lyric policy.
-- ⬇️ Downloads, app-private lyrics, local music database, local metadata edits, and
-  provider-assisted metadata/lyric lookup.
-- 🔗 Direct system sharing with App Link-friendly share URLs.
-- ⚙️ Runtime settings for providers, login, quality, playback behavior, local scan
-  filters, cache limits, lyrics, and theme.
+- 🎵 **Multiple music sources in one app** — use NetEase Cloud Music, QQ Music, Bilibili, and YouTube Music side by side, and choose which sources are enabled and preferred.
+- 🧭 **Rich discovery** — browse daily recommendations, private radio, charts, playlist and artist collections, new releases, MV collections, music styles, and other source-specific content.
+- 🔎 **Unified search** — search enabled online sources and local music, with dedicated results for songs, artists, albums, playlists, and videos where available.
+- ▶️ **Complete playback experience** — queue management, shuffle and repeat, up next, seeking, multipart content, audio playback, and a full-screen MV/video player with playback controls.
+- 🎤 **Better lyrics** — synchronized lyrics, translations, NetEase word-by-word karaoke highlighting, and ColorOS lock-screen live lyrics on supported OPPO/OnePlus devices.
+- 🔁 **Smart source replacement** — when a track is unavailable, FuoEvolve can automatically look for a close match from another enabled source while keeping the original song information and lyrics.
+- 💽 **Local music and playlists** — browse local music by artist, album, or directory, edit metadata, create local playlists, and import or share playlist files.
+- ⬇️ **Downloads for offline listening** — download supported online tracks and play them locally from the app.
+- 🎙️ **Audio recognition** — identify a song from the microphone and jump directly to search or song details.
+- 🔗 **Share into FuoEvolve** — on Android, share supported NetEase, QQ Music, Bilibili, YouTube, or YouTube Music links to the app to open the matching content; unsupported share text can fall back to search.
+- 🎨 **Material 3 Expressive UI** — light/dark themes, dynamic color, cover-inspired player colors, smooth transitions, and layouts that adapt across phone and larger screens.
+
+## Music Sources
+
+FuoEvolve currently includes four online sources. Available content can vary by source, region, account state, and upstream service behavior.
+
+| Source | What you can explore |
+| --- | --- |
+| **NetEase Cloud Music** | Daily songs, recommended and new songs, private FM, charts, playlist square, artist square, MV square, music styles, favorite songs, cloud songs, playlists, artists, and albums. |
+| **QQ Music** | Daily songs, recommendations, private FM, charts, playlist square, artist square, new albums, MV square, multi-type search, user playlists, favorites, artists, and albums. |
+| **Bilibili** | Music/video search and playback, personalized recommendations, dynamic videos, weekly must-watch, watch later, viewing history, followed creators and uploads, favorites, and collected bangumi/films. |
+| **YouTube Music** | Song and video search, recommendations and library content, playlists, artists, albums, charts, and video playback where available. |
+
+Sources can be enabled, disabled, reordered, and signed in from Settings. NetEase, QQ Music, and Bilibili use account cookies. YouTube Music supports Google authorization as well as imported account headers/cookies.
+
+## Playback and Lyrics
+
+FuoEvolve is designed for both everyday listening and mixed music/video libraries. You can manage the play queue, use shuffle or repeat, add tracks to Up Next, seek through playback, and open artist or album details directly from the player.
+
+MV and video playback has a dedicated viewing experience with transport controls, full-screen playback, orientation handling, and support for multipart Bilibili videos.
+
+Lyrics support includes classic synchronized lyrics, translated lines, and NetEase word-level lyrics with karaoke-style progress highlighting. On supported ColorOS devices, timed lyrics can also appear on the lock screen while music is playing.
+
+## Discovery and Personal Library
+
+The home and library experience follows the content each source actually provides instead of forcing every source into the same shape.
+
+NetEase and QQ Music expose broader discovery areas such as charts, playlist collections, artist browsing, MV browsing, categories, and filters. NetEase also includes music-style browsing, while QQ Music includes new album discovery.
+
+Bilibili focuses on its own content model: personalized and dynamic videos, weekly recommendations, Watch Later, viewing history, followed creators, creator uploads, favorites, and collected bangumi/films.
+
+Your library also surfaces frequently played playlists so commonly used collections are easier to return to.
+
+## Local Music, Playlists, and Downloads
+
+Local music can be scanned into the app and browsed by all tracks, artist, album, or directory. Scan rules can be adjusted to include specific folders or ignore very short audio files.
+
+Track title, artist, and album information can be edited locally. FuoEvolve can also use enabled online sources to help find better metadata and lyrics.
+
+Local playlists can contain local, downloaded, and supported online tracks. They can be created and managed in the app, imported from files, and shared as playlist files. Downloaded tracks remain available for local playback inside FuoEvolve.
 
 ## Audio Recognition
 
-Open audio recognition from the microphone action in Search. Android and
-experimental iOS builds request microphone permission, keep the captured audio
-in memory while generating a fingerprint, and send only the audio fingerprint
-to the recognition service. The app displays recognized songs and lets you search
-for them or open their NetEase details. Recognition results remain available when
-you return from Search or a detail page; an unsuccessful run ends with a retry
-option.
+Open audio recognition from the microphone action in Search. The app records only what is needed to generate an audio fingerprint, keeps the captured audio in memory, and sends the fingerprint to the recognition service rather than uploading the original recording.
 
-## Provider Support
+Recognized songs can be searched immediately or opened in their NetEase details. The latest recognition result remains available when navigating between Search and detail pages, and unsuccessful recognition can be retried.
 
-Provider implementations currently bundled in the shared Kotlin module:
+## Personalization and Settings
 
-| Provider | Implementation | Default | Login modes |
-| --- | --- | --- | --- |
-| NetEase Cloud Music | `NeteaseProvider` | Enabled | Cookie |
-| QQ Music | `QQMusicProvider` | Available in Settings | Cookie |
-| Bilibili | `BilibiliProvider` | Available in Settings | Cookie |
-| YouTube Music | `YtMusicProvider` | Available in Settings | OAuth (TV) / Headers |
+FuoEvolve lets you tune the experience without requiring deep configuration. Common options include:
 
-The app loads NetEase by default. QQ Music, Bilibili, and YouTube Music are
-packaged and can be enabled, disabled, or reordered from Settings.
-
-YouTube Music supports two login modes:
-
-1. **Google OAuth (TV / Limited Input device-code)** — same flow as
-   [ytmusicapi OAuth](https://ytmusicapi.readthedocs.io/en/stable/setup/oauth.html).
-   Create a Google Cloud OAuth client of type **TVs and Limited Input devices**,
-   enable the YouTube Data API, enter or import the Console `client_secret_*.json`
-   in Settings, then tap **Sign in with Google (TV)** and complete the browser
-   verification code. You can also import an `oauth.json` produced by
-   `ytmusicapi oauth` (client credentials are still required for refresh).
-2. **Headers / Cookie** — import `ytmusic_header.json` or paste Authorization +
-   Cookie manually.
-
-Local `oauth.json` and `client_secret*.json` files are gitignored.
-
-Legend: ✅ supported, including features that require login; 🧩 supported only
-when the upstream provider exposes the required method or result type; ➖ not
-exposed in the app today.
-
-| Feature | NetEase | QQ Music | Bilibili | YouTube Music |
-| --- | --- | --- | --- | --- |
-| Provider login/logout | ✅ | ✅ | ✅ | ✅ |
-| Song search | ✅ | ✅ | ✅ | ✅ |
-| Artist / album / playlist / video search tabs | 🧩 | 🧩 | 🧩 | 🧩 |
-| Daily songs | ✅ | ✅ | ➖ | ✅ |
-| Recommended playlists | ✅ | ✅ | ➖ | ✅ |
-| Private FM / radio | ✅ | ✅ | ➖ | ➖ |
-| Top lists | ✅ | ➖ | ➖ | ✅ |
-| User playlists | ✅ | ✅ | ✅ | ✅ |
-| Favorite songs | ✅ | ✅ | ➖ | ✅ |
-| Favorite playlists | ✅ | ✅ | ✅ | ✅ |
-| Favorite artists | ✅ | ✅ | ➖ | ✅ |
-| Favorite albums | ✅ | ✅ | ➖ | ✅ |
-| Followed Bilibili creators | ➖ | ➖ | ✅ | ➖ |
-| Collected anime / films | ➖ | ➖ | ✅ | ➖ |
-| Add song to user playlist | 🧩 | 🧩 | 🧩 | 🧩 |
-| Remove song from playlist | 🧩 | 🧩 | 🧩 | ➖ |
-| Similar songs / hot comments / song MV | 🧩 | 🧩 | 🧩 | 🧩 |
-| Video playback | 🧩 | 🧩 | 🧩 | 🧩 |
-
-Provider behavior can still vary with upstream service limits, region, login
-state, and the exact FeelUOwn provider implementation.
-
-## App Settings And Features
-
-| Area | Current options |
-| --- | --- |
-| 🎛️ Providers | Enable or disable packaged providers, reorder provider priority, manage provider login, and switch login mode per provider. |
-| 🎧 Audio quality | Separate Wi-Fi and cellular policies: highest, high, standard, or low-data. |
-| 🔁 Unavailable tracks | Smart replacement or skip. Smart replacement can choose providers and minimum score while keeping the original track metadata and lyrics. |
-| 🖼️ Playback display | Lyrics font size, system/light/dark mode, dynamic color, and preset color schemes. |
-| 💽 Local music | Media permission entry, database-backed refresh, grouping by all/artist/album, directory inclusion, and minimum-duration filter. |
-| ✏️ Local metadata | Edit title/artist/album, search provider metadata, and download lyrics into app-private storage. |
-| 🧹 Cache | Configurable audio cache and image cache limits. |
-| ⬇️ Downloads | Download provider tracks, play downloaded tracks locally, and remove downloaded files. |
-| 🐞 Debug builds | Debug log viewer is available only in debug builds. |
-
-## Project Structure
-
-- `shared`: shared Compose UI, domain contracts, player state, common tests, and
-  the Kotlin provider/network layer.
-- `androidApp`: Android application, Media3 playback, assets, resources, and
-  Android credential/cache stores.
-- `shared/src/commonMain/kotlin/org/feeluown/mobile/provider`: Kotlin provider
-  implementations, request policies, cache, retry, and domain mapping.
-- `shared/src/commonMain/resources/audio_recognition`: bundled fingerprint runtime
-  assets used by mobile audio recognition.
-- `iosApp/FuoEvolve`: Swift app shell for experimental iOS builds.
-- `.github/workflows`: Android APK and release workflows, plus the experimental
-  iOS debug workflow.
-
-## Requirements
-
-- JDK 17 or newer.
-- Android Studio or Android command-line tools for Android builds.
-- Xcode on macOS for experimental iOS builds.
-
-## Android Build
-
-Build a debug Android APK with the checked-in Gradle wrapper:
-
-```bash
-./gradlew :androidApp:assembleDebug
-```
-
-Install it on a connected device or emulator:
-
-```bash
-./gradlew :androidApp:installDebug
-```
-
-The Android build includes the Kotlin provider implementations and their Ktor
-network stack directly; it does not download or package a scripting runtime.
+- online source enablement, priority, and login management;
+- separate Wi-Fi and cellular audio-quality preferences;
+- smart replacement behavior for unavailable tracks;
+- playback behavior, including whether another app starting audio should pause FuoEvolve;
+- system, light, or dark appearance, dynamic color, preset colors, and cover-inspired player colors;
+- lyric font size and display preferences;
+- local music scan folders and minimum track duration;
+- audio and image cache limits.
 
 ## iOS Status
 
-The iOS project under `iosApp/FuoEvolve.xcodeproj` has experimental debug-build
-support, including shared UI integration and audio recognition integration. Every
-push to `master` builds a simulator debug artifact
-in GitHub Actions. iOS is not released: do not treat its artifacts as
-production-ready or expect a GitHub Release, App Store distribution, or end-user
-installation support.
+iOS support is experimental. The project includes an iOS app and CI builds for development, and a growing set of shared features such as browsing, playback, MV controls, and audio recognition are available there.
 
-Provider and playback integration remain experimental.
+iOS is not currently published as a GitHub Release or App Store build, so it should not yet be considered an end-user supported platform.
 
-## Testing
+## Development
 
-Run shared multiplatform tests:
+FuoEvolve uses Kotlin Multiplatform and Compose Multiplatform to share most application code across platforms. Android uses AndroidX Media3 for playback.
+
+Requirements:
+
+- JDK 17 or newer;
+- Android Studio or Android command-line tools for Android builds;
+- Xcode on macOS for experimental iOS builds.
+
+Build and install the Android debug app:
+
+```bash
+./gradlew :androidApp:assembleDebug
+./gradlew :androidApp:installDebug
+```
+
+Run shared tests and Android lint:
 
 ```bash
 ./gradlew :shared:allTests
-```
-
-Run Android lint checks:
-
-```bash
 ./gradlew :androidApp:lint :shared:lint
 ```
 
-## Provider Extensions
+Main project areas:
 
-To add a provider, implement the shared `KotlinMusicProvider` contract under
-`shared/src/commonMain/kotlin/org/feeluown/mobile/provider`, register it in
-`KotlinProviderRepository`, expose it from Settings, and add focused contract
-tests. The default enabled provider set is NetEase:
-
-```json
-{
-  "enabled": ["netease"]
-}
-```
+- `shared` — shared UI, application state, music-source integrations, and common tests;
+- `androidApp` — Android application and platform playback integration;
+- `iosApp/FuoEvolve` — experimental iOS application;
+- `.github/workflows` — Android release/build automation and iOS development builds.
 
 ## License
 
-FuoEvolve is licensed under the GNU General Public License v3.0. See
-[LICENSE](LICENSE) for details.
+FuoEvolve is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

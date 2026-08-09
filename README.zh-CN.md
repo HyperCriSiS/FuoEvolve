@@ -13,170 +13,127 @@
 
 中文 | [English](README.md)
 
-FuoEvolve 是一个基于 [FeelUOwn](https://github.com/feeluown/FeelUOwn)
-生态构建的开源音乐播放器。当前 Android 端可用，已提供 iOS 实验性构建支持，但暂不发布 iOS 版本。
+FuoEvolve 是一个围绕 [FeelUOwn](https://github.com/feeluown/FeelUOwn) 生态构建的开源音乐播放器。它把多个在线音乐平台、本地音乐、歌单、下载、歌词和视频内容整合到同一个应用中，并提供现代化的 Material 3 使用体验。
 
-项目使用 Kotlin Multiplatform 和 Compose Multiplatform 共享 UI、状态、播放器契约和音乐源实现。
-音乐源层使用 Kotlin 与 Ktor 实现，Android 端使用 AndroidX Media3 播放音频和视频。
+目前 Android 是主要支持的平台；iOS 已有实验性构建，可用于体验和开发验证，但暂未面向普通用户正式发布。
 
 ## 下载
 
-| 渠道 | 地址 | 安装包 |
+| 渠道 | 地址 | 说明 |
 | --- | --- | --- |
-| 正式版 | [GitHub 最新 Release](https://github.com/feeluown/FuoEvolve/releases/latest) | 一个包含 `arm64-v8a` 和 `x86_64` 的签名 multi-ABI release APK。 |
-| F-Droid | [官方自托管仓库](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | 自动收录最近 5 个稳定版 multi-ABI 安装包，每次 GitHub Release 后自动更新。 |
-| Canary | [master 分支最新 Android APK workflow](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | 在最新成功 workflow 的 Artifacts 中下载签名 debug APK 和签名 multi-ABI release APK。 |
-
-iOS 仅提供实验性的 Debug 构建产物，不会作为 GitHub Release 发布，也不面向终端用户安装提供支持。
+| 正式版 | [GitHub 最新 Release](https://github.com/feeluown/FuoEvolve/releases/latest) | 签名的 Android multi-ABI APK，包含 `arm64-v8a` 和 `x86_64`。 |
+| F-Droid | [官方自托管仓库](https://feeluown.github.io/FuoEvolve/fdroid/repo?fingerprint=8D8BE45A04CF3242C13B43361C9FFA1CA8FB2F39D1A43CE35BEADFA8DBFEFB74) | 保留近期稳定版本，并在 GitHub Release 发布后自动更新。 |
+| Canary | [master 最新 Android 构建](https://github.com/feeluown/FuoEvolve/actions/workflows/android-apk.yml?query=branch%3Amaster) | 从最新成功的 `master` workflow 下载签名 release APK。 |
 
 ## 项目亮点
 
-- 🎵 Android 端接入基于 FeelUOwn 的在线音乐源能力。
-- 🔎 支持跨已启用音乐源和本地音乐搜索，并可按音乐源过滤。
-- 🧭 在线搜索页按歌曲、歌手、专辑、歌单、视频分栏展示，具体结果类型取决于上游音乐源支持。
-- 🏠 音乐源首页支持推荐、探索、我的歌单、收藏内容等分区。
-- ▶️ Media3 音频播放、视频/MV 播放、播放队列、稍后播放、随机、循环、多分 P、封面、LRC 歌词，
-  并支持从全屏播放器打开歌手和专辑详情。
-- 🎙️ Android 和 iOS 实验性构建支持听歌识曲，展示识别结果，并可直接搜索或查看网易云详情。
-- 📚 播放歌单时先播放已加载曲目，同时在后台增量加载剩余曲目，支持较大歌单的随机播放。
-- 🔁 资源不可用时支持智能替换，可配置替换音乐源、最低分、元信息策略和歌词策略。
-- ⬇️ 支持下载、应用私有歌词、本地音乐数据库、本地元信息修改、在线匹配元信息和下载歌词。
-- 🔗 支持直接调起系统分享，并生成适合 App Links 的分享 URL。
-- ⚙️ 设置页支持音乐源、登录、音质、播放策略、本地扫描、缓存、歌词和主题等配置。
+- 🎵 **多音乐源整合**：在一个应用中使用网易云音乐、QQ 音乐、哔哩哔哩和 YouTube Music，并可自由启用、关闭和调整优先级。
+- 🧭 **丰富的发现内容**：浏览每日推荐、私人 FM、排行榜、歌单广场、歌手广场、新歌新碟、MV、音乐风格以及各平台自己的特色内容。
+- 🔎 **统一搜索**：同时搜索已启用的在线音乐源和本地音乐，并在支持时按歌曲、歌手、专辑、歌单和视频分类查看结果。
+- ▶️ **完整播放体验**：支持播放队列、随机/循环、稍后播放、进度跳转、多分 P、音频播放，以及带完整控制和全屏体验的 MV/视频播放。
+- 🎤 **更完整的歌词体验**：支持同步歌词、翻译歌词、网易云逐字歌词的卡拉 OK 式高亮，以及部分 OPPO/OnePlus ColorOS 设备的锁屏实时歌词。
+- 🔁 **智能换源**：当前歌曲资源不可用时，可自动在其他已启用音乐源中寻找更匹配的版本，同时尽量保留原歌曲信息和歌词。
+- 💽 **本地音乐与本地歌单**：可按歌手、专辑或目录浏览本地音乐，修改元信息，创建本地歌单，并导入或分享歌单文件。
+- ⬇️ **离线下载**：支持下载可用的在线歌曲，并在应用内直接进行本地播放。
+- 🎙️ **听歌识曲**：通过麦克风识别正在播放的歌曲，并快速跳转到搜索或歌曲详情。
+- 🔗 **分享直达**：Android 上可直接把网易云、QQ 音乐、哔哩哔哩、YouTube 或 YouTube Music 的分享链接发送给 FuoEvolve，自动打开对应内容；无法识别的分享文本也可以回退到应用内搜索。
+- 🎨 **Material 3 Expressive 界面**：支持亮色/暗色、动态颜色、根据封面生成的播放器配色、流畅页面过渡，以及适配手机和更大屏幕的布局。
+
+## 音乐源
+
+FuoEvolve 目前内置四个在线音乐源。具体可用内容可能会受到平台能力、地区、登录状态和上游服务变化的影响。
+
+| 音乐源 | 可以浏览的内容 |
+| --- | --- |
+| **网易云音乐** | 每日推荐歌曲、推荐新歌、私人 FM、排行榜、歌单广场、歌手广场、MV 广场、音乐风格、我喜欢、云盘歌曲、用户歌单、收藏歌手和专辑等。 |
+| **QQ 音乐** | 每日推荐、推荐内容、私人 FM、排行榜、歌单广场、歌手广场、新碟、MV 广场、多类型搜索、我的歌单、收藏歌曲、歌手和专辑等。 |
+| **哔哩哔哩** | 音乐/视频搜索与播放、个性化推荐、动态视频、每周必看、稍后再看、观看历史、关注的 UP 主及投稿、收藏夹、追番和影视收藏等。 |
+| **YouTube Music** | 歌曲和视频搜索、推荐与媒体库内容、歌单、歌手、专辑、排行榜以及可用的视频播放能力。 |
+
+所有音乐源都可以在设置中启用、关闭、排序和管理登录。网易云音乐、QQ 音乐和哔哩哔哩主要通过账号 Cookie 登录；YouTube Music 支持 Google 授权，也可以导入账号 Headers/Cookie。
+
+## 播放与歌词
+
+FuoEvolve 同时面向普通音乐播放和音乐/视频混合内容使用。可以管理播放队列，使用随机或循环模式，把歌曲加入“稍后播放”，拖动进度，并直接从播放器进入歌手或专辑详情。
+
+MV 和视频拥有独立播放页面，支持播放控制、全屏显示、横竖屏切换，以及哔哩哔哩多分 P 内容。
+
+歌词支持普通时间轴歌词、翻译歌词，以及网易云逐字歌词的跟随式高亮。在支持对应能力的 ColorOS 设备上，播放中的时间轴歌词还可以显示在锁屏界面。
+
+## 发现与个人媒体库
+
+FuoEvolve 会尽量按照每个平台原本的内容特点来组织首页和“我的”，而不是把所有音乐源强行做成完全一致的结构。
+
+网易云音乐和 QQ 音乐提供更完整的发现入口，例如排行榜、歌单广场、歌手浏览、MV 浏览，以及分类和筛选。网易云音乐额外支持音乐风格内容，QQ 音乐则支持新碟浏览。
+
+哔哩哔哩更贴近自身内容生态，可查看个性化推荐、动态视频、每周必看、稍后再看、观看历史、关注的 UP 主及投稿，以及收藏的番剧和影视内容。
+
+“我的”还会根据播放记录展示常听歌单，让经常使用的内容更容易再次找到。
+
+## 本地音乐、歌单与下载
+
+本地音乐可以扫描进入应用，并按全部歌曲、歌手、专辑或目录浏览。扫描时可以指定目录，也可以过滤时长过短的音频文件。
+
+本地歌曲的标题、歌手和专辑信息可以直接修改，也可以借助已启用的在线音乐源查找更合适的元信息和歌词。
+
+本地歌单可以同时容纳本地歌曲、已下载歌曲以及受支持的在线歌曲。歌单可在应用内创建和管理，也可以从文件导入或分享为歌单文件。已经下载的歌曲可以继续在 FuoEvolve 中作为本地资源播放。
 
 ## 听歌识曲
 
-在搜索页点击麦克风入口即可打开听歌识曲。Android 和 iOS 实验性构建会请求麦克风权限，
-录音仅在内存中用于生成音频指纹，识别接口只会收到音频指纹，不会保存或上传原始音频。
-识别成功后会展示歌曲信息，并支持直接搜索或打开网易云详情；从搜索或详情页返回时，识别结果仍会保留。
-识别失败时会结束本次识别并提供重试入口。
+在搜索页点击麦克风入口即可开始听歌识曲。应用只会录制生成音频指纹所需的声音，原始录音保留在内存中，并向识别服务发送音频指纹，而不是上传整段录音。
 
-## 音乐源支持
+识别成功后可以直接搜索歌曲或打开网易云详情；在搜索页和详情页之间切换时，最近一次识别结果会保留，识别失败也可以直接重试。
 
-当前共享 Kotlin 模块内置的音乐源实现：
+## 个性化与设置
 
-| 音乐源 | Kotlin 实现 | 默认状态 | 登录方式 |
-| --- | --- | --- | --- |
-| 网易云音乐 | `NeteaseProvider` | 默认启用 | Cookie |
-| QQ 音乐 | `QQMusicProvider` | 设置中可启用 | Cookie |
-| 哔哩哔哩 | `BilibiliProvider` | 设置中可启用 | Cookie |
-| YouTube Music | `YtMusicProvider` | 设置中可启用 | OAuth（TV）/ Headers |
+FuoEvolve 提供常用的个性化设置，同时尽量避免复杂配置。主要包括：
 
-应用默认只加载网易云音乐。QQ 音乐、哔哩哔哩、YouTube Music 已随 Android 包打包，可在设置中启用、禁用和排序。
-
-YouTube Music 支持两种登录方式：
-
-1. **Google OAuth（TV / Limited Input device-code）**：与 [ytmusicapi OAuth](https://ytmusicapi.readthedocs.io/en/stable/setup/oauth.html) 相同。在 Google Cloud 创建「TVs and Limited Input devices」类型的 OAuth 客户端并启用 YouTube Data API，在设置里填写或导入 Console 下载的 `client_secret_*.json`，然后点击「使用 Google 登录（TV）」按验证码完成授权。也可导入桌面端 `ytmusicapi oauth` 生成的 `oauth.json`（需先有同一对 client 凭证以便刷新）。
-2. **Headers / Cookie**：导入 `ytmusic_header.json` 或手填 Authorization + Cookie。
-
-本地 `oauth.json` 与 `client_secret*.json` 不会被提交到仓库。
-
-图例：✅ 支持，包括需要登录后使用的能力；🧩 依赖上游音乐源暴露对应方法或返回对应结果类型；➖ 当前应用没有入口或未开放。
-
-| 特性 | 网易云音乐 | QQ 音乐 | 哔哩哔哩 | YouTube Music |
-| --- | --- | --- | --- | --- |
-| 音乐源登录/退出 | ✅ | ✅ | ✅ | ✅ |
-| 歌曲搜索 | ✅ | ✅ | ✅ | ✅ |
-| 歌手 / 专辑 / 歌单 / 视频搜索分栏 | 🧩 | 🧩 | 🧩 | 🧩 |
-| 每日推荐歌曲 | ✅ | ✅ | ➖ | ✅ |
-| 推荐歌单 | ✅ | ✅ | ➖ | ✅ |
-| 私人 FM / 电台 | ✅ | ✅ | ➖ | ➖ |
-| 排行榜 | ✅ | ➖ | ➖ | ✅ |
-| 用户歌单 | ✅ | ✅ | ✅ | ✅ |
-| 收藏歌曲 | ✅ | ✅ | ➖ | ✅ |
-| 收藏歌单 | ✅ | ✅ | ✅ | ✅ |
-| 收藏歌手 | ✅ | ✅ | ➖ | ✅ |
-| 收藏专辑 | ✅ | ✅ | ➖ | ✅ |
-| 关注的 Bilibili UP 主 | ➖ | ➖ | ✅ | ➖ |
-| 收藏番剧 / 影视 | ➖ | ➖ | ✅ | ➖ |
-| 添加歌曲到用户歌单 | 🧩 | 🧩 | 🧩 | 🧩 |
-| 从歌单移除歌曲 | 🧩 | 🧩 | 🧩 | ➖ |
-| 相似歌曲 / 热门评论 / 歌曲 MV | 🧩 | 🧩 | 🧩 | 🧩 |
-| 视频播放 | 🧩 | 🧩 | 🧩 | 🧩 |
-
-音乐源实际表现仍可能受到上游服务限制、地区、登录状态和具体 FeelUOwn 插件实现影响。
-
-## 应用设置与特性
-
-| 区域 | 当前可设置项 |
-| --- | --- |
-| 🎛️ 音乐源 | 启用/禁用已打包音乐源、调整音乐源顺序、管理登录，并按音乐源切换登录方式。 |
-| 🎧 音质 | Wi-Fi 和蜂窝网络分别配置：最高、高、标准、低流量。 |
-| 🔁 不可用资源 | 可选智能替换或跳过；智能替换可配置替换音乐源和最低打分，并固定使用原歌曲信息与歌词。 |
-| 🖼️ 播放显示 | 歌词字号、跟随系统/亮色/暗色模式、动态颜色和预设配色方案。 |
-| 💽 本地音乐 | 媒体权限入口、数据库刷新、按全部/歌手/专辑分组、目录过滤和最短时长过滤。 |
-| ✏️ 本地元信息 | 修改标题/歌手/专辑，搜索在线元信息，并将歌词下载到应用私有存储。 |
-| 🧹 缓存 | 可配置音频缓存和图片缓存上限。 |
-| ⬇️ 下载 | 下载在线歌曲、本地播放已下载歌曲，并删除下载文件。 |
-| 🐞 Debug 构建 | 仅 debug 包显示日志查看入口。 |
-
-## 项目结构
-
-- `shared`：共享 Compose UI、领域契约、播放器状态、通用测试和 Kotlin 音乐源/网络层。
-- `androidApp`：Android 应用、Media3 播放、资源以及 Android 凭据/缓存存储。
-- `shared/src/commonMain/kotlin/org/feeluown/mobile/provider`：Kotlin 音乐源实现、请求策略、缓存、重试和领域映射。
-- `shared/src/commonMain/resources/audio_recognition`：移动端听歌识曲使用的音频指纹运行时资源。
-- `iosApp/FuoEvolve`：用于 iOS 实验性构建的 Swift 应用外壳。
-- `.github/workflows`：Android APK 和 release 工作流，以及实验性的 iOS Debug 工作流。
-
-## 环境要求
-
-- JDK 17 或更新版本。
-- Android Studio 或 Android 命令行工具链，用于 Android 构建。
-- macOS + Xcode，用于 iOS 实验性构建。
-
-## Android 构建
-
-使用仓库内 Gradle Wrapper 构建 Debug APK：
-
-```bash
-./gradlew :androidApp:assembleDebug
-```
-
-安装到已连接的设备或模拟器：
-
-```bash
-./gradlew :androidApp:installDebug
-```
-
-Android 构建会直接包含 Kotlin 音乐源实现和 Ktor 网络层，不下载或打包脚本运行时。
+- 音乐源启用状态、优先级和登录管理；
+- Wi-Fi 与蜂窝网络分别设置音质偏好；
+- 资源不可用时的智能换源策略；
+- 播放行为，例如其他应用开始播放音频时是否暂停 FuoEvolve；
+- 跟随系统、亮色或暗色主题、动态颜色、预设配色和封面衍生的播放器配色；
+- 歌词字号与显示偏好；
+- 本地音乐扫描目录和最短歌曲时长；
+- 音频缓存和图片缓存上限。
 
 ## iOS 状态
 
-`iosApp/FuoEvolve.xcodeproj` 已提供实验性 Debug 构建支持，包括共享 UI 集成和听歌识曲集成。
-每次提交到 `master` 都会由 GitHub Actions 构建模拟器 Debug
-产物。iOS 暂不发布，不应将其视为生产可用版本；不会提供 GitHub Release、App Store 分发
-或面向终端用户的安装支持。
+iOS 目前仍处于实验阶段。项目已经包含 iOS 应用和持续集成构建，浏览、播放、MV 控制、听歌识曲等越来越多的共享功能也已经可以在 iOS 上运行。
 
-音乐源和播放集成仍处于实验阶段。
+但 iOS 暂未作为 GitHub Release 或 App Store 版本正式发布，因此目前还不属于面向普通用户支持的平台。
 
-## 测试
+## 开发
 
-运行共享多平台测试：
+FuoEvolve 使用 Kotlin Multiplatform 和 Compose Multiplatform 共享大部分应用代码，Android 端使用 AndroidX Media3 提供播放能力。
+
+环境要求：
+
+- JDK 17 或更新版本；
+- Android Studio 或 Android 命令行工具，用于 Android 构建；
+- macOS + Xcode，用于 iOS 实验性构建。
+
+构建并安装 Android Debug 版本：
+
+```bash
+./gradlew :androidApp:assembleDebug
+./gradlew :androidApp:installDebug
+```
+
+运行共享测试和 Android lint：
 
 ```bash
 ./gradlew :shared:allTests
-```
-
-运行 Android lint：
-
-```bash
 ./gradlew :androidApp:lint :shared:lint
 ```
 
-## 音乐源扩展
+主要目录：
 
-添加音乐源时，在 `shared/src/commonMain/kotlin/org/feeluown/mobile/provider` 下实现
-`KotlinMusicProvider` 契约，在 `KotlinProviderRepository` 注册，并补充契约测试和设置页入口。
-默认启用的音乐源是网易云音乐：
-
-```json
-{
-  "enabled": ["netease"]
-}
-```
+- `shared`：共享 UI、应用状态、音乐源实现和通用测试；
+- `androidApp`：Android 应用和平台播放能力；
+- `iosApp/FuoEvolve`：实验性的 iOS 应用；
+- `.github/workflows`：Android 构建/发布流程和 iOS 开发构建。
 
 ## 许可证
 
-FuoEvolve 使用 GNU General Public License v3.0 开源许可证。详情见
-[LICENSE](LICENSE)。
+FuoEvolve 使用 GNU General Public License v3.0 开源许可证，详情见 [LICENSE](LICENSE)。
