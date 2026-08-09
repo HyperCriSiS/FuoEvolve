@@ -29,7 +29,10 @@ internal class QQMusicUserLibrary(
     private val http: ProviderHttpClient,
     private val credentials: ProviderCredentialStore,
 ) {
-    suspend fun userName(): String? = snapshot().userName
+    suspend fun userName(): String? {
+        val uin = currentUin() ?: return null
+        return runCatching { snapshot(uin).userName }.getOrNull()
+    }
 
     suspend fun loadPlaylists(
         feature: ProviderFeature,
@@ -41,7 +44,12 @@ internal class QQMusicUserLibrary(
                 feature = feature,
                 errorMessage = "无法读取 QQ 音乐账号信息，请重新登录",
             )
-        val snapshot = snapshot(uin)
+        val snapshot = runCatching { snapshot(uin) }.getOrElse { throwable ->
+            return ProviderContentSection(
+                feature = feature,
+                errorMessage = throwable.message ?: "加载 QQ 音乐歌单失败",
+            )
+        }
         val page = snapshot.playlists.drop(offset).take(limit)
         return ProviderContentSection(
             feature = feature,
@@ -51,14 +59,8 @@ internal class QQMusicUserLibrary(
         )
     }
 
-    private suspend fun snapshot(): QQMusicUserLibrarySnapshot {
-        val uin = currentUin() ?: return QQMusicUserLibrarySnapshot()
-        return snapshot(uin)
-    }
-
     private suspend fun snapshot(uin: String): QQMusicUserLibrarySnapshot {
-        val created = runCatching { createdPlaylists(uin) }.getOrNull()
-            ?: CreatedPlaylistsResult()
+        val created = createdPlaylists(uin)
         var userName = created.userName
         var playlists = created.playlists
 
@@ -100,7 +102,17 @@ internal class QQMusicUserLibrary(
             headers = authenticatedHeaders("https://y.qq.com/portal/profile.html"),
             cacheKey = null,
         ).value.let { providerJson.parseToJsonElement(it).asObject() }
-        val data = root.obj("data") ?: return CreatedPlaylistsResult()
+        val data = root.obj("data")
+        if (data == null) {
+            val code = root.int("code")
+            if (code == PRIVATE_PLAYLIST_CODE) return CreatedPlaylistsResult()
+            val message = root.string("message").ifBlank { root.string("msg") }
+            error(
+                message.ifBlank {
+                    if (code != null) "QQ 音乐用户歌单加载失败（code=$code）" else "QQ 音乐用户歌单加载失败"
+                },
+            )
+        }
         val rawPlaylists = data.array("disslist")
         return CreatedPlaylistsResult(
             userName = data.stringOrNull("hostname")
@@ -243,6 +255,7 @@ internal class QQMusicUserLibrary(
         const val NAME = "QQ 音乐"
         const val BASE = "https://c.y.qq.com"
         const val FAVORITE_DIR_ID = 201
+        const val PRIVATE_PLAYLIST_CODE = 4000
         const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
     }
 }
