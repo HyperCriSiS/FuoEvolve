@@ -147,6 +147,11 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    ProviderFeatureFilters(
+                        controller = controller,
+                        feature = feature,
+                        content = content,
+                    )
                     SelectedFeatureContent(
                         controller = controller,
                         content = content,
@@ -195,6 +200,11 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            ProviderFeatureFilters(
+                controller = controller,
+                feature = feature,
+                content = content,
+            )
             SelectedFeatureContent(
                 controller = controller,
                 content = content,
@@ -220,6 +230,13 @@ fun SelectedFeatureContent(
                     onClick = { controller.openPlaylist(it, content.feature.category) },
                 )
             }
+            if (content.hasMore) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = controller::loadMoreSelectedFeature) { Text("加载更多") }
+                    }
+                }
+            }
         }
         content?.mediaItems?.isNotEmpty() == true -> LazyColumn(modifier = modifier) {
             item {
@@ -228,10 +245,24 @@ fun SelectedFeatureContent(
                     onClick = controller::openMediaItem,
                 )
             }
+            if (content.hasMore) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = controller::loadMoreSelectedFeature) { Text("加载更多") }
+                    }
+                }
+            }
         }
         content?.videos?.isNotEmpty() == true -> LazyColumn(modifier = modifier) {
             item {
                 ProviderVideoList(videos = content.videos, onClick = controller::openVideo)
+            }
+            if (content.hasMore) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = controller::loadMoreSelectedFeature) { Text("加载更多") }
+                    }
+                }
             }
         }
         else -> TrackCollectionList(
