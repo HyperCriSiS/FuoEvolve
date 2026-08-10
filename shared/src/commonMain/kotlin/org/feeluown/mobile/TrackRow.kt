@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.Download
@@ -178,6 +179,7 @@ internal fun providerFeatureIcon(featureId: String): ImageVector? {
         "bilibili_popular_videos" -> Icons.Filled.LocalFireDepartment
         "bilibili_recommended_videos" -> Icons.Filled.AutoAwesome
         "bilibili_dynamic_videos" -> Icons.Filled.DynamicFeed
+        "bilibili_weekly_must_watch" -> Icons.Filled.CalendarMonth
         "bilibili_watch_later" -> Icons.Filled.WatchLater
         "bilibili_history" -> Icons.Filled.History
         "playlist:bilibili:watch_later" -> Icons.Filled.WatchLater

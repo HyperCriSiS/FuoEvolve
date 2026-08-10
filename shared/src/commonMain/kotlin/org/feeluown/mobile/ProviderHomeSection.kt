@@ -77,12 +77,15 @@ fun ProviderContentHomeSection(
                 } else if (section == HomeSection.Music) {
                     val entrySections = visibleSections.filter {
                         it.feature.contentType == ProviderContentType.Songs ||
-                            it.feature.contentType == ProviderContentType.Videos
+                            it.feature.contentType == ProviderContentType.Videos ||
+                            it.feature.isBilibiliWeeklyMustWatch()
                     }
                     val previewSections = visibleSections.filter {
-                        it.feature.contentType == ProviderContentType.Playlists ||
-                            it.feature.contentType == ProviderContentType.Artists ||
-                            it.feature.contentType == ProviderContentType.Albums
+                        (
+                            it.feature.contentType == ProviderContentType.Playlists ||
+                                it.feature.contentType == ProviderContentType.Artists ||
+                                it.feature.contentType == ProviderContentType.Albums
+                            ) && !it.feature.isBilibiliWeeklyMustWatch()
                     }
                     if (visibleSections.isNotEmpty()) {
                         item(key = "header:explore") {
@@ -105,27 +108,13 @@ fun ProviderContentHomeSection(
                         }
                     }
                     previewSections.forEach { contentSection ->
-                        val weeklyWithoutCovers = contentSection.feature.isBilibiliWeeklyMustWatch() &&
-                            contentSection.playlists.isNotEmpty() &&
-                            contentSection.playlists.none { !it.coverUrl.isNullOrBlank() }
                         item(key = "header:${contentSection.feature.id}") {
-                            ProviderFeatureHeader(
-                                feature = contentSection.feature,
-                                action = contentSection.feature
-                                    .takeIf { weeklyWithoutCovers }
-                                    ?.let { { controller.openFeature(it) } },
-                                actionLabel = if (weeklyWithoutCovers) {
-                                    "查看全部"
-                                } else {
-                                    ""
-                                },
-                            )
+                            ProviderFeatureHeader(feature = contentSection.feature)
                         }
                         when {
                             contentSection.errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
                                 ProviderContentMessage(contentSection.errorMessage)
                             }
-                            weeklyWithoutCovers -> Unit
                             contentSection.playlists.isNotEmpty() -> {
                                 item(key = "playlists:${contentSection.feature.id}") {
                                     ProviderPlaylistGrid(

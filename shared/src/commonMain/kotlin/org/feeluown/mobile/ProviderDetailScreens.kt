@@ -298,15 +298,28 @@ private fun BilibiliWeeklyContent(
     modifier: Modifier,
 ) {
     val playlists = content?.playlists.orEmpty()
-    val selectedNumber = feature.bilibiliWeeklyNumber()
+    var selectedNumber by remember { mutableStateOf(feature.bilibiliWeeklyNumber()) }
+    LaunchedEffect(feature.id) {
+        feature.bilibiliWeeklyNumber()?.let { selectedNumber = it }
+    }
+    LaunchedEffect(playlists) {
+        if (selectedNumber == null) {
+            selectedNumber = playlists.firstOrNull()?.bilibiliWeeklyNumber()
+        }
+    }
     val selectedIndex = playlists.indexOfFirst { it.bilibiliWeeklyNumber() == selectedNumber }
         .takeIf { it >= 0 }
         ?: 0
     val baseFeatureId = feature.id.substringBefore('|')
+    val selectedPlaylist = playlists.getOrNull(selectedIndex)
 
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(FuoSpacing.md),
+    ) {
         if (playlists.isNotEmpty()) {
             PrimaryScrollableTabRow(
+                modifier = Modifier.fillMaxWidth(),
                 selectedTabIndex = selectedIndex,
                 edgePadding = 0.dp,
             ) {
@@ -316,6 +329,7 @@ private fun BilibiliWeeklyContent(
                         onClick = {
                             if (index != selectedIndex) {
                                 playlist.bilibiliWeeklyNumber()?.let { number ->
+                                    selectedNumber = number
                                     controller.openFeature(
                                         feature.copy(id = "$baseFeatureId|number=$number"),
                                     )
@@ -324,7 +338,8 @@ private fun BilibiliWeeklyContent(
                         },
                         text = {
                             Text(
-                                text = playlist.title.ifBlank { "第${index + 1}期" },
+                                text = playlist.bilibiliWeeklyNumber()?.let { "第${it}期" }
+                                    ?: playlist.title.ifBlank { "第${index + 1}期" },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -332,7 +347,28 @@ private fun BilibiliWeeklyContent(
                     )
                 }
             }
-            Spacer(Modifier.size(8.dp))
+            selectedPlaylist?.let { playlist ->
+                FuoSectionCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = playlist.title.ifBlank { "每周必看" },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (playlist.description.isNotBlank()) {
+                        Text(
+                            text = playlist.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = "${controller.selectedFeatureTracks.size} 个视频",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         TrackCollectionList(
             controller = controller,
