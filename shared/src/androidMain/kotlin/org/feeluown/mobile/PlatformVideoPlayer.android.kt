@@ -34,6 +34,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -275,15 +276,22 @@ private fun VideoPlaybackPayload.isPlayable(): Boolean =
 @OptIn(UnstableApi::class)
 private fun VideoPlaybackPayload.toMediaSource(context: Context) =
     if (url.isNotBlank()) {
-        ProgressiveMediaSource.Factory(dataSourceFactory(context, headers))
-            .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
+        mediaSource(context, url, headers)
     } else {
         MergingMediaSource(
-            ProgressiveMediaSource.Factory(dataSourceFactory(context, headers))
-                .createMediaSource(MediaItem.fromUri(Uri.parse(videoUrl))),
-            ProgressiveMediaSource.Factory(dataSourceFactory(context, headers))
-                .createMediaSource(MediaItem.fromUri(Uri.parse(audioUrl))),
+            mediaSource(context, videoUrl, headers),
+            mediaSource(context, audioUrl, headers),
         )
+    }
+
+@OptIn(UnstableApi::class)
+private fun mediaSource(context: Context, url: String, headers: Map<String, String>) =
+    if (url.substringBefore('?').endsWith(".m3u8", ignoreCase = true)) {
+        HlsMediaSource.Factory(dataSourceFactory(context, headers))
+            .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
+    } else {
+        ProgressiveMediaSource.Factory(dataSourceFactory(context, headers))
+            .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
     }
 
 @OptIn(UnstableApi::class)
