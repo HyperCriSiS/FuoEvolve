@@ -274,15 +274,31 @@ class QQMusicProvider(
 
     override suspend fun videoPlaybackPayload(video: ProviderVideo): VideoPlaybackPayload {
         val identifier = splitResourceId(video.id, "video").second
+        val guid = buildString(32) {
+            repeat(32) {
+                append("0123456789abcdef"[Random.nextInt(16)])
+            }
+        }
         val root = rpc(
             """
-            {"getMvUrl":{"module":"gosrf.Stream.MvUrlProxy","method":"GetMvUrls","param":{"vids":["$identifier"],"request_typet":10001}}}
+            {"getMvUrl":{"module":"music.stream.MvUrlProxy","method":"GetMvUrls","param":{"vids":[${jsonString(identifier)}],"request_type":10003,"guid":${jsonString(guid)},"videoformat":1,"format":265,"dolby":1,"use_new_domain":1,"use_ipv6":1}}}
             """.trimIndent(),
         )
         val data = root.obj("getMvUrl")?.obj("data")?.obj(identifier) ?: return VideoPlaybackPayload(video = video)
-        val url = data.array("mp4").asSequence()
+        val url = sequenceOf("mp4", "hls")
+            .flatMap { format -> data.array(format).asSequence() }
             .map { it.asObject() }
-            .flatMap { it.array("freeflow_url").asSequence().mapNotNull { value -> value.asString().takeIf(String::isNotBlank) } }
+            .filter { item -> item.int("code")?.let { it == 0 } ?: true }
+            .flatMap { item ->
+                buildList {
+                    listOf("url", "comm_url", "freeflow_url").forEach { key ->
+                        item.array(key).forEach { value ->
+                            value.asString().takeIf(String::isNotBlank)?.let(::add)
+                        }
+                    }
+                    item.stringOrNull("m3u8")?.takeIf(String::isNotBlank)?.let(::add)
+                }.asSequence()
+            }
             .firstOrNull()
             ?: return VideoPlaybackPayload(video = video)
         return VideoPlaybackPayload(
@@ -747,7 +763,6 @@ class QQMusicProvider(
         return root.array("data").firstOrNull()?.asObject()
             ?: root.array("songlist").firstOrNull()?.asObject()
     }
-
     override suspend fun lyrics(track: org.feeluown.mobile.MusicTrack): String? {
         val (_, identifier) = splitResourceId(track.providerId ?: track.id)
         val id = identifier.ifBlank { track.id.substringAfterLast(':') }
