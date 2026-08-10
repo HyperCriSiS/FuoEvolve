@@ -502,8 +502,8 @@ fun DailyRecommendationButton(
             .padding(vertical = if (isWideLayout) 2.dp else 6.dp),
         title = feature.title.ifBlank { "每日推荐" },
         providerName = feature.providerName,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
         Icon(
             imageVector = Icons.Filled.CalendarMonth,
