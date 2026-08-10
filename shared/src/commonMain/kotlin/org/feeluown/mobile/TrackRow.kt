@@ -180,6 +180,8 @@ internal fun providerFeatureIcon(featureId: String): ImageVector? {
         "bilibili_dynamic_videos" -> Icons.Filled.DynamicFeed
         "bilibili_watch_later" -> Icons.Filled.WatchLater
         "bilibili_history" -> Icons.Filled.History
+        "playlist:bilibili:watch_later" -> Icons.Filled.WatchLater
+        "playlist:bilibili:history" -> Icons.Filled.History
         else -> null
     }
 }
