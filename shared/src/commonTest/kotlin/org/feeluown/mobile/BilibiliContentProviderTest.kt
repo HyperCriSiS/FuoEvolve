@@ -42,10 +42,15 @@ class BilibiliContentProviderTest {
                                 """{"code":0,"data":{"list":[{"number":301,"subject":"本周热门","name":"2026第31期"},{"number":300,"subject":"上周热门","name":"2026第30期"}]}}""",
                             )
                             "/x/web-interface/popular/series/one" -> {
-                                assertEquals("301", request.url.parameters["number"])
-                                respond(
-                                    """{"code":0,"data":{"config":{"number":301,"subject":"本周热门"},"list":[{"bvid":"BVweekly1","title":"每周视频","duration":123,"owner":{"name":"UP主"},"pic":"//example.test/weekly.jpg"}]}}""",
-                                )
+                                when (request.url.parameters["number"]) {
+                                    "301" -> respond(
+                                        """{"code":0,"data":{"config":{"number":301,"subject":"本周热门","cover":"//example.test/weekly-cover.jpg"},"list":[{"bvid":"BVweekly1","title":"每周视频","duration":123,"owner":{"name":"UP主"},"pic":"//example.test/weekly.jpg"}]}}""",
+                                    )
+                                    "300" -> respond(
+                                        """{"code":0,"data":{"config":{"number":300,"subject":"上周热门"},"list":[{"bvid":"BVweekly2","title":"上周视频","duration":90,"owner":{"name":"上周UP"},"pic":"//example.test/weekly-2.jpg"}]}}""",
+                                    )
+                                    else -> error("unexpected weekly number: ${request.url.parameters["number"]}")
+                                }
                             }
                             else -> error("unexpected request: ${request.url.encodedPath}")
                         }
@@ -58,12 +63,18 @@ class BilibiliContentProviderTest {
 
         val section = provider.loadFeature(feature, 0, 1)
         assertEquals("本周热门", section.playlists.single().title)
+        assertEquals(null, section.playlists.single().coverUrl)
+        assertEquals("BVweekly1", section.tracks.single().providerId?.substringAfterLast(':'))
         assertTrue(section.hasMore)
 
         val detail = provider.playlistDetail(section.playlists.single(), 0, 20)
+        assertEquals("https://example.test/weekly-cover.jpg", detail.playlist.coverUrl)
         assertEquals("BVweekly1", detail.tracks.single().providerId?.substringAfterLast(':'))
         assertEquals("UP主", detail.tracks.single().artists)
         assertEquals(123_000, detail.tracks.single().durationMs)
+
+        val secondWeek = provider.loadFeature(feature.copy(id = "${feature.id}|number=300"), 0, 1)
+        assertEquals("BVweekly2", secondWeek.tracks.single().providerId?.substringAfterLast(':'))
         client.close()
     }
 

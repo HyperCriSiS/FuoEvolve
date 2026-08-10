@@ -105,13 +105,27 @@ fun ProviderContentHomeSection(
                         }
                     }
                     previewSections.forEach { contentSection ->
+                        val weeklyWithoutCovers = contentSection.feature.isBilibiliWeeklyMustWatch() &&
+                            contentSection.playlists.isNotEmpty() &&
+                            contentSection.playlists.none { !it.coverUrl.isNullOrBlank() }
                         item(key = "header:${contentSection.feature.id}") {
-                            ProviderFeatureHeader(feature = contentSection.feature)
+                            ProviderFeatureHeader(
+                                feature = contentSection.feature,
+                                action = contentSection.feature
+                                    .takeIf { weeklyWithoutCovers }
+                                    ?.let { { controller.openFeature(it) } },
+                                actionLabel = if (weeklyWithoutCovers) {
+                                    "查看全部"
+                                } else {
+                                    ""
+                                },
+                            )
                         }
                         when {
                             contentSection.errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
                                 ProviderContentMessage(contentSection.errorMessage)
                             }
+                            weeklyWithoutCovers -> Unit
                             contentSection.playlists.isNotEmpty() -> {
                                 item(key = "playlists:${contentSection.feature.id}") {
                                     ProviderPlaylistGrid(
@@ -990,6 +1004,10 @@ fun ProviderFeature.isBilibiliRecommendedVideos(): Boolean {
 
 fun ProviderFeature.isBilibiliDynamicVideos(): Boolean {
     return providerId == "bilibili" && id == "bilibili_dynamic_videos"
+}
+
+fun ProviderFeature.isBilibiliWeeklyMustWatch(): Boolean {
+    return providerId == "bilibili" && id.substringBefore('|') == "bilibili_weekly_must_watch"
 }
 
 fun ProviderFeature.isRecommendedNewSongs(): Boolean {

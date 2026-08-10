@@ -70,7 +70,7 @@ class BilibiliContentProvider(
         val request = parseFeatureRequest(feature.id)
         return when (request.baseId) {
             RECOMMENDED_VIDEOS -> loadRecommendedVideos(feature, offset, limit)
-            WEEKLY_MUST_WATCH -> loadWeeklyMustWatch(feature, offset, limit)
+            WEEKLY_MUST_WATCH -> loadWeeklyMustWatch(feature, request.params["number"], offset, limit)
             WATCH_LATER -> loadWatchLaterFeature(feature)
             HISTORY -> loadHistory(feature, offset, limit)
             DYNAMIC_VIDEOS -> loadDynamicVideos(feature, offset, limit)
@@ -182,6 +182,7 @@ class BilibiliContentProvider(
 
     private suspend fun loadWeeklyMustWatch(
         feature: ProviderFeature,
+        selectedNumber: String?,
         offset: Int,
         limit: Int,
     ): ProviderContentSection {
@@ -195,7 +196,8 @@ class BilibiliContentProvider(
         val values = root.obj("data")?.array("list").orEmpty()
         val page = values.drop(offset).take(limit.coerceAtLeast(1)).mapNotNull { element ->
             val item = element.asObject()
-            val number = item.stringOrNull("number") ?: item.long("number")?.toString() ?: return@mapNotNull null
+            val number = item.stringOrNull("number") ?: item.long("number")?.toString()
+                ?: return@mapNotNull null
             val subject = item.string("subject")
             val name = item.string("name")
             providerPlaylist(
@@ -206,8 +208,15 @@ class BilibiliContentProvider(
             )
         }
         val nextOffset = offset + page.size
+        val activeNumber = selectedNumber ?: if (offset == 0) {
+            page.firstOrNull()?.id?.substringAfterLast(':')?.removePrefix(WEEKLY_PREFIX)
+        } else {
+            null
+        }
+        val tracks = activeNumber?.let { loadWeeklyTracks(it) }.orEmpty()
         return ProviderContentSection(
             feature = feature,
+            tracks = tracks,
             playlists = page,
             nextOffset = nextOffset,
             hasMore = nextOffset < values.size,
@@ -556,13 +565,7 @@ class BilibiliContentProvider(
         offset: Int,
         limit: Int,
     ): ProviderPlaylistDetail {
-        val root = http.getText(
-            providerId = ID,
-            url = queryUrl("$BASE/x/web-interface/popular/series/one", mapOf("number" to number)),
-            headers = headers(),
-            cacheKey = "bilibili:weekly:$number",
-            cachePolicy = ProviderCachePolicies.recommendation,
-        ).value.let { providerJson.parseToJsonElement(it).asObject() }
+        val root = weeklyDetail(number)
         val data = root.obj("data")
         val values = data?.array("list").orEmpty()
         val page = values.drop(offset).take(limit.coerceAtLeast(1))
@@ -570,6 +573,7 @@ class BilibiliContentProvider(
         val config = data?.obj("config")
         val actual = playlist.copy(
             title = config?.string("subject").orEmpty().ifBlank { playlist.title },
+            coverUrl = config?.stringOrNull("cover")?.let(::normalizeCover) ?: playlist.coverUrl,
             trackCount = values.size,
         )
         val nextOffset = offset + page.size
@@ -580,6 +584,19 @@ class BilibiliContentProvider(
             tracksHasMore = nextOffset < values.size,
         )
     }
+
+    private suspend fun loadWeeklyTracks(number: String): List<MusicTrack> = runCatching {
+        weeklyDetail(number).obj("data")?.array("list").orEmpty()
+            .mapNotNull { historyLikeToTrack(it.asObject()) }
+    }.getOrDefault(emptyList())
+
+    private suspend fun weeklyDetail(number: String): JsonObject = http.getText(
+        providerId = ID,
+        url = queryUrl("$BASE/x/web-interface/popular/series/one", mapOf("number" to number)),
+        headers = headers(),
+        cacheKey = "bilibili:weekly:$number",
+        cachePolicy = ProviderCachePolicies.recommendation,
+    ).value.let { providerJson.parseToJsonElement(it).asObject() }
 
     private suspend fun mutateWatchLater(add: Boolean, bvid: String): ProviderMutationResult {
         val csrf = csrfToken() ?: return ProviderMutationResult(false, "缺少哔哩哔哩 csrf Cookie")

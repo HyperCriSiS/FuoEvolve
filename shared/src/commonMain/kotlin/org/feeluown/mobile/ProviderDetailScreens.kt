@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -103,15 +104,17 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    CoverBox(
-                        track = feature.toDisplayTrack(),
-                        modifier = Modifier.size(160.dp),
-                        placeholder = if (feature.isDailySongs()) {
-                            CoverPlaceholder.DailyRecommendation
-                        } else {
-                            CoverPlaceholder.Song
-                        },
-                    )
+                    if (!feature.isBilibiliWeeklyMustWatch()) {
+                        CoverBox(
+                            track = feature.toDisplayTrack(),
+                            modifier = Modifier.size(160.dp),
+                            placeholder = if (feature.isDailySongs()) {
+                                CoverPlaceholder.DailyRecommendation
+                            } else {
+                                CoverPlaceholder.Song
+                            },
+                        )
+                    }
                     Text(
                         text = feature.title.ifBlank { "推荐" },
                         style = MaterialTheme.typography.headlineSmall,
@@ -154,6 +157,7 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                     )
                     SelectedFeatureContent(
                         controller = controller,
+                        feature = feature,
                         content = content,
                         modifier = Modifier
                             .weight(1f)
@@ -207,6 +211,7 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
             )
             SelectedFeatureContent(
                 controller = controller,
+                feature = feature,
                 content = content,
                 modifier = Modifier
                     .weight(1f)
@@ -219,10 +224,17 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
 @Composable
 fun SelectedFeatureContent(
     controller: FuoPlayerController,
+    feature: ProviderFeature,
     content: ProviderContentSection?,
     modifier: Modifier,
 ) {
     when {
+        feature.isBilibiliWeeklyMustWatch() -> BilibiliWeeklyContent(
+            controller = controller,
+            feature = feature,
+            content = content,
+            modifier = modifier,
+        )
         content?.playlists?.isNotEmpty() == true -> LazyColumn(modifier = modifier) {
             item {
                 ProviderPlaylistGrid(
@@ -276,6 +288,82 @@ fun SelectedFeatureContent(
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BilibiliWeeklyContent(
+    controller: FuoPlayerController,
+    feature: ProviderFeature,
+    content: ProviderContentSection?,
+    modifier: Modifier,
+) {
+    val playlists = content?.playlists.orEmpty()
+    val selectedNumber = feature.bilibiliWeeklyNumber()
+    val selectedIndex = playlists.indexOfFirst { it.bilibiliWeeklyNumber() == selectedNumber }
+        .takeIf { it >= 0 }
+        ?: 0
+    val baseFeatureId = feature.id.substringBefore('|')
+
+    Column(modifier = modifier) {
+        if (playlists.isNotEmpty()) {
+            PrimaryScrollableTabRow(
+                selectedTabIndex = selectedIndex,
+                edgePadding = 0.dp,
+            ) {
+                playlists.forEachIndexed { index, playlist ->
+                    Tab(
+                        selected = index == selectedIndex,
+                        onClick = {
+                            if (index != selectedIndex) {
+                                playlist.bilibiliWeeklyNumber()?.let { number ->
+                                    controller.openFeature(
+                                        feature.copy(id = "$baseFeatureId|number=$number"),
+                                    )
+                                }
+                            }
+                        },
+                        text = {
+                            Text(
+                                text = playlist.title.ifBlank { "第${index + 1}期" },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.size(8.dp))
+        }
+        TrackCollectionList(
+            controller = controller,
+            tracks = controller.selectedFeatureTracks,
+            emptyMessage = "本期暂无内容",
+            showEmpty = !controller.isLoading && controller.selectedFeatureError == null,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            onClick = controller::playFromSelectedFeature,
+            onItemVisible = controller::prefetchSelectedFeatureIfNeeded,
+        )
+        if (content?.hasMore == true) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                TextButton(onClick = controller::loadMoreSelectedFeature) { Text("加载更多期") }
+            }
+        }
+    }
+}
+
+private fun ProviderFeature.bilibiliWeeklyNumber(): String? = id
+    .substringAfter("|number=", "")
+    .takeIf { it.isNotBlank() }
+
+private fun ProviderPlaylist.bilibiliWeeklyNumber(): String? = id
+    .substringAfterLast(':')
+    .removePrefix("weekly_")
+    .takeIf { it.isNotBlank() }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
