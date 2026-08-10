@@ -1,5 +1,10 @@
 package org.feeluown.mobile
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlin.math.abs
 
 /**
@@ -14,11 +19,15 @@ fun composeRichLyrics(
     romanization: String? = null,
     annotation: String? = null,
 ): String {
-    val primary = main.trimEnd()
+    val primary = stripStructuredYrcMetadata(main).trimEnd()
     if (primary.isBlank()) return primary
 
     val secondaryTracks = listOf(translation, romanization, annotation)
-        .mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+        .mapNotNull { raw ->
+            raw?.let(::stripStructuredYrcMetadata)
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+        }
     if (secondaryTracks.isEmpty()) return primary
     if (secondaryTracks.size == 1) return composeLyricsWithTranslation(primary, secondaryTracks.first())
 
@@ -49,6 +58,30 @@ fun composeRichLyrics(
 }
 
 private data class TimedRichText(val timeMs: Long, val text: String)
+
+/**
+ * NetEase YRC may prepend JSON metadata lines such as composer/arranger credits.
+ * They are not lyric text and the YRC parser intentionally does not render them.
+ * Remove them before falling back to the LRC parser as well, otherwise an
+ * instrumental track with no word-timed YRC lines exposes the raw JSON in UI.
+ */
+private fun stripStructuredYrcMetadata(raw: String): String {
+    val lines = raw.lines()
+    if (lines.none(::isStructuredYrcMetadataLine)) return raw
+    return lines.filterNot(::isStructuredYrcMetadataLine).joinToString("\n")
+}
+
+private fun isStructuredYrcMetadataLine(rawLine: String): Boolean {
+    val line = rawLine.trim()
+    if (!line.startsWith('{') || !line.endsWith('}')) return false
+    val root = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: return false
+    if (root["t"]?.jsonPrimitive?.longOrNull == null) return false
+    val content = runCatching { root["c"]?.jsonArray }.getOrNull() ?: return false
+    return content.any { entry ->
+        val value = runCatching { entry.jsonObject["tx"]?.jsonPrimitive?.content }.getOrNull()
+        !value.isNullOrBlank()
+    }
+}
 
 private fun parseTimedRichTrack(raw: String): List<TimedRichText> = buildList {
     raw.lineSequence().forEach { originalLine ->
