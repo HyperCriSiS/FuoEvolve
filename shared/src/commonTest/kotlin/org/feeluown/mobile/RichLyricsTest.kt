@@ -45,4 +45,35 @@ class RichLyricsTest {
             composeRichLyrics(main, translation = translation),
         )
     }
+
+    @Test
+    fun stripsStructuredYrcMetadataFromInstrumentalLyrics() {
+        val raw = composeRichLyrics(
+            main = """
+                纯音乐，请欣赏
+                {"t":0,"c":[{"tx":"作曲："},{"tx":"温菁 Jing.W (HOYO-MiX)"}]}
+                {"t":555,"c":[{"tx":"编曲 Arranger：温菁 Jing.W (HOYO-MiX)"}]}
+                {"t":1110,"c":[{"tx":"制谱 Music Copyist：吴泽熙 Jersey Wu (HOYO-MiX)"}]}
+            """.trimIndent(),
+        )
+
+        assertEquals("纯音乐，请欣赏", raw)
+        assertEquals(listOf("纯音乐，请欣赏"), parseLyrics(raw).map(LyricLine::text))
+        assertTrue(!raw.contains("\"tx\""))
+    }
+
+    @Test
+    fun stripsStructuredYrcMetadataWithoutDroppingWordTiming() {
+        val raw = composeRichLyrics(
+            main = """
+                {"t":0,"c":[{"tx":"作词："},{"tx":"Someone"}]}
+                [1000,2000](1000,500,0)Hel(1500,1500,0)lo
+            """.trimIndent(),
+        )
+
+        val line = parseLyrics(raw).single()
+        assertEquals("Hello", line.text)
+        assertEquals(2, line.words?.size)
+        assertTrue(!raw.contains("\"tx\""))
+    }
 }
