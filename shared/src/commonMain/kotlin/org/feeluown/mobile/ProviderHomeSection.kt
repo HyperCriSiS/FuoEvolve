@@ -528,8 +528,9 @@ fun RecommendationEntryButton(
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
+        val icon = providerFeatureIcon(feature.id) ?: Icons.Filled.PlayArrow
         Icon(
-            Icons.Filled.PlayArrow,
+            imageVector = icon,
             contentDescription = "打开${feature.providerName}${feature.title}",
             modifier = Modifier.size(if (isWideLayout) 40.dp else 44.dp),
         )

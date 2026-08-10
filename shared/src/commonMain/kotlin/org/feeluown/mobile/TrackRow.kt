@@ -15,10 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.filled.MusicVideo
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.WatchLater
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -159,6 +163,10 @@ fun CoverBox(
 private fun materialExploreFeatureIcon(track: MusicTrack): ImageVector? {
     if (track.sourceType != TrackSourceType.Provider) return null
     val featureId = track.id.substringBefore("^filters^").substringBefore('|')
+    return providerFeatureIcon(featureId)
+}
+
+internal fun providerFeatureIcon(featureId: String): ImageVector? {
     return when (featureId) {
         "netease_mv_square",
         "netease_recommended_mvs",
@@ -168,6 +176,10 @@ private fun materialExploreFeatureIcon(track: MusicTrack): ImageVector? {
         "netease_styles" -> Icons.Filled.GraphicEq
         "netease_top_mvs" -> Icons.Filled.Leaderboard
         "bilibili_popular_videos" -> Icons.Filled.LocalFireDepartment
+        "bilibili_recommended_videos" -> Icons.Filled.AutoAwesome
+        "bilibili_dynamic_videos" -> Icons.Filled.DynamicFeed
+        "bilibili_watch_later" -> Icons.Filled.WatchLater
+        "bilibili_history" -> Icons.Filled.History
         else -> null
     }
 }
