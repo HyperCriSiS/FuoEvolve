@@ -80,4 +80,50 @@ class QQMusicMvPlaybackTest {
         assertEquals("https://y.qq.com/", payload.headers["Referer"])
         client.close()
     }
+
+    @Test
+    fun fallsBackToHlsM3u8WhenMp4IsUnavailable() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler {
+                        respond(
+                            """
+                            {
+                              "getMvUrl": {
+                                "data": {
+                                  "test-hls": {
+                                    "mp4": [],
+                                    "hls": [
+                                      {
+                                        "code": 0,
+                                        "url": [],
+                                        "freeflow_url": [],
+                                        "comm_url": [],
+                                        "m3u8": "https://media.example/test.m3u8"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                            """.trimIndent(),
+                        )
+                    }
+                }
+            },
+        )
+        val provider = QQMusicProvider(client, InMemoryProviderCredentialStore())
+        val video = ProviderVideo(
+            id = "video:qqmusic:test-hls",
+            title = "HLS 测试 MV",
+            providerId = "qqmusic",
+            providerName = "QQ 音乐",
+        )
+
+        val payload = provider.videoPlaybackPayload(video)
+
+        assertEquals("https://media.example/test.m3u8", payload.url)
+        client.close()
+    }
 }
