@@ -53,6 +53,7 @@ class ProviderPlaylistFeatureTest {
         val operationTargets = provider.playlistOperationTargets(detail.tracks.single())
 
         assertEquals("我的收藏", created.playlists.single().title)
+        assertEquals("https://example.test/video.jpg", created.playlists.single().coverUrl)
         assertEquals("收藏合集", collected.playlists.single().title)
         assertEquals("我的收藏", operationTargets.single().title)
         assertEquals("bilibili:BV1demo", detail.tracks.single().providerId)

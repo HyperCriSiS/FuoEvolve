@@ -420,14 +420,58 @@ class BilibiliProvider(
             it.asObject().toFavoritePlaylist(isCollection = collected)
         }
         val page = if (collected) folders else folders.drop(offset).take(pageSize)
+        val resolvedPage = if (collected) page else resolveCreatedPlaylistCovers(page)
         val total = data?.int("count") ?: folders.size
         val nextOffset = offset + page.size
         return ProviderContentSection(
             feature = feature,
-            playlists = page,
+            playlists = resolvedPage,
             nextOffset = nextOffset,
             hasMore = nextOffset < total,
         )
+    }
+
+    private suspend fun resolveCreatedPlaylistCovers(playlists: List<ProviderPlaylist>): List<ProviderPlaylist> {
+        val resolved = ArrayList<ProviderPlaylist>(playlists.size)
+        for (playlist in playlists) {
+            val coverUrl = playlist.coverUrl?.takeIf { it.isNotBlank() }
+                ?: previewCreatedPlaylistCover(playlist)
+            resolved += if (coverUrl.isNullOrBlank()) playlist else playlist.copy(coverUrl = coverUrl)
+        }
+        return resolved
+    }
+
+    private suspend fun previewCreatedPlaylistCover(playlist: ProviderPlaylist): String? {
+        val (_, encodedId) = splitResourceId(playlist.id, "playlist")
+        val resourceId = encodedId.removePrefix(COLLECTION_PREFIX)
+        return runCatching {
+            http.getText(
+                providerId = ID,
+                url = queryUrl(
+                    "$BASE/x/v3/fav/resource/list",
+                    mapOf(
+                        "media_id" to resourceId,
+                        "pn" to "1",
+                        "ps" to "1",
+                        "keyword" to "",
+                        "order" to "mtime",
+                        "type" to "0",
+                        "platform" to "web",
+                    ),
+                ),
+                headers = headers(),
+                cacheKey = "bilibili:favorite-preview:$resourceId",
+                cachePolicy = ProviderCachePolicies.detail,
+            ).value
+                .let { providerJson.parseToJsonElement(it).asObject() }
+                .obj("data")
+                ?.array("medias")
+                ?.firstOrNull()
+                ?.asObject()
+                ?.let { item ->
+                    normalizeCover(item.stringOrNull("cover") ?: item.stringOrNull("pic"))
+                }
+        }.getOrNull()
     }
 
     private suspend fun currentUserMid(): String? = nav()?.obj("data")?.stringOrNull("mid")
