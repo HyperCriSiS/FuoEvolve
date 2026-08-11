@@ -634,7 +634,6 @@ class NeteaseProvider(
             "artists" -> "artist"
             else -> "song"
         }
-        val sort = if (kind == "songs" || kind == "albums") 0 else null
         val root = neteaseWeApiPost(
             "$BASE/weapi/style-tag/home/$endpoint",
             buildString {
@@ -642,7 +641,7 @@ class NeteaseProvider(
                 append(cursor.toLongOrNull()?.toString() ?: "\"${cursor.jsonString()}\"")
                 append(",\"size\":$limit,\"tagId\":")
                 append(tagId.toLongOrNull()?.toString() ?: "\"${tagId.jsonString()}\"")
-                if (sort != null) append(",\"sort\":$sort")
+                append(",\"sort\":0")
                 append('}')
             },
         )
