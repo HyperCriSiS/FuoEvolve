@@ -23,12 +23,16 @@ fun ProviderFeatureFilters(
 ) {
     val filters = content?.let { ProviderFeatureFilterCodec.filters(it.feature.id) }.orEmpty()
     if (filters.isEmpty()) return
+    val activeRequestId = ProviderFeatureFilterCodec.requestId(feature.id)
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         filters.forEach { filter ->
+            val hasActiveTarget = filter.options.any { option ->
+                ProviderFeatureFilterCodec.requestId(option.featureId) == activeRequestId
+            }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = filter.title,
@@ -44,10 +48,15 @@ fun ProviderFeatureFilters(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     filter.options.forEach { option ->
+                        val selected = if (hasActiveTarget) {
+                            ProviderFeatureFilterCodec.requestId(option.featureId) == activeRequestId
+                        } else {
+                            option.selected
+                        }
                         FilterChip(
-                            selected = option.selected,
+                            selected = selected,
                             onClick = {
-                                if (!option.selected && option.featureId.isNotBlank()) {
+                                if (!selected && option.featureId.isNotBlank()) {
                                     controller.openFeature(feature.copy(id = option.featureId))
                                 }
                             },
