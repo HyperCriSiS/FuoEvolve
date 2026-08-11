@@ -6,6 +6,7 @@ import io.ktor.client.engine.mock.respond
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.feeluown.mobile.provider.core.InMemoryProviderCredentialStore
@@ -124,6 +125,62 @@ class QQMusicMvPlaybackTest {
         val payload = provider.videoPlaybackPayload(video)
 
         assertEquals("https://media.example/test.m3u8", payload.url)
+        client.close()
+    }
+
+    @Test
+    fun reportsResponseDetailsWhenMvHasNoPlayableUrl() = runTest {
+        val client = ProviderHttpClient(
+            HttpClient(MockEngine) {
+                engine {
+                    addHandler {
+                        respond(
+                            """
+                            {
+                              "getMvUrl": {
+                                "code": 0,
+                                "data": {
+                                  "test-empty": {
+                                    "svp_flag": 1,
+                                    "mp4": [
+                                      {
+                                        "code": 0,
+                                        "url": [],
+                                        "freeflow_url": [],
+                                        "comm_url": [],
+                                        "m3u8": "",
+                                        "filetype": 0,
+                                        "format": 265
+                                      }
+                                    ],
+                                    "hls": []
+                                  }
+                                }
+                              }
+                            }
+                            """.trimIndent(),
+                        )
+                    }
+                }
+            },
+        )
+        val provider = QQMusicProvider(client, InMemoryProviderCredentialStore())
+        val video = ProviderVideo(
+            id = "video:qqmusic:test-empty",
+            title = "空地址测试 MV",
+            providerId = "qqmusic",
+            providerName = "QQ 音乐",
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            provider.videoPlaybackPayload(video)
+        }
+
+        assertTrue(error.message.orEmpty().contains("QQ MV 调试信息：没有可播放地址"))
+        assertTrue(error.message.orEmpty().contains("vid=test-empty"))
+        assertTrue(error.message.orEmpty().contains("response.code=0"))
+        assertTrue(error.message.orEmpty().contains("mp4[0] code=0 url=0 comm=0 freeflow=0 m3u8=false"))
+        assertTrue(error.message.orEmpty().contains("\"svp_flag\":1"))
         client.close()
     }
 }
