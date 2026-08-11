@@ -284,7 +284,37 @@ class QQMusicProvider(
             {"getMvUrl":{"module":"music.stream.MvUrlProxy","method":"GetMvUrls","param":{"vids":[${jsonString(identifier)}],"request_type":10003,"guid":${jsonString(guid)},"videoformat":1,"format":265,"dolby":1,"use_new_domain":1,"use_ipv6":1}}}
             """.trimIndent(),
         )
-        val data = root.obj("getMvUrl")?.obj("data")?.obj(identifier) ?: return VideoPlaybackPayload(video = video)
+        val response = root.obj("getMvUrl")
+        val dataRoot = response?.obj("data")
+        val data = dataRoot?.obj(identifier)
+
+        fun debugMessage(reason: String): String {
+            fun describe(format: String): String {
+                val items = data?.array(format).orEmpty()
+                if (items.isEmpty()) return "$format: <empty>"
+                return items.mapIndexed { index, value ->
+                    val item = value.asObject()
+                    val urlCount = item.array("url").count { it.asString().isNotBlank() }
+                    val commCount = item.array("comm_url").count { it.asString().isNotBlank() }
+                    val freeflowCount = item.array("freeflow_url").count { it.asString().isNotBlank() }
+                    val hasM3u8 = !item.stringOrNull("m3u8").isNullOrBlank()
+                    "$format[$index] code=${item.int("code")} url=$urlCount comm=$commCount freeflow=$freeflowCount m3u8=$hasM3u8 filetype=${item.int("filetype")} format=${item.int("format")}"
+                }.joinToString("\n")
+            }
+
+            return buildString {
+                appendLine("QQ MV 调试信息：$reason")
+                appendLine("vid=$identifier")
+                appendLine("response.code=${response?.int("code")}")
+                appendLine("data.keys=${dataRoot?.keys?.joinToString(",") ?: "<none>"}")
+                appendLine(describe("mp4"))
+                appendLine(describe("hls"))
+                append("raw=")
+                append(response?.toString()?.take(1_600) ?: "<none>")
+            }
+        }
+
+        if (data == null) error(debugMessage("接口未返回当前 VID 数据"))
         val url = sequenceOf("mp4", "hls")
             .flatMap { format -> data.array(format).asSequence() }
             .map { it.asObject() }
@@ -300,7 +330,7 @@ class QQMusicProvider(
                 }.asSequence()
             }
             .firstOrNull()
-            ?: return VideoPlaybackPayload(video = video)
+            ?: error(debugMessage("没有可播放地址"))
         return VideoPlaybackPayload(
             video = video,
             url = url,
