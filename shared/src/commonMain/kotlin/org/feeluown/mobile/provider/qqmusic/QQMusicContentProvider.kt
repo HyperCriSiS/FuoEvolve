@@ -444,11 +444,12 @@ class QQMusicContentProvider(
     ): ProviderContentSection {
         val area = request.params["area"].orEmpty().ifBlank { QQ_DEFAULT_MV_AREA }
         val version = request.params["version"].orEmpty().ifBlank { QQ_DEFAULT_MV_VERSION }
+        val order = request.params["order"].orEmpty().ifBlank { QQ_DEFAULT_MV_ORDER }
         val root = rpc(
             """
-            {"mv_list":{"module":"MvService.MvInfoProServer","method":"GetAllocMvInfo","param":{"start":$offset,"size":$limit,"version_id":$version,"area_id":$area,"order":1}}}
+            {"mv_list":{"module":"MvService.MvInfoProServer","method":"GetAllocMvInfo","param":{"start":$offset,"size":$limit,"version_id":$version,"area_id":$area,"order":$order}}}
             """.trimIndent(),
-            cacheKey = "qqmusic:mv-square:$area:$version:$offset:$limit",
+            cacheKey = "qqmusic:mv-square:$area:$version:$order:$offset:$limit",
             cachePolicy = ProviderCachePolicies.recommendation,
         )
         val data = root.obj("mv_list")?.obj("data") ?: root.obj("data") ?: root
@@ -466,7 +467,7 @@ class QQMusicContentProvider(
         return ProviderContentSection(
             feature = ProviderFeatureFilterCodec.attach(
                 feature,
-                qqMusicMvSquareFilters(area, version),
+                qqMusicMvSquareFilters(area, version, order),
             ),
             videos = videos,
             nextOffset = nextOffset,
