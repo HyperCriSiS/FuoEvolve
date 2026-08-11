@@ -201,6 +201,7 @@ internal fun qqMusicArtistSquareFilters(
 internal fun qqMusicMvSquareFilters(
     area: String,
     version: String,
+    order: String = QQ_DEFAULT_MV_ORDER,
 ): List<ProviderFeatureFilterSpec> = listOf(
     ProviderFeatureFilterSpec(
         key = "area",
@@ -219,6 +220,7 @@ internal fun qqMusicMvSquareFilters(
                     QQMUSIC_MV_SQUARE,
                     "area" to value,
                     "version" to version,
+                    "order" to order,
                 ),
                 selected = value == area,
             )
@@ -243,8 +245,28 @@ internal fun qqMusicMvSquareFilters(
                     QQMUSIC_MV_SQUARE,
                     "area" to area,
                     "version" to value,
+                    "order" to order,
                 ),
                 selected = value == version,
+            )
+        },
+    ),
+    ProviderFeatureFilterSpec(
+        key = "order",
+        title = "排序",
+        options = listOf(
+            "1" to "热门",
+            "0" to "最新",
+        ).map { (value, label) ->
+            ProviderFeatureFilterOption(
+                label = label,
+                featureId = qqMusicFeatureId(
+                    QQMUSIC_MV_SQUARE,
+                    "area" to area,
+                    "version" to version,
+                    "order" to value,
+                ),
+                selected = value == order,
             )
         },
     ),
@@ -255,3 +277,4 @@ internal const val QQ_DEFAULT_PLAYLIST_SORT_ID = "5"
 internal const val QQ_DEFAULT_ARTIST_FILTER = "-100"
 internal const val QQ_DEFAULT_MV_AREA = "15"
 internal const val QQ_DEFAULT_MV_VERSION = "7"
+internal const val QQ_DEFAULT_MV_ORDER = "1"
