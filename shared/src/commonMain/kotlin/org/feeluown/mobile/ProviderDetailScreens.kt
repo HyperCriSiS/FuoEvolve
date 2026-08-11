@@ -36,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -47,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,9 +64,22 @@ import androidx.compose.ui.unit.dp
 fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeature?) {
     feature ?: return
     val content = controller.selectedFeatureContent
-    val contentCount = content?.let {
+    val featureBaseId = ProviderFeatureFilterCodec.requestId(feature.id).substringBefore('|')
+    var retainedContent by remember(feature.providerId, featureBaseId) {
+        mutableStateOf<ProviderContentSection?>(content)
+    }
+    LaunchedEffect(content, feature.providerId, featureBaseId) {
+        if (content != null) retainedContent = content
+    }
+    val displayContent = content ?: retainedContent
+    val isRefreshingContent = controller.isLoading && content == null && retainedContent != null
+    val displayTracks = displayContent?.tracks.orEmpty().ifEmpty { controller.selectedFeatureTracks }
+    val contentCount = displayContent?.let {
         maxOf(it.tracks.size, it.playlists.size, it.mediaItems.size, it.videos.size)
     } ?: controller.selectedFeatureTracks.size
+    val contentKey = displayContent?.feature?.id
+        ?.let(ProviderFeatureFilterCodec::requestId)
+        ?: ProviderFeatureFilterCodec.requestId(feature.id)
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -128,8 +143,12 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (controller.selectedFeatureTracks.isNotEmpty()) {
-                        PlayAllButton(onClick = controller::playAllFromSelectedFeature)
+                    if (displayTracks.isNotEmpty()) {
+                        PlayAllButton(
+                            onClick = {
+                                if (!isRefreshingContent) controller.playAllFromSelectedFeature()
+                            },
+                        )
                     }
                 }
                 Column(
@@ -138,10 +157,14 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                         .fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    LoadingIndicator(controller.isLoading)
+                    LoadingIndicator(controller.isLoading && !isRefreshingContent)
                     if (controller.selectedFeatureError != null) {
                         ProviderContentMessage(controller.selectedFeatureError.orEmpty())
-                    } else if (controller.isLoading && controller.selectedFeatureTracks.isEmpty()) {
+                    } else if (
+                        controller.isLoading &&
+                        !isRefreshingContent &&
+                        controller.selectedFeatureTracks.isEmpty()
+                    ) {
                         Text(
                             text = controller.message,
                             style = MaterialTheme.typography.bodySmall,
@@ -153,16 +176,29 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                     ProviderFeatureFilters(
                         controller = controller,
                         feature = feature,
-                        content = content,
+                        content = displayContent,
                     )
-                    SelectedFeatureContent(
-                        controller = controller,
-                        feature = feature,
-                        content = content,
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                    )
+                    ) {
+                        key(contentKey) {
+                            SelectedFeatureContent(
+                                controller = controller,
+                                feature = feature,
+                                content = displayContent,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        if (isRefreshingContent) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.TopCenter),
+                            )
+                        }
+                    }
                 }
             }
             return@Scaffold
@@ -174,7 +210,7 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LoadingIndicator(controller.isLoading)
+            LoadingIndicator(controller.isLoading && !isRefreshingContent)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -189,13 +225,21 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (controller.selectedFeatureTracks.isNotEmpty()) {
-                    PlayAllButton(onClick = controller::playAllFromSelectedFeature)
+                if (displayTracks.isNotEmpty()) {
+                    PlayAllButton(
+                        onClick = {
+                            if (!isRefreshingContent) controller.playAllFromSelectedFeature()
+                        },
+                    )
                 }
             }
             if (controller.selectedFeatureError != null) {
                 ProviderContentMessage(controller.selectedFeatureError.orEmpty())
-            } else if (controller.isLoading && controller.selectedFeatureTracks.isEmpty()) {
+            } else if (
+                controller.isLoading &&
+                !isRefreshingContent &&
+                controller.selectedFeatureTracks.isEmpty()
+            ) {
                 Text(
                     text = controller.message,
                     style = MaterialTheme.typography.bodySmall,
@@ -207,16 +251,29 @@ fun ProviderFeatureScreen(controller: FuoPlayerController, feature: ProviderFeat
             ProviderFeatureFilters(
                 controller = controller,
                 feature = feature,
-                content = content,
+                content = displayContent,
             )
-            SelectedFeatureContent(
-                controller = controller,
-                feature = feature,
-                content = content,
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-            )
+            ) {
+                key(contentKey) {
+                    SelectedFeatureContent(
+                        controller = controller,
+                        feature = feature,
+                        content = displayContent,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                if (isRefreshingContent) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter),
+                    )
+                }
+            }
         }
     }
 }
@@ -277,15 +334,25 @@ fun SelectedFeatureContent(
                 }
             }
         }
-        else -> TrackCollectionList(
-            controller = controller,
-            tracks = controller.selectedFeatureTracks,
-            emptyMessage = "暂无内容",
-            showEmpty = !controller.isLoading && controller.selectedFeatureError == null,
-            modifier = modifier,
-            onClick = controller::playFromSelectedFeature,
-            onItemVisible = controller::prefetchSelectedFeatureIfNeeded,
-        )
+        else -> {
+            val tracks = content?.tracks ?: controller.selectedFeatureTracks
+            val contentIsCurrent = content != null && content == controller.selectedFeatureContent
+            TrackCollectionList(
+                controller = controller,
+                tracks = tracks,
+                emptyMessage = "暂无内容",
+                showEmpty = !controller.isLoading && controller.selectedFeatureError == null,
+                modifier = modifier,
+                onClick = { index ->
+                    val displayedTrack = tracks.getOrNull(index)
+                    val currentTrack = controller.selectedFeatureTracks.getOrNull(index)
+                    if (displayedTrack != null && displayedTrack.id == currentTrack?.id) {
+                        controller.playFromSelectedFeature(index)
+                    }
+                },
+                onItemVisible = if (contentIsCurrent) controller::prefetchSelectedFeatureIfNeeded else null,
+            )
+        }
     }
 }
 
@@ -312,6 +379,8 @@ private fun BilibiliWeeklyContent(
         ?: 0
     val baseFeatureId = feature.id.substringBefore('|')
     val selectedPlaylist = playlists.getOrNull(selectedIndex)
+    val tracks = content?.tracks ?: controller.selectedFeatureTracks
+    val contentIsCurrent = content != null && content == controller.selectedFeatureContent
 
     Column(
         modifier = modifier,
@@ -363,7 +432,7 @@ private fun BilibiliWeeklyContent(
                         )
                     }
                     Text(
-                        text = "${controller.selectedFeatureTracks.size} 个视频",
+                        text = "${tracks.size} 个视频",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -372,14 +441,20 @@ private fun BilibiliWeeklyContent(
         }
         TrackCollectionList(
             controller = controller,
-            tracks = controller.selectedFeatureTracks,
+            tracks = tracks,
             emptyMessage = "本期暂无内容",
             showEmpty = !controller.isLoading && controller.selectedFeatureError == null,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            onClick = controller::playFromSelectedFeature,
-            onItemVisible = controller::prefetchSelectedFeatureIfNeeded,
+            onClick = { index ->
+                val displayedTrack = tracks.getOrNull(index)
+                val currentTrack = controller.selectedFeatureTracks.getOrNull(index)
+                if (displayedTrack != null && displayedTrack.id == currentTrack?.id) {
+                    controller.playFromSelectedFeature(index)
+                }
+            },
+            onItemVisible = if (contentIsCurrent) controller::prefetchSelectedFeatureIfNeeded else null,
         )
         if (content?.hasMore == true) {
             Box(
