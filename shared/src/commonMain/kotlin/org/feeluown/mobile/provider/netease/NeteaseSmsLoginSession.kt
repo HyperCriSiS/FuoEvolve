@@ -21,9 +21,10 @@ internal class NeteaseSmsLoginRiskException(
 /**
  * A short-lived NetEase SMS authentication handshake.
  *
- * Transport is delegated to [ProviderHttpClient]. Login cookies are accumulated
- * by [NeteaseSmsCookieStore] and exported only after NetEase confirms login, so
- * the resulting JSON can continue through the existing provider credential path.
+ * Transport is delegated to [ProviderHttpClient], response interpretation to
+ * [NeteaseSmsLoginResponseParser], and login cookies to [NeteaseSmsCookieStore].
+ * Once login succeeds the cookie JSON continues through the existing provider
+ * credential path.
  */
 internal class NeteaseSmsLoginSession(
     private val http: ProviderHttpClient = ProviderHttpClient(),
@@ -39,7 +40,7 @@ internal class NeteaseSmsLoginSession(
             path = "sms/captcha/sent",
             json = """{"ctcode":"86","secrete":"music_middleuser_pclogin","cellphone":"$normalizedPhone","csrf_token":"${cookieStore.csrfToken()}"}""",
         )
-        ensureSuccess(response, "验证码发送失败")
+        NeteaseSmsLoginResponseParser.ensureSuccess(response, "验证码发送失败")
     }
 
     suspend fun login(phone: String, captcha: String): String {
@@ -52,7 +53,7 @@ internal class NeteaseSmsLoginSession(
             path = "w/login/cellphone",
             json = """{"type":"1","https":"true","phone":"$normalizedPhone","countrycode":"86","captcha":"$normalizedCaptcha","remember":"true","secureCaptcha":"","csrf_token":"${cookieStore.csrfToken()}"}""",
         )
-        ensureSuccess(response, "短信验证码登录失败")
+        NeteaseSmsLoginResponseParser.ensureSuccess(response, "短信验证码登录失败")
         require(cookieStore.hasMusicU()) {
             "网易云音乐登录成功但未返回 MUSIC_U，请改用 WebView 登录"
         }
@@ -101,21 +102,6 @@ internal class NeteaseSmsLoginSession(
         HttpHeaders.Cookie to cookieStore.cookieHeader(),
     )
 
-    private fun ensureSuccess(raw: String, fallbackMessage: String) {
-        val root = runCatching { providerJson.parseToJsonElement(raw).asObject() }
-            .getOrElse { error(fallbackMessage) }
-        val code = root.int("code")
-        if (code == 200) return
-        val detail = root.string("message").ifBlank { root.string("msg") }
-        if (code in RISK_CODES || detail.contains("安全风险")) {
-            throw NeteaseSmsLoginRiskException(
-                code = code,
-                message = detail.ifBlank { "当前登录被网易云安全风控拦截" },
-            )
-        }
-        error(detail.ifBlank { fallbackMessage })
-    }
-
     private fun normalizePhone(phone: String): String = phone
         .filter(Char::isDigit)
         .also { require(it.matches(MAINLAND_PHONE_REGEX)) { "请输入正确的中国大陆手机号" } }
@@ -128,7 +114,25 @@ internal class NeteaseSmsLoginSession(
                 "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         val MAINLAND_PHONE_REGEX = Regex("1\\d{10}")
         val CAPTCHA_REGEX = Regex("\\d{4,8}")
-        val RISK_CODES = setOf(10003, 10004)
+    }
+}
+
+internal object NeteaseSmsLoginResponseParser {
+    private val riskCodes = setOf(10003, 10004)
+
+    fun ensureSuccess(raw: String, fallbackMessage: String) {
+        val root = runCatching { providerJson.parseToJsonElement(raw).asObject() }
+            .getOrElse { error(fallbackMessage) }
+        val code = root.int("code")
+        if (code == 200) return
+        val detail = root.string("message").ifBlank { root.string("msg") }
+        if (code in riskCodes || detail.contains("安全风险")) {
+            throw NeteaseSmsLoginRiskException(
+                code = code,
+                message = detail.ifBlank { "当前登录被网易云安全风控拦截" },
+            )
+        }
+        error(detail.ifBlank { fallbackMessage })
     }
 }
 
