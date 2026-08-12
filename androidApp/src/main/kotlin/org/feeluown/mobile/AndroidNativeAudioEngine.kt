@@ -22,6 +22,7 @@ class AndroidNativeAudioEngine(
     private val scope: CoroutineScope,
 ) : PlaybackEngine {
     private val mutableState = MutableStateFlow(PlaybackState())
+    private var rawAudioQuality: String? = null
     private var mediaController: MediaController? = null
     private var controllerConnecting = false
     private var pendingLockScreenLyrics: PendingLockScreenLyrics? = null
@@ -38,14 +39,20 @@ class AndroidNativeAudioEngine(
         }
         scope.launch {
             FuoPlaybackService.audioFormatInfo.collect { audioFormatInfo ->
-                mutableState.value = mutableState.value.copy(audioFormatInfo = audioFormatInfo)
+                mutableState.value = mutableState.value.copy(
+                    audioQuality = normalizedAudioQualityLabel(rawAudioQuality, audioFormatInfo),
+                    audioFormatInfo = audioFormatInfo,
+                )
             }
         }
         scope.launch {
             FuoPlaybackService.playbackState.collect { serviceState ->
+                rawAudioQuality = serviceState.audioQuality
+                val audioFormatInfo = mutableState.value.audioFormatInfo
                 mutableState.value = serviceState.copy(
+                    audioQuality = normalizedAudioQualityLabel(rawAudioQuality, audioFormatInfo),
                     audioDecoderInfo = mutableState.value.audioDecoderInfo,
-                    audioFormatInfo = mutableState.value.audioFormatInfo,
+                    audioFormatInfo = audioFormatInfo,
                 )
                 applyPendingLockScreenLyrics()
             }
@@ -60,6 +67,7 @@ class AndroidNativeAudioEngine(
 
     override fun prepareLoading(track: MusicTrack) {
         pendingLockScreenLyrics = null
+        rawAudioQuality = null
         mutableState.value = mutableState.value.copy(
             status = PlayerStatus.Loading,
             currentTrack = track,
@@ -80,6 +88,7 @@ class AndroidNativeAudioEngine(
 
     override fun play(plan: PlaybackPlan) {
         val first = plan.requests.firstOrNull() ?: return
+        rawAudioQuality = null
         mutableState.value = mutableState.value.copy(
             status = PlayerStatus.Loading,
             currentTrack = first.track,
@@ -119,10 +128,11 @@ class AndroidNativeAudioEngine(
 
     override fun stop() {
         pendingLockScreenLyrics = null
+        rawAudioQuality = null
         clearCurrentLockScreenLyrics()
         mediaController?.stop()
         FuoPlaybackService.stop(context)
-        mutableState.value = mutableState.value.copy(status = PlayerStatus.Idle, positionMs = 0)
+        mutableState.value = mutableState.value.copy(status = PlayerStatus.Idle, positionMs = 0, audioQuality = null)
     }
 
     override fun seekTo(positionMs: Long) {

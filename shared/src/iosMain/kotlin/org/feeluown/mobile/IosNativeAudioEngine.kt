@@ -13,6 +13,7 @@ class IosNativeAudioEngine(
     settingsRepository: AppSettingsRepository,
 ) : PlaybackEngine {
     private val mutableState = MutableStateFlow(PlaybackState())
+    private var rawAudioQuality: String? = null
 
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
 
@@ -33,6 +34,7 @@ class IosNativeAudioEngine(
     }
 
     override fun prepareLoading(track: MusicTrack) {
+        rawAudioQuality = null
         mutableState.value = PlaybackState(
             status = PlayerStatus.Loading,
             currentTrack = track,
@@ -43,12 +45,13 @@ class IosNativeAudioEngine(
 
     override fun play(track: MusicTrack, payload: PlaybackPayload) {
         output.play(payload.url, payload.headers, payload.title, payload.artists, payload.album)
+        rawAudioQuality = payload.audioQuality
         mutableState.value = PlaybackState(
             status = PlayerStatus.Loading,
             currentTrack = track,
             durationMs = payload.durationMs ?: track.durationMs ?: 0,
             lyrics = payload.lyrics,
-            audioQuality = payload.audioQuality,
+            audioQuality = normalizedAudioQualityLabel(rawAudioQuality, null),
             playbackParts = payload.parts,
             currentPartIndex = payload.currentPartIndex,
         )
@@ -65,6 +68,7 @@ class IosNativeAudioEngine(
     }
 
     override fun stop() {
+        rawAudioQuality = null
         output.stop()
         mutableState.value = PlaybackState(status = PlayerStatus.Idle)
     }
@@ -84,12 +88,14 @@ class IosNativeAudioEngine(
             "Error" -> PlayerStatus.Error
             else -> PlayerStatus.Idle
         }
+        val audioFormatInfo = output.audioFormatInfo()
         mutableState.value = mutableState.value.copy(
             status = status,
             positionMs = output.positionMs().coerceAtLeast(0),
             durationMs = output.durationMs().takeIf { it > 0 } ?: mutableState.value.durationMs,
             bufferedMs = output.bufferedMs().coerceAtLeast(0),
-            audioFormatInfo = output.audioFormatInfo(),
+            audioQuality = normalizedAudioQualityLabel(rawAudioQuality, audioFormatInfo),
+            audioFormatInfo = audioFormatInfo,
             errorMessage = output.errorMessage(),
         )
     }
