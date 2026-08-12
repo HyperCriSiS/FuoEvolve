@@ -15,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -36,7 +35,6 @@ import org.feeluown.mobile.provider.netease.NeteaseSmsLoginSession
 internal fun NeteaseSmsLoginPanel(
     controller: FuoPlayerController,
     isAuthBusy: Boolean,
-    onOpenWebLogin: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val session = remember { NeteaseSmsLoginSession() }
@@ -142,9 +140,9 @@ internal fun NeteaseSmsLoginPanel(
             feedback?.let { message ->
                 val displayMessage = if (showWebFallback) {
                     if (riskCode != null) {
-                        "网易云风控拦截了本次短信登录（$riskCode），可稍后重试或改用 WebView 登录。"
+                        "网易云风控拦截了本次短信登录（$riskCode），可稍后重试或使用下方 WebView 登录。"
                     } else {
-                        "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
+                        "网易云风控拦截了本次短信登录，可稍后重试或使用下方 WebView 登录。"
                     }
                 } else {
                     message
@@ -158,16 +156,6 @@ internal fun NeteaseSmsLoginPanel(
                         MaterialTheme.colorScheme.onPrimaryContainer
                     },
                 )
-            }
-            if (showWebFallback) {
-                TextButton(
-                    enabled = !isSmsBusy && !isAuthBusy,
-                    onClick = onOpenWebLogin,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
-                    Text("改用 WebView 登录")
-                }
             }
             Button(
                 enabled = !isSmsBusy && !isAuthBusy && phone.length == 11 && captcha.length >= 4,
