@@ -2647,6 +2647,100 @@ class FuoPlayerControllerTest {
     }
 
     @Test
+    fun featurePrefetchAppendsFinalPageAndStopsRequesting() = runTest {
+        val feature = ProviderFeature(
+            id = "netease_paginated_songs",
+            providerId = "netease",
+            providerName = "网易云音乐",
+            title = "分页歌曲",
+            category = ProviderFeatureCategory.Music,
+            contentType = ProviderContentType.Songs,
+            requiresLogin = false,
+        )
+        val tracks = (1..51).map { index -> providerTrack("provider:$index", "Track $index") }
+        val provider = FakeProviderRepository(
+            tracks = emptyList(),
+            features = listOf(feature),
+            featureSections = mapOf(feature.id to ProviderContentSection(feature, tracks = tracks)),
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.openFeature(feature)
+            advanceUntilIdle()
+
+            assertEquals(50, controller.selectedFeatureTracks.size)
+            assertTrue(controller.selectedFeatureTracksHasMore)
+
+            controller.prefetchSelectedFeatureIfNeeded(49)
+            advanceUntilIdle()
+
+            assertEquals(tracks, controller.selectedFeatureTracks)
+            assertFalse(controller.selectedFeatureTracksHasMore)
+            assertEquals(2, provider.loadedFeatureIds.count { it == feature.id })
+
+            controller.prefetchSelectedFeatureIfNeeded(50)
+            advanceUntilIdle()
+
+            assertEquals(2, provider.loadedFeatureIds.count { it == feature.id })
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun mediaItemTrackPrefetchAppendsFinalPageAndStopsRequesting() = runTest {
+        val tracks = (1..51).map { index -> providerTrack("provider:$index", "Track $index") }
+        val mediaItem = ProviderMediaItem(
+            id = "artist:netease:paginated",
+            title = "Paginated Artist",
+            providerId = "netease",
+            providerName = "网易云音乐",
+            type = ProviderMediaItemType.Artist,
+        )
+        val provider = FakeProviderRepository(emptyList(), mediaItemTracks = tracks)
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.openMediaItem(mediaItem)
+            advanceUntilIdle()
+
+            assertEquals(50, controller.selectedMediaItemTracks.size)
+            assertTrue(controller.selectedMediaItemTracksHasMore)
+
+            controller.prefetchSelectedMediaItemTracksIfNeeded(49)
+            advanceUntilIdle()
+
+            assertEquals(tracks, controller.selectedMediaItemTracks)
+            assertFalse(controller.selectedMediaItemTracksHasMore)
+            assertEquals(listOf(0, 50), provider.mediaItemTrackPageOffsets)
+
+            controller.prefetchSelectedMediaItemTracksIfNeeded(50)
+            advanceUntilIdle()
+
+            assertEquals(listOf(0, 50), provider.mediaItemTrackPageOffsets)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
     fun appliesSavedDownloadParallelismToRepositoryOnStartup() = runTest {
         val downloads = FakeDownloadRepository(emptyMap())
         val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
@@ -4432,6 +4526,7 @@ class FuoPlayerControllerTest {
         val loadedFeatureIds = mutableListOf<String>()
         val loadedMoreFeatureIds = mutableListOf<String>()
         val loadedMediaItemIds = mutableListOf<String>()
+        val mediaItemTrackPageOffsets = mutableListOf<Int>()
 
         override suspend fun initialize() = Unit
 
@@ -4636,6 +4731,7 @@ class FuoPlayerControllerTest {
             limit: Int,
         ): ProviderMediaItemDetail {
             loadedMediaItemIds += item.id
+            mediaItemTrackPageOffsets += tracksOffset
             val tracks = mediaItemTracks.drop(tracksOffset).take(limit)
             val tracksNextOffset = tracksOffset + tracks.size
             return ProviderMediaItemDetail(

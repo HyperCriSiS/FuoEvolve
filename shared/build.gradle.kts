@@ -85,7 +85,7 @@ kover {
         variant("debug") {
             verify {
                 rule {
-                    minBound(48)
+                    minBound(49)
                 }
             }
         }
