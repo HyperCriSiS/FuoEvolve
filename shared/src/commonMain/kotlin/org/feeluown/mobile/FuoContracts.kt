@@ -26,10 +26,10 @@ enum class AudioQualityPolicy(
     val label: String,
     val policy: String,
 ) {
-    Highest("最高", ">>>"),
-    High("高", "hq<>"),
-    Standard("标准", "sq<>"),
-    Low("低流量", "lq<>"),
+    Highest("最高可用", ">>>"),
+    High("高音质", "hq<>"),
+    Standard("标准音质", "sq<>"),
+    Low("省流量", "lq<>"),
 }
 
 @Serializable

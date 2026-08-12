@@ -14,16 +14,18 @@ class AudioQualityLabelTest {
     }
 
     @Test
+    fun usesProviderCodecAwareQualityBeforeBitrate() {
+        assertEquals("LQ", normalizedAudioQualityLabel("AUDIO_QUALITY_LOW", AudioFormatInfo(averageBitrate = 96_000)))
+        assertEquals("SQ", normalizedAudioQualityLabel("AUDIO_QUALITY_MEDIUM", AudioFormatInfo(averageBitrate = 128_000)))
+        assertEquals("HQ", normalizedAudioQualityLabel("AUDIO_QUALITY_HIGH", AudioFormatInfo(averageBitrate = 192_000)))
+        assertEquals("LQ", normalizedAudioQualityLabel("AUDIO_QUALITY_ULTRALOW", null))
+    }
+
+    @Test
     fun classifiesLosslessFormatsAsShq() {
         assertEquals("SHQ", normalizedAudioQualityLabel("flac", null))
-        assertEquals(
-            "SHQ",
-            normalizedAudioQualityLabel(null, AudioFormatInfo(format = "audio/flac")),
-        )
-        assertEquals(
-            "SHQ",
-            normalizedAudioQualityLabel("hq", AudioFormatInfo(codec = "alac")),
-        )
+        assertEquals("SHQ", normalizedAudioQualityLabel(null, AudioFormatInfo(format = "audio/flac")))
+        assertEquals("SHQ", normalizedAudioQualityLabel("hq", AudioFormatInfo(codec = "alac")))
     }
 
     @Test
@@ -38,18 +40,9 @@ class AudioQualityLabelTest {
 
     @Test
     fun usesActualBitrateForCodecOnlyProviderValues() {
-        assertEquals(
-            "LQ",
-            normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 128_000)),
-        )
-        assertEquals(
-            "SQ",
-            normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 192_000)),
-        )
-        assertEquals(
-            "HQ",
-            normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 320_000)),
-        )
+        assertEquals("LQ", normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 128_000)))
+        assertEquals("SQ", normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 192_000)))
+        assertEquals("HQ", normalizedAudioQualityLabel("mp3", AudioFormatInfo(averageBitrate = 320_000)))
     }
 
     @Test

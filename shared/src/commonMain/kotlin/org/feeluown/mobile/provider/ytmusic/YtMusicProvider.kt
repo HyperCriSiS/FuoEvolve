@@ -106,7 +106,8 @@ class YtMusicProvider(
             headers = played.playbackHeaders,
             coverUrl = track.coverUrl,
             durationMs = selected.long("approxDurationMs") ?: track.durationMs,
-            audioQuality = selected.int("bitrate")?.toString(),
+            // InnerTube's audioQuality is codec-aware; bitrate is only a fallback when absent.
+            audioQuality = selected.stringOrNull("audioQuality") ?: selected.int("bitrate")?.toString(),
             providerName = NAME,
         )
     }
