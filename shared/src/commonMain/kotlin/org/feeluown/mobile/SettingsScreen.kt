@@ -680,6 +680,12 @@ fun ProviderLoginPanel(
                 }
                 return@Column
             }
+            if (provider.providerId == "netease") {
+                NeteaseSmsLoginPanel(
+                    controller = controller,
+                    isAuthBusy = isAuthBusy,
+                )
+            }
             if (supportedLoginModes.size > 1) {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     supportedLoginModes.forEachIndexed { index, mode ->
