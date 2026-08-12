@@ -54,7 +54,7 @@ internal class NeteaseSmsLoginSession(
 
     suspend fun sendCaptcha(phone: String) {
         bootstrapSession()
-        cookies.putIfAbsent("NMTID", randomHex(32))
+        cookies.getOrPut("NMTID") { randomHex(32) }
         val normalizedPhone = normalizePhone(phone)
         val response = weApiPost(
             path = "sms/captcha/sent",
