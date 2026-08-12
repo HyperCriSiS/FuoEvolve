@@ -4,7 +4,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,6 +47,36 @@ class ProviderNetworkTest {
         assertEquals("ok", result.value)
         assertEquals(CacheFreshness.Network, result.freshness)
         assertEquals(3, calls)
+        client.close()
+    }
+
+    @Test
+    fun responseHeadersAreExposedByProviderTransport() = runTest {
+        val httpClient = HttpClient(MockEngine) {
+            engine {
+                addHandler {
+                    respond(
+                        content = "ok",
+                        headers = headersOf(HttpHeaders.SetCookie, "MUSIC_U=token; Path=/"),
+                    )
+                }
+            }
+        }
+        val client = ProviderHttpClient(httpClient = httpClient)
+        var capturedHeaders = emptyMap<String, List<String>>()
+
+        val result = client.getText(
+            providerId = "test",
+            url = "https://example.test/auth",
+            kind = ProviderRequestKind.Auth,
+            onResponseHeaders = { capturedHeaders = it },
+        )
+
+        assertEquals("ok", result.value)
+        assertEquals(
+            listOf("MUSIC_U=token; Path=/"),
+            capturedHeaders.entries.first { (name, _) -> name.equals(HttpHeaders.SetCookie, ignoreCase = true) }.value,
+        )
         client.close()
     }
 
