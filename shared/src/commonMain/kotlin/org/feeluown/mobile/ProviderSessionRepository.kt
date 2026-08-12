@@ -153,11 +153,12 @@ class DefaultProviderSessionRepository(
             authState
         } catch (throwable: Throwable) {
             val current = mutableState.value
+            val failureMessage = throwable.providerFailureOrNull(providerId)?.userMessage
+                ?: throwable.message
+                ?: throwable::class.simpleName.orEmpty()
             mutableState.value = current.copy(
                 operations = current.operations - providerId,
-                errors = current.errors + (
-                    providerId to (throwable.message ?: throwable::class.simpleName.orEmpty())
-                ),
+                errors = current.errors + (providerId to failureMessage),
             )
             throw throwable
         }

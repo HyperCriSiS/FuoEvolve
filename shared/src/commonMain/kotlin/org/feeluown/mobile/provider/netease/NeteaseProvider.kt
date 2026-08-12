@@ -27,6 +27,8 @@ import org.feeluown.mobile.ProviderSearchResults
 import org.feeluown.mobile.ProviderVideo
 import org.feeluown.mobile.VideoPlaybackPayload
 import org.feeluown.mobile.composeRichLyrics
+import org.feeluown.mobile.providerBusinessException
+import org.feeluown.mobile.providerContractException
 import org.feeluown.mobile.provider.core.BaseKotlinProvider
 import org.feeluown.mobile.provider.core.KotlinMusicProvider
 import org.feeluown.mobile.provider.core.ProviderCredentials
@@ -1081,11 +1083,14 @@ class NeteaseProvider(
     }
 
     private fun parseNeteaseResponse(raw: String): JsonObject {
-        val root = providerJson.parseToJsonElement(raw).asObject()
+        val root = runCatching { providerJson.parseToJsonElement(raw).asObject() }
+            .getOrElse { throwable ->
+                throw providerContractException(ID, "网易云音乐响应格式无法解析", throwable)
+            }
         val code = root.int("code")
         if (code != null && code != 200) {
             val message = root.string("message").ifBlank { root.string("msg") }
-            error("网易云音乐接口失败：code=$code${message.takeIf(String::isNotBlank)?.let { ", $it" }.orEmpty()}")
+            throw providerBusinessException(ID, code, message)
         }
         return root
     }

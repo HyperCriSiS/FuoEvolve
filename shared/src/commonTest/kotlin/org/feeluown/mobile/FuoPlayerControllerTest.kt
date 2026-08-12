@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import org.feeluown.mobile.provider.core.network.ProviderNetworkException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -2326,6 +2327,42 @@ class FuoPlayerControllerTest {
     }
 
     @Test
+    fun openFeatureExposesStructuredProviderFailure() = runTest {
+        val feature = ProviderFeature(
+            id = "qqmusic_daily_songs",
+            providerId = "qqmusic",
+            providerName = "QQ 音乐",
+            title = "每日推荐歌曲",
+            category = ProviderFeatureCategory.Recommend,
+            contentType = ProviderContentType.Songs,
+            requiresLogin = false,
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = FakeProviderRepository(
+                    tracks = emptyList(),
+                    featureFailure = ProviderNetworkException.Http(451, "region restricted"),
+                ),
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = FakePlaybackEngine(),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.openFeature(feature)
+            advanceUntilIdle()
+
+            assertEquals("当前地区暂不支持此内容", controller.selectedFeatureError)
+            assertEquals(ProviderFailureKind.RegionRestricted, controller.lastProviderFailure?.kind)
+            assertEquals("qqmusic", controller.lastProviderFailure?.providerId)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
     fun navigateBackClosesMediaItemBeforeSearch() = runTest {
         val mediaItem = ProviderMediaItem(
             id = "album:netease:1",
@@ -4478,6 +4515,7 @@ class FuoPlayerControllerTest {
         private val mediaItemTracks: List<MusicTrack> = emptyList(),
         private val features: List<ProviderFeature> = emptyList(),
         private val featureSections: Map<String, ProviderContentSection> = emptyMap(),
+        private val featureFailure: Throwable? = null,
         private val additionalFeatureTracks: Map<String, List<MusicTrack>> = emptyMap(),
         private val playlistTargets: List<ProviderPlaylist> = emptyList(),
         private val capabilities: List<ProviderCapabilities> = emptyList(),
@@ -4649,6 +4687,7 @@ class FuoPlayerControllerTest {
             offset: Int,
             limit: Int,
         ): ProviderContentSection {
+            featureFailure?.let { throw it }
             loadedFeatureIds += feature.id
             val section = featureSections[feature.id] ?: return ProviderContentSection(feature)
             val tracks = section.tracks.drop(offset).take(limit)

@@ -14,79 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.Serializable
 import org.feeluown.mobile.provider.core.network.currentTimeMillis
-
-@Serializable
-enum class SearchScope {
-    Local,
-    Provider,
-    All,
-}
-
-@Serializable
-enum class ProviderSearchTab {
-    Songs,
-    Artists,
-    Albums,
-    Playlists,
-    Videos,
-}
-
-@Serializable
-enum class HomeSection {
-    Recommend,
-    Music,
-    Mine,
-}
-
-@Serializable
-enum class ProviderDisplaySection(val label: String) {
-    Search("搜索"),
-    Recommend("推荐"),
-    Explore("探索"),
-    Mine("我的"),
-    Replace("替换"),
-}
-
-@Serializable
-enum class MineSection {
-    Playlists,
-    Songs,
-    Artists,
-    Albums,
-    LocalMusic,
-}
-
-@Serializable
-enum class PlaylistFilter {
-    All,
-    UserPlaylists,
-    FavoritePlaylists,
-    Local,
-}
-
-@Serializable
-enum class LocalMusicViewMode {
-    All,
-    Artist,
-    Album,
-}
-
-data class LocalMusicCollectionSelection(
-    val mode: LocalMusicViewMode,
-    val key: String,
-)
-
-data class TrackArtistTarget(
-    val name: String,
-    val mediaItem: ProviderMediaItem? = null,
-)
-
-enum class PlaylistTargetType {
-    Provider,
-    Local,
-}
 
 private const val DYNAMIC_QUEUE_PREFETCH_REMAINING = 2
 private const val LIST_PREFETCH_REMAINING = 8
@@ -123,23 +51,25 @@ class FuoPlayerController(
     private val oauthDeviceCodeAssistant: OAuthDeviceCodeAssistant = NoOpOAuthDeviceCodeAssistant,
     private val scope: CoroutineScope,
 ) {
+    private val providerState = ProviderControllerState()
+
     var isSettingsLoaded by mutableStateOf(false)
         private set
     var onboardingCompleted by mutableStateOf(false)
         private set
-    var availableProviders by mutableStateOf<List<ProviderInfo>>(emptyList())
+    var availableProviders by providerState::availableProviders
         private set
-    var providers by mutableStateOf<List<ProviderInfo>>(emptyList())
+    var providers by providerState::providers
         private set
-    var providerFeatures by mutableStateOf<List<ProviderFeature>>(emptyList())
+    var providerFeatures by providerState::features
         private set
-    var providerCapabilities by mutableStateOf<Map<String, ProviderCapabilities>>(emptyMap())
+    var providerCapabilities by providerState::capabilities
         private set
-    var providerAuthStates by mutableStateOf<Map<String, ProviderAuthState>>(emptyMap())
+    var providerAuthStates by providerState::authStates
         private set
-    var providerAuthOperations by mutableStateOf<Map<String, ProviderSessionOperation>>(emptyMap())
+    var providerAuthOperations by providerState::authOperations
         private set
-    var providerAuthErrors by mutableStateOf<Map<String, String>>(emptyMap())
+    var providerAuthErrors by providerState::authErrors
         private set
     var providerCookieInputs by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -163,16 +93,18 @@ class FuoPlayerController(
         private set
     var mineProviderIds by mutableStateOf<Set<String>>(emptySet())
         private set
-    var recommendSections by mutableStateOf<List<ProviderContentSection>>(emptyList())
+    var recommendSections by providerState::recommendSections
         private set
-    var musicSections by mutableStateOf<List<ProviderContentSection>>(emptyList())
+    var musicSections by providerState::musicSections
         private set
-    var mineSections by mutableStateOf<List<ProviderContentSection>>(emptyList())
+    var mineSections by providerState::mineSections
         private set
-    var minePlaylistSections by mutableStateOf<List<ProviderContentSection>>(emptyList())
+    var minePlaylistSections by providerState::minePlaylistSections
         private set
-    var mineFavoritePlaylistSections by mutableStateOf<List<ProviderContentSection>>(emptyList())
+    var mineFavoritePlaylistSections by providerState::mineFavoritePlaylistSections
         private set
+    val lastProviderFailure: ProviderFailure?
+        get() = providerState.lastFailure
     var selectedPlaylist by mutableStateOf<ProviderPlaylist?>(null)
         private set
     var selectedPlaylistCategory by mutableStateOf<ProviderFeatureCategory?>(null)
@@ -2185,10 +2117,7 @@ class FuoPlayerController(
                 }.getOrElse { throwable ->
                     ProviderContentSection(
                         feature = feature,
-                        errorMessage = when (throwable) {
-                            is TimeoutCancellationException -> "加载超时，请检查网络后重试"
-                            else -> throwable.message ?: "加载失败"
-                        },
+                        errorMessage = providerErrorMessage(throwable, "加载失败", feature.providerId),
                     )
                 }
                 updates.send(loaded)
@@ -2278,8 +2207,8 @@ class FuoPlayerController(
                         }
                     }
                 }.onFailure {
-                    selectedFeatureError = it.message ?: it::class.simpleName.orEmpty()
-                    setError(it)
+                    selectedFeatureError = providerErrorMessage(it, "加载失败", feature.providerId)
+                    setError(it, feature.providerId)
                 }
             }
             isLoading = false
@@ -2351,7 +2280,7 @@ class FuoPlayerController(
                 if (replacementCandidateState.trackId == trackId) {
                     replacementCandidateState = ReplacementCandidateState(
                         trackId = trackId,
-                        errorMessage = throwable.message ?: throwable::class.simpleName ?: "查询失败",
+                        errorMessage = providerErrorMessage(throwable, "查询失败", originalTrack.source),
                     )
                 }
             }
@@ -5192,14 +5121,17 @@ class FuoPlayerController(
         )
     }
 
-    private fun setError(throwable: Throwable) {
-        message = when (throwable) {
-            is TimeoutCancellationException -> "操作超时，请检查网络后重试"
-            else -> throwable.message ?: throwable::class.simpleName.orEmpty()
-        }
+    private fun setError(throwable: Throwable, providerId: String? = null) {
+        message = providerErrorMessage(throwable, throwable::class.simpleName.orEmpty(), providerId)
         playbackState = playbackState.copy(status = PlayerStatus.Error, errorMessage = message)
         isLoading = false
     }
+
+    private fun providerErrorMessage(
+        throwable: Throwable,
+        fallback: String,
+        providerId: String? = null,
+    ): String = providerState.userMessage(throwable, fallback, providerId)
 
     private fun recoverPlaybackEngineError(engineState: PlaybackState) {
         val failedTrack = engineState.currentTrack ?: currentQueueTrack() ?: return

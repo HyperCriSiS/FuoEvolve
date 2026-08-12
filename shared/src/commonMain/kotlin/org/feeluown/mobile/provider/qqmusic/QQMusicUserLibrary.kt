@@ -8,6 +8,9 @@ import org.feeluown.mobile.ProviderFeature
 import org.feeluown.mobile.ProviderMediaItem
 import org.feeluown.mobile.ProviderMediaItemType
 import org.feeluown.mobile.ProviderPlaylist
+import org.feeluown.mobile.providerBusinessException
+import org.feeluown.mobile.providerContractException
+import org.feeluown.mobile.providerFailureOrNull
 import org.feeluown.mobile.provider.core.ProviderCredentialStore
 import org.feeluown.mobile.provider.core.array
 import org.feeluown.mobile.provider.core.asObject
@@ -46,10 +49,10 @@ internal class QQMusicUserLibrary(
         offset: Int,
         limit: Int,
     ): ProviderContentSection {
-        val snapshot = runCatching { snapshot() }.getOrElse {
+        val snapshot = runCatching { snapshot() }.getOrElse { failure ->
             return ProviderContentSection(
                 feature = feature,
-                errorMessage = "QQ 音乐账号资料加载失败，当前登录状态已保留",
+                errorMessage = failure.providerMessage("QQ 音乐账号资料加载失败，当前登录状态已保留"),
             )
         }
         val page = snapshot.playlists.drop(offset).take(limit)
@@ -91,8 +94,11 @@ internal class QQMusicUserLibrary(
                 ?: total?.let { nextOffset < it }
                 ?: (rawValues.size >= limit),
         )
-    }.getOrElse {
-        ProviderContentSection(feature = feature, errorMessage = "QQ 音乐收藏歌单加载失败")
+    }.getOrElse { failure ->
+        ProviderContentSection(
+            feature = feature,
+            errorMessage = failure.providerMessage("QQ 音乐收藏歌单加载失败"),
+        )
     }
 
     suspend fun loadFollowedArtists(
@@ -128,8 +134,11 @@ internal class QQMusicUserLibrary(
                 else -> rawValues.size >= limit
             },
         )
-    }.getOrElse {
-        ProviderContentSection(feature = feature, errorMessage = "QQ 音乐关注歌手加载失败")
+    }.getOrElse { failure ->
+        ProviderContentSection(
+            feature = feature,
+            errorMessage = failure.providerMessage("QQ 音乐关注歌手加载失败"),
+        )
     }
 
     suspend fun loadFavoriteAlbums(
@@ -162,8 +171,11 @@ internal class QQMusicUserLibrary(
                 ?: total?.let { nextOffset < it }
                 ?: (rawValues.size >= limit),
         )
-    }.getOrElse {
-        ProviderContentSection(feature = feature, errorMessage = "QQ 音乐收藏专辑加载失败")
+    }.getOrElse { failure ->
+        ProviderContentSection(
+            feature = feature,
+            errorMessage = failure.providerMessage("QQ 音乐收藏专辑加载失败"),
+        )
     }
 
     private suspend fun snapshot(): QQMusicUserLibrarySnapshot {
@@ -254,9 +266,10 @@ internal class QQMusicUserLibrary(
 
         val code = root.int("code")
         if (code != null && code != 0) {
-            error(root.errorMessage().ifBlank { "QQ Music profile request failed (code=$code)" })
+            throw providerBusinessException(ID, code, root.errorMessage())
         }
-        val data = root.obj("data") ?: error("QQ Music profile payload missing data")
+        val data = root.obj("data")
+            ?: throw providerContractException(ID, "QQ Music profile payload missing data")
         val creator = data.obj("creator")
         val userName = creator?.stringOrNull("nick")
             ?: creator?.stringOrNull("nickname")
@@ -348,7 +361,7 @@ internal class QQMusicUserLibrary(
         if (data == null) {
             val code = root.int("code")
             if (code == PRIVATE_PLAYLIST_CODE) return CreatedPlaylistsResult()
-            error(root.errorMessage().ifBlank { "QQ Music user playlists request failed" })
+            throw providerBusinessException(ID, code, root.errorMessage())
         }
         val rawPlaylists = data.array("disslist")
         return CreatedPlaylistsResult(
@@ -609,7 +622,7 @@ internal class QQMusicUserLibrary(
         val envelope = root.obj(key) ?: root
         val code = envelope.int("code")
         if (code != null && code != 0) {
-            error(envelope.errorMessage().ifBlank { "QQ Music request failed (code=$code)" })
+            throw providerBusinessException(ID, code, envelope.errorMessage())
         }
         return envelope.obj("data") ?: envelope
     }
@@ -668,6 +681,9 @@ internal class QQMusicUserLibrary(
 
     private fun JsonObject.errorMessage(): String =
         string("message").ifBlank { string("msg") }.ifBlank { string("errmsg") }.ifBlank { string("error") }
+
+    private fun Throwable.providerMessage(fallback: String): String =
+        providerFailureOrNull(ID)?.userMessage ?: fallback
 
     private fun CreatedPlaylistsResult?.orEmptyPlaylists(): List<ProviderPlaylist> = this?.playlists.orEmpty()
 
