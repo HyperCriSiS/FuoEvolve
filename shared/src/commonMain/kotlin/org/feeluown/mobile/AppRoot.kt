@@ -212,6 +212,7 @@ fun AppRoot(
     onLogoutProvider: (ProviderInfo) -> Unit,
     onImportYtmusicHeaderFile: (() -> Unit)? = null,
     onImportYtmusicOAuthFile: (() -> Unit)? = null,
+    onStartYtmusicOAuth: (() -> Unit)? = null,
     onImportLocalPlaylistFile: (() -> Unit)? = null,
     onExportLocalPlaylistFile: ((String, String) -> Unit)? = null,
     onShareLocalPlaylistFile: ((String, String) -> Unit)? = null,
@@ -237,6 +238,7 @@ fun AppRoot(
                 onLogoutProvider = onLogoutProvider,
                 onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
                 onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
+                onStartYtmusicOAuth = onStartYtmusicOAuth,
             )
             return@FuoTheme
         }
@@ -348,6 +350,7 @@ fun AppRoot(
                                                 appVersionInfo = appVersionInfo,
                                                 onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
                                                 onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
+                                                onStartYtmusicOAuth = onStartYtmusicOAuth,
                                             )
                                             AppRoute.Search -> SearchScreen(
                                                 controller = controller,

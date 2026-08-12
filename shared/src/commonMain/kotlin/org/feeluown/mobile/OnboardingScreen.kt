@@ -82,6 +82,7 @@ fun OnboardingScreen(
     onLogoutProvider: (ProviderInfo) -> Unit,
     onImportYtmusicHeaderFile: (() -> Unit)? = null,
     onImportYtmusicOAuthFile: (() -> Unit)? = null,
+    onStartYtmusicOAuth: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val availableProviders = controller.orderedAvailableProviders()
@@ -215,6 +216,7 @@ fun OnboardingScreen(
                         onLogoutProvider = onLogoutProvider,
                         onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
                         onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
+                        onStartYtmusicOAuth = onStartYtmusicOAuth,
                     )
                 }
             }
@@ -467,6 +469,7 @@ private fun ProviderLoginOnboardingPage(
     onLogoutProvider: (ProviderInfo) -> Unit,
     onImportYtmusicHeaderFile: (() -> Unit)?,
     onImportYtmusicOAuthFile: (() -> Unit)?,
+    onStartYtmusicOAuth: (() -> Unit)?,
 ) {
     Column(
         modifier = Modifier
@@ -492,6 +495,7 @@ private fun ProviderLoginOnboardingPage(
             onLogoutProvider = onLogoutProvider,
             onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
             onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
+            onStartYtmusicOAuth = onStartYtmusicOAuth,
         )
     }
 }

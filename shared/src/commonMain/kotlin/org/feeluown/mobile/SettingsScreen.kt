@@ -108,6 +108,7 @@ fun SettingsScreen(
     appVersionInfo: String?,
     onImportYtmusicHeaderFile: (() -> Unit)? = null,
     onImportYtmusicOAuthFile: (() -> Unit)? = null,
+    onStartYtmusicOAuth: (() -> Unit)? = null,
 ) {
     val loginProviderId = controller.settingsLoginProviderId
     val loginProvider = controller.orderedProviders().firstOrNull { it.providerId == loginProviderId }
@@ -157,6 +158,7 @@ fun SettingsScreen(
                     onLogoutProvider = onLogoutProvider,
                     onImportYtmusicHeaderFile = onImportYtmusicHeaderFile,
                     onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
+                    onStartYtmusicOAuth = onStartYtmusicOAuth,
                 )
             }
         } else if (layoutInfo.useWideLayout) {
@@ -597,6 +599,7 @@ fun ProviderLoginPanel(
     onLogoutProvider: (ProviderInfo) -> Unit,
     onImportYtmusicHeaderFile: (() -> Unit)? = null,
     onImportYtmusicOAuthFile: (() -> Unit)? = null,
+    onStartYtmusicOAuth: (() -> Unit)? = null,
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val authState = controller.authStateFor(provider)
@@ -880,7 +883,7 @@ fun ProviderLoginPanel(
                         }
                         Button(
                             enabled = !isAuthBusy,
-                            onClick = { controller.startYtmusicTvOAuthLogin() },
+                            onClick = onStartYtmusicOAuth ?: controller::startYtmusicTvOAuthLogin,
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                             Spacer(Modifier.size(8.dp))

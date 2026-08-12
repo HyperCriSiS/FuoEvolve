@@ -75,6 +75,11 @@ class MainActivity : ComponentActivity() {
                 hasMicrophonePermission = granted
                 controller.onMicrophonePermissionChange(granted)
             }
+            val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) {
+                controller.startYtmusicTvOAuthLogin()
+            }
             val lifecycleOwner = LocalLifecycleOwner.current
             val appUiState by appViewModel.uiState.collectAsStateWithLifecycle()
             val systemDark = LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
@@ -227,6 +232,20 @@ class MainActivity : ComponentActivity() {
                 },
                 onImportYtmusicOAuthFile = {
                     ytmusicOAuthFileLauncher.launch(arrayOf("application/json"))
+                },
+                onStartYtmusicOAuth = {
+                    val oauthInput = controller.providerOAuthInputFor("ytmusic")
+                    val hasCredentials = oauthInput.clientId.isNotBlank() && oauthInput.clientSecret.isNotBlank()
+                    val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) != PackageManager.PERMISSION_GRANTED
+                    if (hasCredentials && needsPermission) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        controller.startYtmusicTvOAuthLogin()
+                    }
                 },
                 onImportLocalPlaylistFile = {
                     localPlaylistFileLauncher.launch(

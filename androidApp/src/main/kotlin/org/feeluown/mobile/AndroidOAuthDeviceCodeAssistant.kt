@@ -1,5 +1,6 @@
 package org.feeluown.mobile
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -25,6 +27,10 @@ class AndroidOAuthDeviceCodeAssistant(
     }
 
     override fun showUserCodeNotification(userCode: String) {
+        if (!canShowNotifications()) {
+            copyUserCodeFallback(userCode)
+            return
+        }
         ensureChannel()
         val copyIntent = Intent(appContext, OAuthUserCodeCopyReceiver::class.java).apply {
             action = OAuthUserCodeCopyReceiver.ACTION_COPY_USER_CODE
@@ -66,8 +72,10 @@ class AndroidOAuthDeviceCodeAssistant(
                 copyPendingIntent,
             )
             .build()
-        runCatching {
+        try {
             NotificationManagerCompat.from(appContext).notify(NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            copyUserCodeFallback(userCode)
         }
     }
 
@@ -89,6 +97,18 @@ class AndroidOAuthDeviceCodeAssistant(
                 description = "YouTube Music TV OAuth 设备验证码"
             },
         )
+    }
+
+    private fun canShowNotifications(): Boolean {
+        val hasRuntimePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        return hasRuntimePermission && NotificationManagerCompat.from(appContext).areNotificationsEnabled()
+    }
+
+    private fun copyUserCodeFallback(userCode: String) {
+        copyToClipboard(appContext, userCode)
+        Toast.makeText(appContext, "通知权限不可用，验证码已复制：$userCode", Toast.LENGTH_LONG).show()
     }
 
     companion object {
