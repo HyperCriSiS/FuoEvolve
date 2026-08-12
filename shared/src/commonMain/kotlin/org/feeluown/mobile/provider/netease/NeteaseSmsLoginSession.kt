@@ -72,7 +72,7 @@ internal class NeteaseSmsLoginSession(
         val response = httpClient.request("$BASE/weapi/$path") {
             method = HttpMethod.Post
             header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded.toString())
-            header(HttpHeaders.Referer, "$BASE/")
+            header("Referer", "$BASE/")
             header(HttpHeaders.UserAgent, USER_AGENT)
             header(HttpHeaders.Cookie, cookieHeader())
             setBody(form.formUrlEncode())
