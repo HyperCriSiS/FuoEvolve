@@ -4993,10 +4993,15 @@ class FuoPlayerController(
         map { section -> section.copy(tracks = section.tracks.filterNot { it.id == trackId }) }
 
     private fun ProviderFeature.isDeferredHomeFeature(): Boolean {
-        return (category == ProviderFeatureCategory.Music &&
-            (contentType == ProviderContentType.Songs || contentType == ProviderContentType.Videos)) ||
-            (category == ProviderFeatureCategory.Recommend &&
-                (id.endsWith("_daily_songs") || isDynamicQueueFeature() || isBilibiliRecommendedVideos()))
+        val deferredMusicFeature = category == ProviderFeatureCategory.Music &&
+            (
+                contentType == ProviderContentType.Songs ||
+                    contentType == ProviderContentType.Videos ||
+                    isBilibiliWeeklyMustWatch()
+            )
+        val deferredRecommendFeature = category == ProviderFeatureCategory.Recommend &&
+            (id.endsWith("_daily_songs") || isDynamicQueueFeature() || isBilibiliRecommendedVideos())
+        return deferredMusicFeature || deferredRecommendFeature
     }
 
     private fun ProviderFeature.isDynamicQueueFeature(): Boolean {

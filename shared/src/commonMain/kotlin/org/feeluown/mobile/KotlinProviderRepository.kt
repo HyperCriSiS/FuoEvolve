@@ -591,13 +591,18 @@ internal suspend fun <T> selectReplacementCandidate(
 internal fun bilibiliReplacementScore(origin: MusicTrack, candidate: MusicTrack): Double {
     val originTitle = normalizeReplacementText(origin.title)
     val candidateTitle = normalizeReplacementText(candidate.title)
+    val candidateArtists = normalizeReplacementText(candidate.artists)
     if (originTitle.isBlank() || candidateTitle.isBlank()) return 0.0
 
     var score = 0.0
     if (originTitle in candidateTitle) {
         score += 0.40
     }
-    if (replacementArtistMatchTexts(origin.artists).any { artist -> artist in candidateTitle }) {
+    if (
+        replacementArtistMatchTexts(origin.artists).any { artist ->
+            artist in candidateTitle || artist in candidateArtists
+        }
+    ) {
         score += 0.20
     }
     if (BILIBILI_REPLACEMENT_BONUS_KEYWORDS.any { keyword -> keyword in candidateTitle }) {

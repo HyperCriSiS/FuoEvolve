@@ -245,7 +245,6 @@ internal class QQMusicUserLibrary(
                     "userid" to accountId,
                     "reqfrom" to "1",
                     "reqtype" to "0",
-                    "hostUin" to "0",
                     "loginUin" to accountId,
                 ),
             ),
@@ -329,7 +328,6 @@ internal class QQMusicUserLibrary(
             url = queryUrl(
                 "$BASE/rsc/fcgi-bin/fcg_user_created_diss",
                 mapOf(
-                    "hostUin" to "0",
                     "hostuin" to uin,
                     "sin" to "0",
                     "size" to "200",

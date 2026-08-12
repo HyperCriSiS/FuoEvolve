@@ -481,7 +481,7 @@ class FuoPlayerControllerTest {
             requiresLogin = false,
         )
         val weeklyVideos = ProviderFeature(
-            id = "bilibili_weekly_video_playlists",
+            id = "bilibili_weekly_must_watch",
             providerId = "bilibili",
             providerName = "哔哩哔哩",
             title = "每周必看",

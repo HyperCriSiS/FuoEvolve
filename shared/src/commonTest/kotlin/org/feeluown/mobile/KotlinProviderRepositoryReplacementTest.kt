@@ -23,6 +23,22 @@ class KotlinProviderRepositoryReplacementTest {
     }
 
     @Test
+    fun bilibiliScoreMatchesArtistMetadataWhenUploaderTitleOmitsArtist() {
+        val origin = track(
+            source = "netease",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+        )
+        val candidate = track(
+            source = "bilibili",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+        )
+
+        assertEquals(0.60, bilibiliReplacementScore(origin, candidate), 0.0001)
+    }
+
+    @Test
     fun bilibiliScorePenalizesCoverKeywords() {
         val origin = track(
             source = "netease",

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlinx.kover)
 }
 
 kotlin {
@@ -76,5 +77,17 @@ android {
 
     lint {
         disable.add("NullSafeMutableLiveData")
+    }
+}
+
+kover {
+    reports {
+        variant("debug") {
+            verify {
+                rule {
+                    minBound(48)
+                }
+            }
+        }
     }
 }

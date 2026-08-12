@@ -214,7 +214,7 @@ class YtMusicContentProviderTest {
                     "overlay":{"musicItemThumbnailOverlayRenderer":{"content":{"musicPlayButtonRenderer":{"playNavigationEndpoint":{"watchEndpoint":{
                       "videoId":"song1",
                       "watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_ATV"}}
-                    }}}}}}}
+                    }}}}}}
                   }
                 },
                 {
@@ -251,7 +251,7 @@ class YtMusicContentProviderTest {
                     "overlay":{"musicItemThumbnailOverlayRenderer":{"content":{"musicPlayButtonRenderer":{"playNavigationEndpoint":{"watchEndpoint":{
                       "videoId":"video1",
                       "watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_OMV"}}
-                    }}}}}}}
+                    }}}}}}
                   }
                 }
               ]
@@ -316,7 +316,7 @@ class YtMusicContentProviderTest {
               "overlay":{"musicItemThumbnailOverlayRenderer":{"content":{"musicPlayButtonRenderer":{"playNavigationEndpoint":{"watchEndpoint":{
                 "videoId":"$videoId",
                 "watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_ATV"}}
-              }}}}}}}
+              }}}}}}
             }}
         """.trimIndent()
 
