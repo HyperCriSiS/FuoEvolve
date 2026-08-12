@@ -45,10 +45,28 @@ internal fun NeteaseSmsLoginPanel(
     var isSmsBusy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var feedbackIsError by remember { mutableStateOf(false) }
+    var riskCode by remember { mutableStateOf<Int?>(null) }
     var showWebFallback by remember { mutableStateOf(false) }
 
     DisposableEffect(session) {
         onDispose(session::close)
+    }
+
+    fun clearRiskFallback() {
+        riskCode = null
+        showWebFallback = false
+    }
+
+    fun handleFailure(throwable: Throwable, fallbackMessage: String) {
+        if (throwable is NeteaseSmsLoginRiskException) {
+            riskCode = throwable.code
+            showWebFallback = true
+            feedback = throwable.message ?: fallbackMessage
+        } else {
+            clearRiskFallback()
+            feedback = throwable.message ?: fallbackMessage
+        }
+        feedbackIsError = true
     }
 
     Surface(
@@ -106,15 +124,13 @@ internal fun NeteaseSmsLoginPanel(
                             isSmsBusy = true
                             feedback = "正在发送验证码"
                             feedbackIsError = false
-                            showWebFallback = false
+                            clearRiskFallback()
                             runCatching { session.sendCaptcha(phone) }
                                 .onSuccess {
                                     feedback = "验证码已发送"
                                 }
                                 .onFailure { throwable ->
-                                    feedback = throwable.message ?: "验证码发送失败"
-                                    feedbackIsError = true
-                                    showWebFallback = throwable is NeteaseSmsLoginRiskException
+                                    handleFailure(throwable, "验证码发送失败")
                                 }
                             isSmsBusy = false
                         }
@@ -124,17 +140,17 @@ internal fun NeteaseSmsLoginPanel(
                 }
             }
             feedback?.let { message ->
-                Text(
-                    text = if (showWebFallback) {
-                        val code = (runCatching { throwIfRiskMessage(message) }.exceptionOrNull() as? NeteaseSmsLoginRiskException)?.code
-                        if (code != null) {
-                            "网易云风控拦截了本次短信登录（$code），可稍后重试或改用 WebView 登录。"
-                        } else {
-                            "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
-                        }
+                val displayMessage = if (showWebFallback) {
+                    if (riskCode != null) {
+                        "网易云风控拦截了本次短信登录（$riskCode），可稍后重试或改用 WebView 登录。"
                     } else {
-                        message
-                    },
+                        "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
+                    }
+                } else {
+                    message
+                }
+                Text(
+                    text = displayMessage,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (feedbackIsError) {
                         MaterialTheme.colorScheme.error
@@ -160,24 +176,14 @@ internal fun NeteaseSmsLoginPanel(
                         isSmsBusy = true
                         feedback = "正在验证并登录"
                         feedbackIsError = false
-                        showWebFallback = false
+                        clearRiskFallback()
                         runCatching { session.login(phone, captcha) }
                             .onSuccess { cookiesJson ->
                                 feedback = "验证成功，正在建立网易云登录会话"
                                 controller.loginProviderWithCookies("netease", cookiesJson)
                             }
                             .onFailure { throwable ->
-                                if (throwable is NeteaseSmsLoginRiskException) {
-                                    feedback = if (throwable.code != null) {
-                                        "网易云风控拦截了本次短信登录（${throwable.code}），可稍后重试或改用 WebView 登录。"
-                                    } else {
-                                        "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
-                                    }
-                                    showWebFallback = true
-                                } else {
-                                    feedback = throwable.message ?: "短信验证码登录失败"
-                                }
-                                feedbackIsError = true
+                                handleFailure(throwable, "短信验证码登录失败")
                             }
                         isSmsBusy = false
                     }
@@ -193,11 +199,5 @@ internal fun NeteaseSmsLoginPanel(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-    }
-}
-
-private fun throwIfRiskMessage(message: String) {
-    if (message.contains("安全风险")) {
-        throw NeteaseSmsLoginRiskException(null, message)
     }
 }
