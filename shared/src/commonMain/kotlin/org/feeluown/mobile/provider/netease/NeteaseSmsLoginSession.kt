@@ -38,7 +38,7 @@ internal class NeteaseSmsLoginSession(
         val normalizedPhone = normalizePhone(phone)
         val response = weApiPost(
             path = "sms/captcha/sent",
-            json = """{"ctcode":"86","secrete":"music_middleuser_pclogin","cellphone":"$normalizedPhone"}""",
+            json = """{"ctcode":"86","secrete":"music_middleuser_pclogin","cellphone":"$normalizedPhone","csrf_token":""}""",
         )
         ensureSuccess(response, "验证码发送失败")
     }
@@ -50,7 +50,7 @@ internal class NeteaseSmsLoginSession(
         }
         val response = weApiPost(
             path = "w/login/cellphone",
-            json = """{"type":"1","https":"true","phone":"$normalizedPhone","countrycode":"86","captcha":"$normalizedCaptcha","remember":"true","secureCaptcha":""}""",
+            json = """{"type":"1","https":"true","phone":"$normalizedPhone","countrycode":"86","captcha":"$normalizedCaptcha","remember":"true","secureCaptcha":"","csrf_token":""}""",
         )
         ensureSuccess(response, "短信验证码登录失败")
         require(!cookies["MUSIC_U"].isNullOrBlank()) {
