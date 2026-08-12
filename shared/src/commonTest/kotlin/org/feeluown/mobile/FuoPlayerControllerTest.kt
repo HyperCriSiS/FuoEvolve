@@ -752,6 +752,239 @@ class FuoPlayerControllerTest {
     }
 
     @Test
+    fun replacementCandidatesLoadOnDemandAndManualSelectionIsRemembered() = runTest {
+        val origin = providerTrack("netease:1", "First")
+        val candidate = providerTrack("qqmusic:2", "候选歌曲").copy(
+            source = "qqmusic",
+            providerName = "QQ 音乐",
+            coverUrl = "https://example.com/candidate.jpg",
+        )
+        val rankedCandidate = ReplacementCandidate(candidate, 0.88)
+        val provider = FakeProviderRepository(
+            tracks = listOf(origin),
+            replacementCandidates = listOf(rankedCandidate),
+            resolveHandler = { track, _, _, _, _, _ ->
+                if (track.isSmartReplacement) {
+                    PlaybackPayload(
+                        url = "https://example.com/candidate.mp3",
+                        title = track.originalTitle ?: track.title,
+                        artists = track.originalArtists ?: track.artists,
+                        album = track.originalAlbum ?: track.album,
+                        source = track.originalSource ?: track.source,
+                        providerName = candidate.providerName,
+                        isSmartReplacement = true,
+                        originalId = track.originalId,
+                        originalTitle = track.originalTitle,
+                        originalArtists = track.originalArtists,
+                        originalAlbum = track.originalAlbum,
+                        originalSource = track.originalSource,
+                        originalProviderName = track.originalProviderName,
+                        replacementId = track.replacementId,
+                        replacementTitle = track.replacementTitle,
+                        replacementArtists = track.replacementArtists,
+                        replacementAlbum = track.replacementAlbum,
+                        replacementSource = track.replacementSource,
+                        replacementProviderName = track.replacementProviderName,
+                        replacementCoverUrl = track.replacementCoverUrl,
+                        replacementScore = track.replacementScore,
+                    )
+                } else {
+                    payloadFor(track)
+                }
+            },
+        )
+        val engine = FakePlaybackEngine()
+        val settings = FakeSettingsStore(
+            AppSettings(
+                enabledProviderIds = setOf("netease", "qqmusic"),
+                smartReplacementProviderIds = setOf("qqmusic"),
+            ),
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = engine,
+                settingsRepository = settings,
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.onQueryChange("first")
+            controller.onSearchScopeChange(SearchScope.Provider)
+            advanceUntilIdle()
+            controller.playFromSearch(0)
+            advanceUntilIdle()
+
+            assertEquals(0, provider.replacementCandidateQueryCount)
+            controller.loadReplacementCandidates(origin)
+            advanceUntilIdle()
+            assertEquals(1, provider.replacementCandidateQueryCount)
+            assertEquals(listOf(rankedCandidate), controller.replacementCandidateState.candidates)
+
+            controller.selectReplacementCandidate(origin, rankedCandidate)
+            advanceUntilIdle()
+
+            assertEquals(0L, engine.lastTrack?.let { controller.playbackState.positionMs })
+            assertEquals(true, engine.lastTrack?.isSmartReplacement)
+            assertEquals(candidate.id, engine.lastTrack?.replacementId)
+            assertEquals(rankedCandidate.toSelectionForTest(), settings.saved.smartReplacementSelections[origin.id])
+
+            controller.playFromSearch(0)
+            advanceUntilIdle()
+            assertEquals(candidate.id, engine.lastTrack?.replacementId)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun manualReplacementFailureRestoresPreviousTrackWithoutSavingPreference() = runTest {
+        val origin = providerTrack("netease:1", "First")
+        val candidate = providerTrack("qqmusic:2", "候选歌曲").copy(
+            source = "qqmusic",
+            providerName = "QQ 音乐",
+        )
+        val rankedCandidate = ReplacementCandidate(candidate, 0.88)
+        val provider = FakeProviderRepository(
+            tracks = listOf(origin),
+            replacementCandidates = listOf(rankedCandidate),
+            resolveHandler = { track, _, _, _, _, _ ->
+                if (track.isSmartReplacement) error("selected replacement unavailable")
+                payloadFor(track)
+            },
+        )
+        val engine = FakePlaybackEngine()
+        val settings = FakeSettingsStore(
+            AppSettings(
+                enabledProviderIds = setOf("netease", "qqmusic"),
+                smartReplacementProviderIds = setOf("qqmusic"),
+            ),
+        )
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = engine,
+                settingsRepository = settings,
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.onQueryChange("first")
+            controller.onSearchScopeChange(SearchScope.Provider)
+            advanceUntilIdle()
+            controller.playFromSearch(0)
+            advanceUntilIdle()
+            controller.selectReplacementCandidate(origin, rankedCandidate)
+            advanceUntilIdle()
+
+            assertEquals(origin.id, engine.lastTrack?.id)
+            assertEquals(false, engine.lastTrack?.isSmartReplacement)
+            assertTrue(settings.saved.smartReplacementSelections.isEmpty())
+            assertTrue(controller.message.contains("恢复原播放源"), controller.message)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun manualReplacementRestoreFailureDoesNotAutoAdvance() = runTest {
+        val origin = providerTrack("netease:1", "First")
+        val next = providerTrack("netease:2", "Second")
+        val candidate = providerTrack("qqmusic:2", "候选歌曲").copy(source = "qqmusic")
+        val rankedCandidate = ReplacementCandidate(candidate, 0.88)
+        var restoreAttempt = false
+        val provider = FakeProviderRepository(
+            tracks = listOf(origin, next),
+            replacementCandidates = listOf(rankedCandidate),
+            resolveHandler = { track, _, _, _, _, _ ->
+                if (track.isSmartReplacement) {
+                    restoreAttempt = true
+                    error("media not found: selected replacement")
+                }
+                if (restoreAttempt && track.id == origin.id) {
+                    error("media not found: original source")
+                }
+                payloadFor(track)
+            },
+        )
+        val engine = FakePlaybackEngine()
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = engine,
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.onQueryChange("song")
+            controller.onSearchScopeChange(SearchScope.Provider)
+            advanceUntilIdle()
+            controller.playFromSearch(0)
+            advanceUntilIdle()
+            controller.selectReplacementCandidate(origin, rankedCandidate)
+            advanceUntilIdle()
+
+            assertEquals(origin.id, engine.lastTrack?.id)
+            assertEquals(0, controller.playbackState.queueIndex)
+            assertTrue(controller.message.contains("无法恢复原播放源"), controller.message)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
+    fun manualReplacementPlanUsesOnlySelectedCandidate() = runTest {
+        val origin = providerTrack("netease:1", "First")
+        val candidate = providerTrack("qqmusic:2", "候选歌曲").copy(source = "qqmusic")
+        val rankedCandidate = ReplacementCandidate(candidate, 0.88)
+        val provider = FakeProviderRepository(
+            tracks = listOf(origin),
+            replacementCandidates = listOf(rankedCandidate),
+        )
+        val engine = FakeInternalResolverPlaybackEngine()
+        val controllerScope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = FuoPlayerController(
+                providerRepository = provider,
+                localRepository = FakeLocalMusicRepository(),
+                downloadRepository = FakeDownloadRepository(emptyMap()),
+                playbackEngine = engine,
+                settingsRepository = FakeSettingsStore(
+                    AppSettings(
+                        enabledProviderIds = setOf("netease", "qqmusic"),
+                        smartReplacementProviderIds = setOf("qqmusic"),
+                    ),
+                ),
+                scope = controllerScope,
+            )
+
+            advanceUntilIdle()
+            controller.onQueryChange("first")
+            controller.onSearchScopeChange(SearchScope.Provider)
+            advanceUntilIdle()
+            controller.playFromSearch(0)
+            advanceUntilIdle()
+            controller.selectReplacementCandidate(origin, rankedCandidate)
+            advanceUntilIdle()
+
+            val request = engine.lastPlan?.requests?.first()
+            assertEquals(candidate.id, request?.resolveTrack?.replacementId)
+            assertTrue(request?.resolveOnlySelectedReplacement == true)
+        } finally {
+            controllerScope.cancel()
+        }
+    }
+
+    @Test
     fun nextUsesKotlinQueueOrder() = runTest {
         val tracks = listOf(
             providerTrack("provider:1", "First"),
@@ -4133,6 +4366,18 @@ class FuoPlayerControllerTest {
         source = track.source,
     )
 
+    private fun ReplacementCandidate.toSelectionForTest(): SmartReplacementSelection = SmartReplacementSelection(
+        replacementId = track.id,
+        replacementTitle = track.title,
+        replacementArtists = track.artists,
+        replacementAlbum = track.album,
+        replacementSource = track.source,
+        replacementProviderName = track.providerName,
+        replacementCoverUrl = track.coverUrl,
+        replacementDurationMs = track.durationMs,
+        replacementScore = score,
+    )
+
     private class FakeProviderRepository(
         private val tracks: List<MusicTrack>,
         private val playlistTracks: List<MusicTrack> = emptyList(),
@@ -4151,6 +4396,7 @@ class FuoPlayerControllerTest {
         private val resolveHandler: (
             suspend (MusicTrack, UnavailablePlaybackPolicy, Set<String>, Double, Boolean, Boolean) -> PlaybackPayload
         )? = null,
+        private val replacementCandidates: List<ReplacementCandidate> = emptyList(),
         private val lyricsHandler: (suspend (MusicTrack) -> String?)? = null,
         private val availableProviderInfos: List<ProviderInfo> = listOf(
             ProviderInfo(providerId = "netease", providerName = "网易云音乐"),
@@ -4179,6 +4425,7 @@ class FuoPlayerControllerTest {
         var lastSmartReplacementUseOriginalMetadata: Boolean? = null
         var lastSmartReplacementUseOriginalLyrics: Boolean? = null
         var lastTrackDetailId: String? = null
+        var replacementCandidateQueryCount = 0
         var lastAddedToPlaylist: Pair<ProviderPlaylist, MusicTrack>? = null
         var lastRemovedFromPlaylist: Pair<ProviderPlaylist, MusicTrack>? = null
         val playlistPageOffsets = mutableListOf<Int>()
@@ -4206,6 +4453,15 @@ class FuoPlayerControllerTest {
         override suspend fun trackDetail(trackId: String): MusicTrack {
             lastTrackDetailId = trackId
             return tracks.firstOrNull { it.id == trackId } ?: throw RuntimeException("track not found: $trackId")
+        }
+
+        override suspend fun replacementCandidates(
+            track: MusicTrack,
+            smartReplacementProviderIds: Set<String>,
+            smartReplacementMinScore: Double,
+        ): List<ReplacementCandidate> {
+            replacementCandidateQueryCount += 1
+            return replacementCandidates
         }
 
         override suspend fun resolve(

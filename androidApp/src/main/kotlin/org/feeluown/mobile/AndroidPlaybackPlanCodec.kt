@@ -32,6 +32,7 @@ private fun PlaybackRequest.toJsonObject(): JSONObject = JSONObject()
     .put("replacement_min_score", smartReplacementMinScore)
     .put("use_original_metadata", true)
     .put("use_original_lyrics", true)
+    .put("resolve_only_selected_replacement", resolveOnlySelectedReplacement)
 
 private fun JSONObject.toPlaybackRequest(): PlaybackRequest = PlaybackRequest(
     track = getJSONObject("track").toMusicTrack(),
@@ -45,6 +46,7 @@ private fun JSONObject.toPlaybackRequest(): PlaybackRequest = PlaybackRequest(
     smartReplacementMinScore = optDouble("replacement_min_score", DEFAULT_SMART_REPLACEMENT_MIN_SCORE),
     smartReplacementUseOriginalMetadata = true,
     smartReplacementUseOriginalLyrics = true,
+    resolveOnlySelectedReplacement = optBoolean("resolve_only_selected_replacement", false),
 )
 
 internal fun MusicTrack.toJsonObject(): JSONObject = JSONObject()
@@ -109,6 +111,8 @@ internal fun JSONObject.toMusicTrack(): MusicTrack = MusicTrack(
     replacementProviderName = optString("replacement_provider_name").takeIf { it.isNotBlank() },
     replacementCoverUrl = optString("replacement_cover_url").takeIf { it.isNotBlank() },
     replacementStrategy = optString("replacement_strategy").takeIf { it.isNotBlank() },
-    replacementScore = optDouble("replacement_score", 0.0).takeIf { it > 0.0 },
+    replacementScore = optDouble("replacement_score", 0.0).takeIf {
+        has("replacement_score") && !isNull("replacement_score")
+    },
     isUnavailable = optBoolean("unavailable"),
 )

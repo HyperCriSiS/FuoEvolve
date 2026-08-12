@@ -105,6 +105,55 @@ class KotlinProviderRepositoryReplacementTest {
         assertEquals("playable", selected.third)
     }
 
+    @Test
+    fun replacementCandidatesAreDeduplicatedFilteredAndStableForEqualScores() {
+        val duplicateFirst = track("qqmusic", "First result", "Artist", id = "duplicate")
+        val duplicateLater = track("qqmusic", "Later result", "Artist", id = "duplicate")
+        val tieFirst = track("bilibili", "Tie first", "Artist", id = "tie-first")
+        val tieSecond = track("ytmusic", "Tie second", "Artist", id = "tie-second")
+        val ranked = rankReplacementCandidates(
+            candidates = listOf(
+                track("qqmusic", "Below threshold", "Artist", id = "below"),
+                tieFirst,
+                duplicateFirst,
+                tieSecond,
+                duplicateLater,
+                track("bilibili", "Best", "Artist", id = "best"),
+            ),
+            minScore = 0.5,
+            scoreOf = { candidate ->
+                mapOf(
+                    "below" to 0.4,
+                    "tie-first" to 0.8,
+                    "tie-second" to 0.8,
+                    "duplicate" to 0.7,
+                    "best" to 0.95,
+                ).getValue(candidate.id)
+            },
+        )
+
+        assertEquals(listOf("best", "tie-first", "tie-second", "duplicate"), ranked.map { it.track.id })
+        assertEquals("First result", ranked.last().track.title)
+    }
+
+    @Test
+    fun rankedCandidateResolverDoesNotTryCandidatesAfterFirstPlayableResult() = runTest {
+        val first = ReplacementCandidate(track("qqmusic", "First", "Artist", id = "first"), 0.9)
+        val second = ReplacementCandidate(track("bilibili", "Second", "Artist", id = "second"), 0.8)
+        val attempts = mutableListOf<String>()
+
+        val selected = selectRankedReplacementCandidate(
+            candidates = listOf(first, second),
+            resolve = { candidate ->
+                attempts += candidate.id
+                "payload:${candidate.id}"
+            },
+        )
+
+        assertEquals(listOf("first"), attempts)
+        assertEquals("first", selected?.first?.id)
+    }
+
     private fun track(
         source: String,
         title: String,

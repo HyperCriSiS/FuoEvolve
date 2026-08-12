@@ -99,6 +99,13 @@ private const val PLAYLIST_PLAYBACK_STATS_VERSION = 1
 private const val PLAYLIST_STATS_KEY_SEPARATOR = "::"
 private val DEFAULT_DEBUG_LOG_LEVEL_FILTERS = setOf(DebugLogLevel.Info, DebugLogLevel.Warning, DebugLogLevel.Error)
 
+private data class PendingManualReplacementSwitch(
+    val requestSerial: Long,
+    val previousTrack: MusicTrack?,
+    val originalTrackId: String,
+    val selection: SmartReplacementSelection,
+)
+
 class FuoPlayerController(
     private val providerRepository: ProviderMusicRepository,
     private val localRepository: LocalMusicRepository,
@@ -336,6 +343,8 @@ class FuoPlayerController(
         private set
     var smartReplacementMinScore by mutableStateOf(DEFAULT_SMART_REPLACEMENT_MIN_SCORE)
         private set
+    var replacementCandidateState by mutableStateOf(ReplacementCandidateState())
+        private set
     var lyricFontSize by mutableStateOf(LyricFontSize.Small)
         private set
     var themeMode by mutableStateOf(ThemeMode.System)
@@ -402,6 +411,10 @@ class FuoPlayerController(
     private var autoAdvanceEligibleTrackId: String? = null
     private var lastRecoveredPlaybackErrorKey: String? = null
     private var playRequestSerial: Long = 0
+    private var smartReplacementSelections: Map<String, SmartReplacementSelection> = emptyMap()
+    private var replacementCandidatesJob: Job? = null
+    private var pendingManualReplacementSwitch: PendingManualReplacementSwitch? = null
+    private var suppressPlaybackRecoveryRequestSerial: Long? = null
     private var lyricsLoadJob: Job? = null
     private var lyricsLoadedForTrackId: String? = null
     private var localMusicRefreshSerial: Long = 0
@@ -539,7 +552,19 @@ class FuoPlayerController(
                 if (shouldAutoAdvance) {
                     next()
                 } else if (engineState.status == PlayerStatus.Error) {
-                    recoverPlaybackEngineError(engineState)
+                    if (!rollbackManualReplacement(playRequestSerial, engineState.errorMessage)) {
+                        if (suppressPlaybackRecoveryRequestSerial == playRequestSerial) {
+                            showManualReplacementRestoreFailure(engineState.errorMessage)
+                        } else {
+                            recoverPlaybackEngineError(engineState)
+                        }
+                    }
+                }
+                if (engineState.status == PlayerStatus.Playing || engineState.status == PlayerStatus.Paused) {
+                    if (suppressPlaybackRecoveryRequestSerial == playRequestSerial) {
+                        suppressPlaybackRecoveryRequestSerial = null
+                    }
+                    commitManualReplacementIfReady(engineState)
                 }
             }
         }
@@ -2293,6 +2318,98 @@ class FuoPlayerController(
         val detailTrack = track.replacementDetailTrack() ?: return
         closeFullPlayer()
         openTrackDetail(detailTrack)
+    }
+
+    fun loadReplacementCandidates(track: MusicTrack) {
+        val originalTrack = track.originalDetailTrack()
+        val trackId = originalTrack.id
+        replacementCandidatesJob?.cancel()
+        replacementCandidateState = ReplacementCandidateState(
+            trackId = trackId,
+            isLoading = true,
+        )
+        replacementCandidatesJob = scope.launch {
+            runCatching {
+                withTimeout(30_000) {
+                    providerRepository.replacementCandidates(
+                        track = originalTrack,
+                        smartReplacementProviderIds = selectedSmartReplacementProviderIds(),
+                        smartReplacementMinScore = smartReplacementMinScore,
+                    )
+                }
+            }.onSuccess { candidates ->
+                if (replacementCandidateState.trackId == trackId) {
+                    replacementCandidateState = ReplacementCandidateState(
+                        trackId = trackId,
+                        candidates = candidates
+                            .sortedByDescending { candidate -> candidate.score }
+                            .distinctBy { candidate -> candidate.track.id },
+                    )
+                }
+            }.onFailure { throwable ->
+                if (throwable is CancellationException) return@onFailure
+                if (replacementCandidateState.trackId == trackId) {
+                    replacementCandidateState = ReplacementCandidateState(
+                        trackId = trackId,
+                        errorMessage = throwable.message ?: throwable::class.simpleName ?: "查询失败",
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectReplacementCandidate(track: MusicTrack, candidate: ReplacementCandidate) {
+        val previousTrack = currentQueueTrack() ?: playbackState.currentTrack ?: return
+        val originalTrack = track.originalDetailTrack()
+        val selection = candidate.toSmartReplacementSelection()
+        val selectedTrack = originalTrack.withReplacementSelection(selection)
+        replacementCandidateState = replacementCandidateState.copy(isLoading = false)
+        startPlayback(
+            track = selectedTrack,
+            manualSelection = selection,
+            rollbackTrack = previousTrack,
+        )
+    }
+
+    private fun ReplacementCandidate.toSmartReplacementSelection(): SmartReplacementSelection {
+        return SmartReplacementSelection(
+            replacementId = track.id,
+            replacementTitle = track.title,
+            replacementArtists = track.artists,
+            replacementAlbum = track.album,
+            replacementSource = track.source,
+            replacementProviderName = track.providerName,
+            replacementCoverUrl = track.coverUrl,
+            replacementDurationMs = track.durationMs,
+            replacementScore = score,
+        )
+    }
+
+    private fun MusicTrack.withReplacementSelection(selection: SmartReplacementSelection): MusicTrack {
+        return copy(
+            id = id,
+            providerId = providerId ?: id,
+            sourceType = TrackSourceType.Provider,
+            localUri = null,
+            isSmartReplacement = true,
+            originalId = id,
+            originalTitle = title,
+            originalArtists = artists,
+            originalAlbum = album,
+            originalSource = source,
+            originalProviderName = providerName,
+            originalCoverUrl = coverUrl,
+            replacementId = selection.replacementId,
+            replacementTitle = selection.replacementTitle,
+            replacementArtists = selection.replacementArtists,
+            replacementAlbum = selection.replacementAlbum,
+            replacementSource = selection.replacementSource,
+            replacementProviderName = selection.replacementProviderName,
+            replacementCoverUrl = selection.replacementCoverUrl,
+            replacementStrategy = "user_selected",
+            replacementScore = selection.replacementScore,
+            isUnavailable = false,
+        )
     }
 
     private fun MusicTrack.originalDetailTrack(): MusicTrack {
@@ -4141,9 +4258,26 @@ class FuoPlayerController(
         track: MusicTrack,
         skippedUnavailableCount: Int = 0,
         requestedPartIndex: Int? = null,
+        manualSelection: SmartReplacementSelection? = null,
+        rollbackTrack: MusicTrack? = null,
+        messageAfterStart: String? = null,
+        suppressPlaybackRecovery: Boolean = false,
     ) {
         val requestSerial = ++playRequestSerial
-        val playbackTrack = track.preferDownloaded()
+        suppressPlaybackRecoveryRequestSerial = requestSerial.takeIf { suppressPlaybackRecovery }
+        val playbackTrack = if (manualSelection != null) {
+            track
+        } else {
+            track.withRememberedReplacement().preferDownloaded()
+        }
+        pendingManualReplacementSwitch = manualSelection?.let { selection ->
+            PendingManualReplacementSwitch(
+                requestSerial = requestSerial,
+                previousTrack = rollbackTrack,
+                originalTrackId = playbackTrack.originalId ?: playbackTrack.id,
+                selection = selection,
+            )
+        }
         val isPlaybackPartRequest = requestedPartIndex != null && playbackParts.isNotEmpty()
         if (!isPlaybackPartRequest) {
             playbackParts = emptyList()
@@ -4159,14 +4293,14 @@ class FuoPlayerController(
             queueIndex = displayQueueIndex(),
             positionMs = 0,
             playbackParts = playbackParts,
-            currentPartIndex = if (isPlaybackPartRequest) requestedPartIndex ?: -1 else -1,
+            currentPartIndex = requestedPartIndex.takeIf { isPlaybackPartRequest } ?: -1,
             lyrics = playbackTrack.lyrics,
             errorMessage = null,
         )
         persistPlaybackQueue()
         playbackEngine.prepareLoading(playbackTrack)
         isLoading = true
-        message = "正在播放：${track.title}"
+        message = messageAfterStart ?: "正在播放：${track.title}"
         val resolveTrack = requestedPartIndex
             ?.let { index -> playbackParts.getOrNull(index) }
             ?.toTrack(playbackTrack)
@@ -4176,15 +4310,27 @@ class FuoPlayerController(
             scope.launch playRequest@{
                 runCatching {
                     val payload = resolveTrack.toPayload()
-                        ?: providerRepository.resolve(
-                            resolveTrack,
-                            unavailablePlaybackPolicy,
-                            selectedSmartReplacementProviderIds(),
-                            smartReplacementMinScore,
-                            true,
-                            true,
-                        )
+                        ?: if (manualSelection != null) {
+                            providerRepository.resolveSelectedReplacement(
+                                resolveTrack,
+                                true,
+                                true,
+                                selectedSmartReplacementProviderIds(),
+                            )
+                        } else {
+                            providerRepository.resolve(
+                                resolveTrack,
+                                unavailablePlaybackPolicy,
+                                selectedSmartReplacementProviderIds(),
+                                smartReplacementMinScore,
+                                true,
+                                true,
+                            )
+                    }
                     if (requestSerial != playRequestSerial) return@playRequest
+                    if (suppressPlaybackRecoveryRequestSerial == requestSerial) {
+                        suppressPlaybackRecoveryRequestSerial = null
+                    }
                     val nextParts = payload.parts
                     val nextPartIndex = when {
                         nextParts.isEmpty() -> -1
@@ -4195,44 +4341,61 @@ class FuoPlayerController(
                     playbackParts = nextParts
                     currentPartIndex = nextPartIndex
                     val isMultipartPlayback = playbackParts.isNotEmpty()
+                    val isSmartReplacementPlayback = payload.isSmartReplacement || manualSelection != null
                     val playableTrack = playbackTrack.copy(
                         title = if (isMultipartPlayback) playbackTrack.title else payload.title.ifBlank { playbackTrack.title },
                         artists = payload.artists.ifBlank { playbackTrack.artists },
                         album = payload.album.ifBlank { playbackTrack.album },
-                    source = if (payload.isSmartReplacement) {
-                        payload.originalSource?.takeIf { it.isNotBlank() } ?: playbackTrack.source
-                    } else {
-                        payload.source.ifBlank { playbackTrack.source }
-                    },
-                    coverUrl = payload.coverUrl ?: playbackTrack.coverUrl,
-                    durationMs = if (isMultipartPlayback) playbackTrack.durationMs else payload.durationMs ?: playbackTrack.durationMs,
-                    providerName = if (payload.isSmartReplacement) {
-                        payload.originalProviderName ?: playbackTrack.providerName
-                    } else {
-                        payload.providerName ?: playbackTrack.providerName
-                    },
-                    providerId = if (payload.isSmartReplacement) {
-                        payload.originalId ?: playbackTrack.providerId
-                    } else {
-                        playbackTrack.providerId
-                    },
-                        isSmartReplacement = payload.isSmartReplacement,
-                        originalId = payload.originalId,
-                        originalTitle = payload.originalTitle,
-                        originalArtists = payload.originalArtists,
-                        originalAlbum = payload.originalAlbum,
-                        originalSource = payload.originalSource,
-                        originalProviderName = payload.originalProviderName,
-                        originalCoverUrl = payload.originalCoverUrl,
-                        replacementId = payload.replacementId,
-                        replacementTitle = payload.replacementTitle,
-                        replacementArtists = payload.replacementArtists,
-                        replacementAlbum = payload.replacementAlbum,
-                        replacementSource = payload.replacementSource,
-                        replacementProviderName = payload.replacementProviderName,
-                        replacementCoverUrl = payload.replacementCoverUrl,
-                        replacementStrategy = payload.replacementStrategy,
-                        replacementScore = payload.replacementScore,
+                        source = if (isSmartReplacementPlayback) {
+                            payload.originalSource?.takeIf { it.isNotBlank() } ?: playbackTrack.source
+                        } else {
+                            payload.source.ifBlank { playbackTrack.source }
+                        },
+                        coverUrl = payload.coverUrl ?: playbackTrack.coverUrl,
+                        durationMs = if (isMultipartPlayback) playbackTrack.durationMs else payload.durationMs ?: playbackTrack.durationMs,
+                        providerName = if (isSmartReplacementPlayback) {
+                            payload.providerName ?: payload.replacementProviderName ?: playbackTrack.providerName
+                        } else {
+                            payload.providerName ?: playbackTrack.providerName
+                        },
+                        providerId = if (isSmartReplacementPlayback) {
+                            payload.originalId ?: playbackTrack.providerId
+                        } else {
+                            playbackTrack.providerId
+                        },
+                        isSmartReplacement = isSmartReplacementPlayback,
+                        originalId = payload.originalId.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalId.takeIf { isSmartReplacementPlayback },
+                        originalTitle = payload.originalTitle.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalTitle.takeIf { isSmartReplacementPlayback },
+                        originalArtists = payload.originalArtists.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalArtists.takeIf { isSmartReplacementPlayback },
+                        originalAlbum = payload.originalAlbum.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalAlbum.takeIf { isSmartReplacementPlayback },
+                        originalSource = payload.originalSource.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalSource.takeIf { isSmartReplacementPlayback },
+                        originalProviderName = payload.originalProviderName.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalProviderName.takeIf { isSmartReplacementPlayback },
+                        originalCoverUrl = payload.originalCoverUrl.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.originalCoverUrl.takeIf { isSmartReplacementPlayback },
+                        replacementId = payload.replacementId.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementId.takeIf { isSmartReplacementPlayback },
+                        replacementTitle = payload.replacementTitle.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementTitle.takeIf { isSmartReplacementPlayback },
+                        replacementArtists = payload.replacementArtists.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementArtists.takeIf { isSmartReplacementPlayback },
+                        replacementAlbum = payload.replacementAlbum.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementAlbum.takeIf { isSmartReplacementPlayback },
+                        replacementSource = payload.replacementSource.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementSource.takeIf { isSmartReplacementPlayback },
+                        replacementProviderName = payload.replacementProviderName.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementProviderName.takeIf { isSmartReplacementPlayback },
+                        replacementCoverUrl = payload.replacementCoverUrl.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementCoverUrl.takeIf { isSmartReplacementPlayback },
+                        replacementStrategy = payload.replacementStrategy.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementStrategy.takeIf { isSmartReplacementPlayback },
+                        replacementScore = payload.replacementScore.takeIf { isSmartReplacementPlayback }
+                            ?: playbackTrack.replacementScore.takeIf { isSmartReplacementPlayback },
                         isUnavailable = false,
                     )
                     updateCurrentTrack(playableTrack)
@@ -4249,12 +4412,20 @@ class FuoPlayerController(
                     )
                     maybeLoadLyrics(playableTrack)
                     persistPlaybackQueue()
-                    message = currentPlaybackPartLabel()?.let { "${playableTrack.title} · $it" }
+                    message = messageAfterStart
+                        ?: currentPlaybackPartLabel()?.let { "${playableTrack.title} · $it" }
                         ?: "${playableTrack.title} - ${playableTrack.artists}"
                     prefetchFeatureQueueIfNeeded()
                 }.onFailure { throwable ->
-                    if (requestSerial == playRequestSerial && !skipUnavailableTrack(track, skippedUnavailableCount, throwable)) {
-                        setError(throwable)
+                    if (requestSerial == playRequestSerial) {
+                        if (manualSelection != null && rollbackManualReplacement(requestSerial, throwable.message)) {
+                            return@onFailure
+                        }
+                        if (suppressPlaybackRecoveryRequestSerial == requestSerial) {
+                            showManualReplacementRestoreFailure(throwable.message)
+                        } else if (!skipUnavailableTrack(playbackTrack, skippedUnavailableCount, throwable)) {
+                            setError(throwable)
+                        }
                     }
                 }
                 if (requestSerial == playRequestSerial) isLoading = false
@@ -4275,13 +4446,14 @@ class FuoPlayerController(
                             smartReplacementMinScore = smartReplacementMinScore,
                             smartReplacementUseOriginalMetadata = true,
                             smartReplacementUseOriginalLyrics = true,
+                            resolveOnlySelectedReplacement = manualSelection != null,
                         ),
                     )
                     displayQueue()
                         .drop(1)
                         .take(PLAYBACK_PLAN_LOOKAHEAD)
                         .forEach { queuedTrack ->
-                            val nextTrack = queuedTrack.preferDownloaded()
+                            val nextTrack = queuedTrack.withRememberedReplacement().preferDownloaded()
                             add(
                                 PlaybackRequest(
                                     track = nextTrack,
@@ -4503,12 +4675,66 @@ class FuoPlayerController(
     }
 
     private fun MusicTrack.preferDownloaded(): MusicTrack {
+        if (isSmartReplacement) return this
         val downloaded = downloadStates[id] as? DownloadState.Downloaded ?: return this
         return copy(
             sourceType = TrackSourceType.Downloaded,
             localUri = downloaded.uri,
             providerId = providerId ?: id,
         )
+    }
+
+    private fun MusicTrack.withRememberedReplacement(): MusicTrack {
+        val originalTrack = originalDetailTrack()
+        val selection = smartReplacementSelections[originalTrack.id] ?: return this
+        val enabledReplacementProviderIds = selectedSmartReplacementProviderIds()
+        if (selection.replacementSource !in enabledReplacementProviderIds) {
+            return if (isSmartReplacement) originalTrack else this
+        }
+        return originalTrack.withReplacementSelection(selection)
+    }
+
+    private fun commitManualReplacementIfReady(engineState: PlaybackState) {
+        val pending = pendingManualReplacementSwitch ?: return
+        if (pending.requestSerial != playRequestSerial) return
+        val currentTrack = engineState.currentTrack ?: currentQueueTrack() ?: return
+        val currentOriginalId = currentTrack.originalId ?: currentTrack.id
+        if (
+            currentOriginalId != pending.originalTrackId ||
+                currentTrack.replacementId != pending.selection.replacementId
+        ) {
+            return
+        }
+        smartReplacementSelections = smartReplacementSelections +
+            (pending.originalTrackId to pending.selection)
+        pendingManualReplacementSwitch = null
+        persistSettings()
+    }
+
+    private fun rollbackManualReplacement(requestSerial: Long, errorMessage: String?): Boolean {
+        val pending = pendingManualReplacementSwitch
+            ?.takeIf { it.requestSerial == requestSerial }
+            ?: return false
+        pendingManualReplacementSwitch = null
+        val previousTrack = pending.previousTrack
+        if (previousTrack == null) {
+            message = "手动换源失败，当前歌曲无法恢复${errorMessage?.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty()}"
+            isLoading = false
+            return true
+        }
+        startPlayback(
+            track = previousTrack,
+            messageAfterStart = "手动换源失败，已恢复原播放源：${previousTrack.title}",
+            suppressPlaybackRecovery = true,
+        )
+        return true
+    }
+
+    private fun showManualReplacementRestoreFailure(errorMessage: String?) {
+        val detail = errorMessage?.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty()
+        message = "手动换源失败，无法恢复原播放源$detail"
+        playbackState = playbackState.copy(status = PlayerStatus.Error, errorMessage = message)
+        isLoading = false
     }
 
     private fun MusicTrack.toPayload(): PlaybackPayload? {
@@ -4824,6 +5050,7 @@ class FuoPlayerController(
         unavailablePlaybackPolicy = settings.unavailablePlaybackPolicy
         smartReplacementProviderIds = settings.smartReplacementProviderIds
         smartReplacementMinScore = settings.smartReplacementMinScore.coerceIn(0.0, 1.0)
+        smartReplacementSelections = settings.smartReplacementSelections
         lyricFontSize = settings.lyricFontSize
         themeMode = settings.themeMode
         themeColorScheme = settings.themeColorScheme
@@ -4866,6 +5093,7 @@ class FuoPlayerController(
             unavailablePlaybackPolicy = unavailablePlaybackPolicy,
             smartReplacementProviderIds = smartReplacementProviderIds,
             smartReplacementMinScore = smartReplacementMinScore,
+            smartReplacementSelections = smartReplacementSelections,
             lyricFontSize = lyricFontSize,
             themeMode = themeMode,
             themeColorScheme = themeColorScheme,

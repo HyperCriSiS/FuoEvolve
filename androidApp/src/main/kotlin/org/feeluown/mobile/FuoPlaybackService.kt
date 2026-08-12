@@ -376,44 +376,61 @@ class FuoPlaybackService : MediaSessionService() {
             request.requestedPartIndex?.let { it in parts.indices } == true -> request.requestedPartIndex ?: -1
             else -> -1
         }
+        val isSmartReplacementPlayback = payload.isSmartReplacement || request.resolveOnlySelectedReplacement
         val track = request.track.copy(
             title = if (parts.isEmpty()) payload.title.ifBlank { request.track.title } else request.track.title,
             artists = payload.artists.ifBlank { request.track.artists },
             album = payload.album.ifBlank { request.track.album },
-            source = if (payload.isSmartReplacement) {
+            source = if (isSmartReplacementPlayback) {
                 payload.originalSource?.takeIf { it.isNotBlank() } ?: request.track.source
             } else {
                 payload.source.ifBlank { request.track.source }
             },
             coverUrl = payload.coverUrl ?: request.track.coverUrl,
             durationMs = if (parts.isEmpty()) payload.durationMs ?: request.track.durationMs else request.track.durationMs,
-            providerId = if (payload.isSmartReplacement) {
+            providerId = if (isSmartReplacementPlayback) {
                 payload.originalId ?: request.track.providerId
             } else {
                 request.track.providerId
             },
-            providerName = if (payload.isSmartReplacement) {
-                payload.originalProviderName ?: request.track.providerName
+            providerName = if (isSmartReplacementPlayback) {
+                payload.providerName ?: payload.replacementProviderName ?: request.track.providerName
             } else {
                 payload.providerName ?: request.track.providerName
             },
-            isSmartReplacement = payload.isSmartReplacement,
-            originalId = payload.originalId,
-            originalTitle = payload.originalTitle,
-            originalArtists = payload.originalArtists,
-            originalAlbum = payload.originalAlbum,
-            originalSource = payload.originalSource,
-            originalProviderName = payload.originalProviderName,
-            originalCoverUrl = payload.originalCoverUrl,
-            replacementId = payload.replacementId,
-            replacementTitle = payload.replacementTitle,
-            replacementArtists = payload.replacementArtists,
-            replacementAlbum = payload.replacementAlbum,
-            replacementSource = payload.replacementSource,
-            replacementProviderName = payload.replacementProviderName,
-            replacementCoverUrl = payload.replacementCoverUrl,
-            replacementStrategy = payload.replacementStrategy,
-            replacementScore = payload.replacementScore,
+            isSmartReplacement = isSmartReplacementPlayback,
+            originalId = payload.originalId.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalId.takeIf { isSmartReplacementPlayback },
+            originalTitle = payload.originalTitle.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalTitle.takeIf { isSmartReplacementPlayback },
+            originalArtists = payload.originalArtists.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalArtists.takeIf { isSmartReplacementPlayback },
+            originalAlbum = payload.originalAlbum.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalAlbum.takeIf { isSmartReplacementPlayback },
+            originalSource = payload.originalSource.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalSource.takeIf { isSmartReplacementPlayback },
+            originalProviderName = payload.originalProviderName.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalProviderName.takeIf { isSmartReplacementPlayback },
+            originalCoverUrl = payload.originalCoverUrl.takeIf { isSmartReplacementPlayback }
+                ?: request.track.originalCoverUrl.takeIf { isSmartReplacementPlayback },
+            replacementId = payload.replacementId.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementId.takeIf { isSmartReplacementPlayback },
+            replacementTitle = payload.replacementTitle.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementTitle.takeIf { isSmartReplacementPlayback },
+            replacementArtists = payload.replacementArtists.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementArtists.takeIf { isSmartReplacementPlayback },
+            replacementAlbum = payload.replacementAlbum.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementAlbum.takeIf { isSmartReplacementPlayback },
+            replacementSource = payload.replacementSource.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementSource.takeIf { isSmartReplacementPlayback },
+            replacementProviderName = payload.replacementProviderName.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementProviderName.takeIf { isSmartReplacementPlayback },
+            replacementCoverUrl = payload.replacementCoverUrl.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementCoverUrl.takeIf { isSmartReplacementPlayback },
+            replacementStrategy = payload.replacementStrategy.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementStrategy.takeIf { isSmartReplacementPlayback },
+            replacementScore = payload.replacementScore.takeIf { isSmartReplacementPlayback }
+                ?: request.track.replacementScore.takeIf { isSmartReplacementPlayback },
             isUnavailable = false,
         )
         val mediaItem = createMediaItem(track, payload, parts, currentPartIndex)
@@ -428,14 +445,23 @@ class FuoPlaybackService : MediaSessionService() {
 
     private suspend fun resolvePlaybackPayload(request: PlaybackRequest): PlaybackPayload {
         return request.resolveTrack.localUri?.let { uri -> request.resolveTrack.toLocalPayload(uri) }
-            ?: (application as FuoEvolveApplication).providerRepository.resolve(
-                request.resolveTrack,
-                request.unavailablePolicy,
-                request.smartReplacementProviderIds,
-                request.smartReplacementMinScore,
-                true,
-                true,
-            )
+            ?: if (request.resolveOnlySelectedReplacement) {
+                (application as FuoEvolveApplication).providerRepository.resolveSelectedReplacement(
+                    request.resolveTrack,
+                    request.smartReplacementUseOriginalMetadata,
+                    request.smartReplacementUseOriginalLyrics,
+                    request.smartReplacementProviderIds,
+                )
+            } else {
+                (application as FuoEvolveApplication).providerRepository.resolve(
+                    request.resolveTrack,
+                    request.unavailablePolicy,
+                    request.smartReplacementProviderIds,
+                    request.smartReplacementMinScore,
+                    request.smartReplacementUseOriginalMetadata,
+                    request.smartReplacementUseOriginalLyrics,
+                )
+            }
     }
 
     private fun createMediaItem(

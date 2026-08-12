@@ -109,6 +109,7 @@ data class AppSettings(
     val unavailablePlaybackPolicy: UnavailablePlaybackPolicy = DEFAULT_UNAVAILABLE_PLAYBACK_POLICY,
     val smartReplacementProviderIds: Set<String> = emptySet(),
     val smartReplacementMinScore: Double = DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
+    val smartReplacementSelections: Map<String, SmartReplacementSelection> = emptyMap(),
     val pauseOnOtherAppPlayback: Boolean = DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK,
     val lyricFontSize: LyricFontSize = LyricFontSize.Small,
     val themeMode: ThemeMode = ThemeMode.System,
@@ -122,6 +123,19 @@ data class AppSettings(
 data class PlaylistPlaybackStat(
     val playCount: Long = 0,
     val lastPlayedAtMillis: Long = 0,
+)
+
+@Serializable
+data class SmartReplacementSelection(
+    val replacementId: String,
+    val replacementTitle: String,
+    val replacementArtists: String,
+    val replacementAlbum: String = "",
+    val replacementSource: String,
+    val replacementProviderName: String? = null,
+    val replacementCoverUrl: String? = null,
+    val replacementDurationMs: Long? = null,
+    val replacementScore: Double = 0.0,
 )
 
 @Serializable
@@ -228,6 +242,18 @@ data class MusicTrack(
     val providerUrl: String? = null,
 )
 
+data class ReplacementCandidate(
+    val track: MusicTrack,
+    val score: Double,
+)
+
+data class ReplacementCandidateState(
+    val trackId: String? = null,
+    val candidates: List<ReplacementCandidate> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+)
+
 data class PlaybackPart(
     val id: String,
     val title: String,
@@ -280,6 +306,7 @@ data class PlaybackRequest(
     val smartReplacementMinScore: Double = DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
     val smartReplacementUseOriginalMetadata: Boolean = true,
     val smartReplacementUseOriginalLyrics: Boolean = true,
+    val resolveOnlySelectedReplacement: Boolean = false,
 )
 
 /**
@@ -775,6 +802,11 @@ interface ProviderMusicRepository {
     suspend fun trackDetail(trackId: String): MusicTrack {
         throw UnsupportedOperationException("provider does not support track detail: $trackId")
     }
+    suspend fun replacementCandidates(
+        track: MusicTrack,
+        smartReplacementProviderIds: Set<String> = emptySet(),
+        smartReplacementMinScore: Double = DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
+    ): List<ReplacementCandidate> = emptyList()
     suspend fun resolve(
         track: MusicTrack,
         unavailablePolicy: UnavailablePlaybackPolicy = DEFAULT_UNAVAILABLE_PLAYBACK_POLICY,
@@ -783,6 +815,18 @@ interface ProviderMusicRepository {
         smartReplacementUseOriginalMetadata: Boolean = true,
         smartReplacementUseOriginalLyrics: Boolean = true,
     ): PlaybackPayload
+    suspend fun resolveSelectedReplacement(
+        track: MusicTrack,
+        smartReplacementUseOriginalMetadata: Boolean = true,
+        smartReplacementUseOriginalLyrics: Boolean = true,
+        smartReplacementProviderIds: Set<String> = emptySet(),
+    ): PlaybackPayload = resolve(
+        track = track,
+        unavailablePolicy = UnavailablePlaybackPolicy.Skip,
+        smartReplacementProviderIds = smartReplacementProviderIds,
+        smartReplacementUseOriginalMetadata = smartReplacementUseOriginalMetadata,
+        smartReplacementUseOriginalLyrics = smartReplacementUseOriginalLyrics,
+    )
     suspend fun lyrics(track: MusicTrack): String? = null
     suspend fun authState(providerId: String): ProviderAuthState
     suspend fun refreshAuthState(providerId: String): ProviderAuthState = authState(providerId)

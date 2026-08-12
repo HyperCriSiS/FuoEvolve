@@ -368,6 +368,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                                         currentPlaybackPartLabel(state),
                                         state.audioFormatInfo,
                                         state.audioDecoderInfo,
+                                        controller = controller,
                                         onOpenReplacementDetail = controller::openReplacementTrackDetail,
                                     )
                                     Text(
@@ -462,6 +463,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                     currentPlaybackPartLabel(state),
                     state.audioFormatInfo,
                     state.audioDecoderInfo,
+                    controller = controller,
                     onOpenReplacementDetail = controller::openReplacementTrackDetail,
                 )
                 Text(
@@ -610,6 +612,7 @@ fun PlayerTitleBlock(
     partLabel: String?,
     audioFormatInfo: AudioFormatInfo?,
     audioDecoderInfo: AudioDecoderInfo?,
+    controller: FuoPlayerController? = null,
     onOpenReplacementDetail: ((MusicTrack) -> Unit)? = null,
 ) {
     Column(
@@ -636,6 +639,7 @@ fun PlayerTitleBlock(
             audioQuality = audioQuality,
             audioFormatInfo = audioFormatInfo,
             audioDecoderInfo = audioDecoderInfo,
+            controller = controller,
             onOpenReplacementDetail = onOpenReplacementDetail,
         )
     }
@@ -647,6 +651,7 @@ fun PlayerInfoTags(
     audioQuality: String?,
     audioFormatInfo: AudioFormatInfo?,
     audioDecoderInfo: AudioDecoderInfo?,
+    controller: FuoPlayerController? = null,
     onOpenReplacementDetail: ((MusicTrack) -> Unit)? = null,
 ) {
     var replacementInfoTrack by remember(track?.id) { mutableStateOf<MusicTrack?>(null) }
@@ -660,7 +665,10 @@ fun PlayerInfoTags(
             if (track.isSmartReplacement) {
                 InfoTag(
                     text = replacementSourceLabel(track),
-                    onClick = { replacementInfoTrack = track },
+                    onClick = {
+                        replacementInfoTrack = track
+                        controller?.loadReplacementCandidates(track)
+                    },
                 )
             } else {
                 InfoTag(sourceLabel(track, null))
@@ -676,7 +684,15 @@ fun PlayerInfoTags(
     replacementInfoTrack?.let { infoTrack ->
         ReplacementInfoDialog(
             track = infoTrack,
+            candidateState = controller?.replacementCandidateState
+                ?.takeIf { it.trackId == (infoTrack.originalId ?: infoTrack.id) }
+                ?: ReplacementCandidateState(),
             onDismiss = { replacementInfoTrack = null },
+            onRetry = { controller?.loadReplacementCandidates(infoTrack) },
+            onSelectCandidate = { candidate ->
+                controller?.selectReplacementCandidate(infoTrack, candidate)
+                replacementInfoTrack = null
+            },
             onOpenDetail = onOpenReplacementDetail
                 ?.takeIf { infoTrack.replacementId?.isNotBlank() == true }
                 ?.let { openDetail -> { openDetail(infoTrack) } },
@@ -747,6 +763,9 @@ fun ReplacementInfoDialog(
     track: MusicTrack,
     onDismiss: () -> Unit,
     onOpenDetail: (() -> Unit)? = null,
+    candidateState: ReplacementCandidateState = ReplacementCandidateState(),
+    onRetry: (() -> Unit)? = null,
+    onSelectCandidate: ((ReplacementCandidate) -> Unit)? = null,
 ) {
     val detailAction = onOpenDetail?.takeIf { track.replacementId?.isNotBlank() == true }
     AlertDialog(
@@ -764,6 +783,108 @@ fun ReplacementInfoDialog(
                 }
                 track.replacementScore?.let {
                     ReplacementInfoLine("匹配度", formatSmartReplacementScore(it))
+                }
+                Text(
+                    text = "候选音源",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                when {
+                    candidateState.isLoading -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    candidateState.errorMessage != null -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "候选查询失败：${candidateState.errorMessage}",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            onRetry?.let { retry ->
+                                TextButton(onClick = retry) {
+                                    Text("重试")
+                                }
+                            }
+                        }
+                    }
+                    candidateState.candidates.isEmpty() -> {
+                        Text(
+                            text = "暂无符合条件的候选音源",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            itemsIndexed(candidateState.candidates) { _, candidate ->
+                                val isSelected = candidate.track.id == track.replacementId
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = !isSelected) {
+                                                onSelectCandidate?.invoke(candidate)
+                                            }
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        CoverBox(
+                                            track = candidate.track,
+                                            modifier = Modifier.size(48.dp),
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = candidate.track.title.ifBlank { "未知歌曲" },
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            Text(
+                                                text = candidate.track.artists.ifBlank { "未知歌手" },
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                            Text(
+                                                text = "${sourceLabel(candidate.track, null)} · 匹配度 ${formatSmartReplacementScore(candidate.score)}",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                        if (isSelected) {
+                                            Text(
+                                                text = "已选",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.labelMedium,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

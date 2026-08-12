@@ -107,6 +107,26 @@ class KotlinProviderRepository : ProviderMusicRepository {
         ) ?: error("track not found: $trackId")
     }
 
+    override suspend fun replacementCandidates(
+        track: MusicTrack,
+        smartReplacementProviderIds: Set<String>,
+        smartReplacementMinScore: Double,
+    ): List<ReplacementCandidate> {
+        initialize()
+        val mediaTrack = track.asOriginalMediaTrack()
+        val originalProviderId = mediaTrack.source.ifBlank {
+            splitResourceId(mediaTrack.providerId ?: mediaTrack.id).first
+        }
+        val candidates = selectedProvidersForReplacement(smartReplacementProviderIds, originalProviderId)
+            .flatMap { provider -> provider.search("${mediaTrack.title} ${mediaTrack.artists}").tracks }
+        val ranked = rankReplacementCandidates(
+            candidates = candidates,
+            minScore = smartReplacementMinScore,
+            scoreOf = { candidate -> replacementScore(mediaTrack, candidate) },
+        )
+        return ranked
+    }
+
     override suspend fun resolve(
         track: MusicTrack,
         unavailablePolicy: UnavailablePlaybackPolicy,
@@ -123,6 +143,7 @@ class KotlinProviderRepository : ProviderMusicRepository {
         }
         // Persisted smart-replaced tracks keep original ids but may flip `source` to the
         // replacement provider. Prefer the known replacement, then the original identity.
+        var failedKnownReplacementId: String? = null
         if (track.isSmartReplacement) {
             resolveKnownReplacement(
                 track = track,
@@ -130,6 +151,7 @@ class KotlinProviderRepository : ProviderMusicRepository {
                 useOriginalMetadata = smartReplacementUseOriginalMetadata,
                 useOriginalLyrics = smartReplacementUseOriginalLyrics,
             )?.let { return it }
+            failedKnownReplacementId = track.replacementId
         }
         val mediaTrack = track.asOriginalMediaTrack()
         val originalProviderId = mediaTrack.source.ifBlank {
@@ -142,12 +164,13 @@ class KotlinProviderRepository : ProviderMusicRepository {
             error("media not found: ${mediaTrack.id}")
         }
 
-        val candidates = selectedProvidersForReplacement(smartReplacementProviderIds, originalProviderId)
-            .flatMap { provider -> provider.search("${mediaTrack.title} ${mediaTrack.artists}").tracks }
-        val selected = selectReplacementCandidate(
+        val candidates = replacementCandidates(
+            track = mediaTrack,
+            smartReplacementProviderIds = smartReplacementProviderIds,
+            smartReplacementMinScore = smartReplacementMinScore,
+        ).filterNot { candidate -> candidate.track.id == failedKnownReplacementId }
+        val selected = selectRankedReplacementCandidate(
             candidates = candidates,
-            minScore = smartReplacementMinScore,
-            scoreOf = { candidate -> replacementScore(mediaTrack, candidate) },
             resolve = { candidate -> providerMap[candidate.source]?.resolve(candidate, quality) },
         ) ?: error("media not found after smart replacement: ${mediaTrack.id}")
         val (candidate, score, payload) = selected
@@ -159,6 +182,40 @@ class KotlinProviderRepository : ProviderMusicRepository {
             useOriginalMetadata = smartReplacementUseOriginalMetadata,
             useOriginalLyrics = smartReplacementUseOriginalLyrics,
         )
+    }
+
+    override suspend fun resolveSelectedReplacement(
+        track: MusicTrack,
+        smartReplacementUseOriginalMetadata: Boolean,
+        smartReplacementUseOriginalLyrics: Boolean,
+        smartReplacementProviderIds: Set<String>,
+    ): PlaybackPayload {
+        initialize()
+        val quality = if (isCellularConnection()) {
+            cellularAudioQualityPolicy.policy
+        } else {
+            wifiAudioQualityPolicy.policy
+        }
+        val replacementTrack = track.asReplacementMediaTrack()
+            ?: error("selected replacement is missing: ${track.id}")
+        val allowedProviderIds = if (smartReplacementProviderIds.isEmpty()) {
+            enabledProviderIds
+        } else {
+            smartReplacementProviderIds.intersect(enabledProviderIds)
+        }
+        if (replacementTrack.source !in allowedProviderIds) {
+            error("selected replacement source is disabled: ${replacementTrack.source}")
+        }
+        val payload = providerMap[replacementTrack.source]?.resolve(replacementTrack, quality)
+            ?: error("selected replacement is unavailable: ${replacementTrack.id}")
+        return annotateSmartReplacement(
+            payload = payload,
+            original = track.asOriginalMediaTrack(),
+            candidate = replacementTrack,
+            score = track.replacementScore ?: 1.0,
+            useOriginalMetadata = smartReplacementUseOriginalMetadata,
+            useOriginalLyrics = smartReplacementUseOriginalLyrics,
+        ).copy(replacementStrategy = "user_selected")
     }
 
     private suspend fun resolveKnownReplacement(
@@ -178,7 +235,7 @@ class KotlinProviderRepository : ProviderMusicRepository {
             score = track.replacementScore ?: 1.0,
             useOriginalMetadata = useOriginalMetadata,
             useOriginalLyrics = useOriginalLyrics,
-        )
+        ).copy(replacementStrategy = track.replacementStrategy ?: "title_artist_duration")
     }
 
     private fun annotateSmartReplacement(
@@ -496,21 +553,39 @@ class KotlinProviderRepository : ProviderMusicRepository {
     }
 }
 
+internal fun rankReplacementCandidates(
+    candidates: List<MusicTrack>,
+    minScore: Double,
+    scoreOf: (MusicTrack) -> Double,
+): List<ReplacementCandidate> {
+    return candidates
+        .map { candidate -> ReplacementCandidate(candidate, scoreOf(candidate)) }
+        .filter { candidate -> candidate.score >= minScore }
+        .sortedByDescending { candidate -> candidate.score }
+        .distinctBy { candidate -> candidate.track.id }
+}
+
+internal suspend fun <T> selectRankedReplacementCandidate(
+    candidates: List<ReplacementCandidate>,
+    resolve: suspend (MusicTrack) -> T?,
+): Triple<MusicTrack, Double, T>? {
+    for (candidate in candidates) {
+        val resolved = resolve(candidate.track) ?: continue
+        return Triple(candidate.track, candidate.score, resolved)
+    }
+    return null
+}
+
 internal suspend fun <T> selectReplacementCandidate(
     candidates: List<MusicTrack>,
     minScore: Double,
     scoreOf: (MusicTrack) -> Double,
     resolve: suspend (MusicTrack) -> T?,
 ): Triple<MusicTrack, Double, T>? {
-    val ranked = candidates
-        .map { candidate -> candidate to scoreOf(candidate) }
-        .filter { (_, score) -> score >= minScore }
-        .sortedByDescending { (_, score) -> score }
-    for ((candidate, score) in ranked) {
-        val resolved = resolve(candidate) ?: continue
-        return Triple(candidate, score, resolved)
-    }
-    return null
+    return selectRankedReplacementCandidate(
+        candidates = rankReplacementCandidates(candidates, minScore, scoreOf),
+        resolve = resolve,
+    )
 }
 
 internal fun bilibiliReplacementScore(origin: MusicTrack, candidate: MusicTrack): Double {

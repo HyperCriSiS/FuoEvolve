@@ -113,6 +113,7 @@ class AppSettingsRepositoryTest {
         assertTrue(settings.onboardingCompleted)
         assertFalse(settings.dynamicCoverColorEnabled)
         assertTrue(settings.pauseOnOtherAppPlayback)
+        assertTrue(settings.smartReplacementSelections.isEmpty())
     }
 
     @Test
@@ -139,6 +140,37 @@ class AppSettingsRepositoryTest {
         ).awaitSettings()
 
         assertEquals(stat, restored.playlistPlaybackStats["netease::playlist:123"])
+    }
+
+    @Test
+    fun smartReplacementSelectionRoundTripsAcrossSettingsStorage() = runTest {
+        val dataStore = FakePreferencesDataStore()
+        val selection = SmartReplacementSelection(
+            replacementId = "qqmusic:456",
+            replacementTitle = "候选歌曲",
+            replacementArtists = "候选歌手",
+            replacementAlbum = "候选专辑",
+            replacementSource = "qqmusic",
+            replacementProviderName = "QQ 音乐",
+            replacementCoverUrl = "https://example.com/cover.jpg",
+            replacementDurationMs = 192_000,
+            replacementScore = 0.86,
+        )
+        val first = DataStoreAppSettingsRepository(
+            dataStore = dataStore,
+            legacyLoader = null,
+            scope = backgroundScope,
+        )
+        first.awaitSettings()
+        first.update { it.copy(smartReplacementSelections = mapOf("netease:123" to selection)) }
+
+        val restored = DataStoreAppSettingsRepository(
+            dataStore = dataStore,
+            legacyLoader = null,
+            scope = backgroundScope,
+        ).awaitSettings()
+
+        assertEquals(selection, restored.smartReplacementSelections["netease:123"])
     }
 
     @Test
