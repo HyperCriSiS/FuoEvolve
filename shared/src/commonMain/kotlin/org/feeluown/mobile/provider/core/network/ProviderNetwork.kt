@@ -5,7 +5,6 @@ import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.cache.HttpCache
@@ -176,6 +175,7 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
+        onResponseHeaders: ((Map<String, List<String>>) -> Unit)? = null,
     ): CachedText {
         return execute(
             providerId = providerId,
@@ -186,6 +186,7 @@ class ProviderHttpClient(
             body = null,
             cacheKey = cacheKey,
             cachePolicy = cachePolicy,
+            onResponseHeaders = onResponseHeaders,
         )
     }
 
@@ -197,6 +198,7 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
+        onResponseHeaders: ((Map<String, List<String>>) -> Unit)? = null,
     ): CachedText {
         return execute(
             providerId = providerId,
@@ -207,6 +209,7 @@ class ProviderHttpClient(
             body = TextContent(form.formUrlEncode(), ContentType.Application.FormUrlEncoded),
             cacheKey = cacheKey,
             cachePolicy = cachePolicy,
+            onResponseHeaders = onResponseHeaders,
         )
     }
 
@@ -218,6 +221,7 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
+        onResponseHeaders: ((Map<String, List<String>>) -> Unit)? = null,
     ): CachedText {
         return execute(
             providerId = providerId,
@@ -228,6 +232,7 @@ class ProviderHttpClient(
             body = TextContent(json, ContentType.Application.Json),
             cacheKey = cacheKey,
             cachePolicy = cachePolicy,
+            onResponseHeaders = onResponseHeaders,
         )
     }
 
@@ -247,6 +252,7 @@ class ProviderHttpClient(
         body: Any?,
         cacheKey: String?,
         cachePolicy: ProviderCachePolicy,
+        onResponseHeaders: ((Map<String, List<String>>) -> Unit)?,
     ): CachedText {
         val effectiveCacheKey = cacheKey?.takeIf {
             cachePolicy.ttlMillis > 0 &&
@@ -270,6 +276,9 @@ class ProviderHttpClient(
                     if (body != null) setBody(body)
                 }
                 val responseBody = response.bodyAsText()
+                onResponseHeaders?.invoke(
+                    response.headers.names().associateWith { name -> response.headers.getAll(name).orEmpty() },
+                )
                 if (response.status.isSuccess()) {
                     effectiveCacheKey?.let { key ->
                         cache.put(key, responseBody)
