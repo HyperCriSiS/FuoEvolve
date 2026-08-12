@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,12 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.feeluown.mobile.provider.netease.NeteaseSmsLoginRiskException
 import org.feeluown.mobile.provider.netease.NeteaseSmsLoginSession
 
 @Composable
 internal fun NeteaseSmsLoginPanel(
     controller: FuoPlayerController,
     isAuthBusy: Boolean,
+    onOpenWebLogin: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val session = remember { NeteaseSmsLoginSession() }
@@ -42,6 +45,7 @@ internal fun NeteaseSmsLoginPanel(
     var isSmsBusy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var feedbackIsError by remember { mutableStateOf(false) }
+    var showWebFallback by remember { mutableStateOf(false) }
 
     DisposableEffect(session) {
         onDispose(session::close)
@@ -102,6 +106,7 @@ internal fun NeteaseSmsLoginPanel(
                             isSmsBusy = true
                             feedback = "正在发送验证码"
                             feedbackIsError = false
+                            showWebFallback = false
                             runCatching { session.sendCaptcha(phone) }
                                 .onSuccess {
                                     feedback = "验证码已发送"
@@ -109,6 +114,7 @@ internal fun NeteaseSmsLoginPanel(
                                 .onFailure { throwable ->
                                     feedback = throwable.message ?: "验证码发送失败"
                                     feedbackIsError = true
+                                    showWebFallback = throwable is NeteaseSmsLoginRiskException
                                 }
                             isSmsBusy = false
                         }
@@ -119,7 +125,16 @@ internal fun NeteaseSmsLoginPanel(
             }
             feedback?.let { message ->
                 Text(
-                    text = message,
+                    text = if (showWebFallback) {
+                        val code = (runCatching { throwIfRiskMessage(message) }.exceptionOrNull() as? NeteaseSmsLoginRiskException)?.code
+                        if (code != null) {
+                            "网易云风控拦截了本次短信登录（$code），可稍后重试或改用 WebView 登录。"
+                        } else {
+                            "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
+                        }
+                    } else {
+                        message
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = if (feedbackIsError) {
                         MaterialTheme.colorScheme.error
@@ -128,6 +143,16 @@ internal fun NeteaseSmsLoginPanel(
                     },
                 )
             }
+            if (showWebFallback) {
+                TextButton(
+                    enabled = !isSmsBusy && !isAuthBusy,
+                    onClick = onOpenWebLogin,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("改用 WebView 登录")
+                }
+            }
             Button(
                 enabled = !isSmsBusy && !isAuthBusy && phone.length == 11 && captcha.length >= 4,
                 onClick = {
@@ -135,13 +160,23 @@ internal fun NeteaseSmsLoginPanel(
                         isSmsBusy = true
                         feedback = "正在验证并登录"
                         feedbackIsError = false
+                        showWebFallback = false
                         runCatching { session.login(phone, captcha) }
                             .onSuccess { cookiesJson ->
                                 feedback = "验证成功，正在建立网易云登录会话"
                                 controller.loginProviderWithCookies("netease", cookiesJson)
                             }
                             .onFailure { throwable ->
-                                feedback = throwable.message ?: "短信验证码登录失败"
+                                if (throwable is NeteaseSmsLoginRiskException) {
+                                    feedback = if (throwable.code != null) {
+                                        "网易云风控拦截了本次短信登录（${throwable.code}），可稍后重试或改用 WebView 登录。"
+                                    } else {
+                                        "网易云风控拦截了本次短信登录，可稍后重试或改用 WebView 登录。"
+                                    }
+                                    showWebFallback = true
+                                } else {
+                                    feedback = throwable.message ?: "短信验证码登录失败"
+                                }
                                 feedbackIsError = true
                             }
                         isSmsBusy = false
@@ -158,5 +193,11 @@ internal fun NeteaseSmsLoginPanel(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+    }
+}
+
+private fun throwIfRiskMessage(message: String) {
+    if (message.contains("安全风险")) {
+        throw NeteaseSmsLoginRiskException(null, message)
     }
 }
