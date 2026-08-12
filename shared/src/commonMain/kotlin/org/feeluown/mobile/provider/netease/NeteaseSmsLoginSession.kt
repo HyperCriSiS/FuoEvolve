@@ -12,11 +12,18 @@ import io.ktor.http.Parameters
 import io.ktor.http.formUrlEncode
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.random.Random
 import org.feeluown.mobile.provider.core.asObject
 import org.feeluown.mobile.provider.core.int
 import org.feeluown.mobile.provider.core.providerJson
 import org.feeluown.mobile.provider.core.string
 import org.feeluown.mobile.provider.core.network.createProviderHttpClient
+import org.feeluown.mobile.provider.core.network.currentTimeMillis
+
+internal class NeteaseSmsLoginRiskException(
+    val code: Int?,
+    message: String,
+) : Exception(message)
 
 /**
  * A short-lived NetEase SMS login session.
@@ -28,13 +35,26 @@ import org.feeluown.mobile.provider.core.network.createProviderHttpClient
 internal class NeteaseSmsLoginSession(
     private val httpClient: HttpClient = createProviderHttpClient(),
 ) {
+    private val startedAt = currentTimeMillis()
+    private val ntesNuid = randomHex(64)
     private val cookies = linkedMapOf(
         "os" to "pc",
         "appver" to "3.1.17.204416",
         "__remember_me" to "true",
+        "ntes_kaola_ad" to "1",
+        "_ntes_nuid" to ntesNuid,
+        "_ntes_nnid" to "$ntesNuid,$startedAt",
+        "WNMCID" to "${randomLowercase(6)}.$startedAt.01.0",
+        "WEVNSM" to "1.0.0",
+        "osver" to "Microsoft-Windows-10-Professional-build-19045-64bit",
+        "channel" to "netease",
+        "deviceId" to randomHex(52).uppercase(),
     )
+    private var bootstrapped = false
 
     suspend fun sendCaptcha(phone: String) {
+        bootstrapSession()
+        cookies.putIfAbsent("NMTID", randomHex(32))
         val normalizedPhone = normalizePhone(phone)
         val response = weApiPost(
             path = "sms/captcha/sent",
@@ -44,6 +64,7 @@ internal class NeteaseSmsLoginSession(
     }
 
     suspend fun login(phone: String, captcha: String): String {
+        bootstrapSession()
         val normalizedPhone = normalizePhone(phone)
         val normalizedCaptcha = captcha.trim().also {
             require(it.matches(CAPTCHA_REGEX)) { "请输入正确的短信验证码" }
@@ -61,6 +82,21 @@ internal class NeteaseSmsLoginSession(
 
     fun close() {
         httpClient.close()
+    }
+
+    private suspend fun bootstrapSession() {
+        if (bootstrapped) return
+        bootstrapped = true
+        runCatching {
+            val response = httpClient.request(BASE) {
+                method = HttpMethod.Get
+                header("Referer", "$BASE/")
+                header(HttpHeaders.UserAgent, USER_AGENT)
+                header(HttpHeaders.Cookie, cookieHeader())
+            }
+            response.headers.getAll(HttpHeaders.SetCookie).orEmpty().forEach(::storeSetCookie)
+            response.bodyAsText()
+        }
     }
 
     private suspend fun weApiPost(path: String, json: String): String {
@@ -88,8 +124,15 @@ internal class NeteaseSmsLoginSession(
     private fun ensureSuccess(raw: String, fallbackMessage: String) {
         val root = runCatching { providerJson.parseToJsonElement(raw).asObject() }
             .getOrElse { error(fallbackMessage) }
-        if (root.int("code") == 200) return
+        val code = root.int("code")
+        if (code == 200) return
         val detail = root.string("message").ifBlank { root.string("msg") }
+        if (code in RISK_CODES || detail.contains("安全风险")) {
+            throw NeteaseSmsLoginRiskException(
+                code = code,
+                message = detail.ifBlank { "当前登录被网易云安全风控拦截" },
+            )
+        }
         error(detail.ifBlank { fallbackMessage })
     }
 
@@ -120,5 +163,21 @@ internal class NeteaseSmsLoginSession(
                 "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         val MAINLAND_PHONE_REGEX = Regex("1\\d{10}")
         val CAPTCHA_REGEX = Regex("\\d{4,8}")
+        val RISK_CODES = setOf(10003, 10004)
     }
 }
+
+private fun randomHex(length: Int): String = buildString(length) {
+    repeat(length) {
+        append(HEX_CHARS[Random.nextInt(HEX_CHARS.length)])
+    }
+}
+
+private fun randomLowercase(length: Int): String = buildString(length) {
+    repeat(length) {
+        append(LOWERCASE_CHARS[Random.nextInt(LOWERCASE_CHARS.length)])
+    }
+}
+
+private const val HEX_CHARS = "0123456789abcdef"
+private const val LOWERCASE_CHARS = "abcdefghijklmnopqrstuvwxyz"
