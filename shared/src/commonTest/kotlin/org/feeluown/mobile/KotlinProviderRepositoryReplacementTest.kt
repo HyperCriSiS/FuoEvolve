@@ -4,62 +4,74 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class KotlinProviderRepositoryReplacementTest {
     @Test
-    fun textSimilarityKeepsCharacterOrder() {
-        assertEquals(1.0, replacementTextSimilarity("abc", "abc"), 0.0001)
-        assertTrue(replacementTextSimilarity("abc", "cba") < 0.5)
-        assertTrue(replacementTextSimilarity("后来我们", "我们后来") < 0.8)
+    fun bilibiliScoreMatchesTitleArtistAndBonusKeywords() {
+        val origin = track(
+            source = "netease",
+            title = "Night Song",
+            artists = "Alice",
+        )
+        val candidate = track(
+            source = "bilibili",
+            title = "ALICE - night song Hi-Res MV",
+            artists = "Uploader",
+        )
+
+        assertEquals(0.70, bilibiliReplacementScore(origin, candidate), 0.0001)
     }
 
     @Test
-    fun replacementRejectsDifferentVersionQualifiers() {
-        val origin = track("netease", "晴天", "周杰伦", durationMs = 269_000)
-        val live = track("qqmusic", "晴天 Live", "周杰伦", durationMs = 270_000)
-        val cover = track("bilibili", "周杰伦 晴天 Cover 翻唱", "Uploader", durationMs = 269_000)
+    fun bilibiliScoreMatchesArtistMetadataWhenUploaderTitleOmitsArtist() {
+        val origin = track(
+            source = "netease",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+        )
+        val candidate = track(
+            source = "bilibili",
+            title = "人间芳菲",
+            artists = "音阙诗听",
+        )
 
-        assertEquals(0.0, replacementMatchScore(origin, live), 0.0001)
-        assertEquals(0.0, replacementMatchScore(origin, cover), 0.0001)
+        assertEquals(0.60, bilibiliReplacementScore(origin, candidate), 0.0001)
     }
 
     @Test
-    fun replacementKeepsMatchingVersionQualifier() {
-        val origin = track("netease", "晴天 Remix", "周杰伦", durationMs = 240_000)
-        val candidate = track("qqmusic", "晴天 REMIX", "周杰伦", durationMs = 241_000)
+    fun bilibiliScorePenalizesCoverKeywords() {
+        val origin = track(
+            source = "netease",
+            title = "晴天",
+            artists = "周杰伦",
+        )
+        val candidate = track(
+            source = "bilibili",
+            title = "周杰伦 晴天 Cover 翻唱",
+            artists = "Uploader",
+        )
 
-        assertTrue(replacementMatchScore(origin, candidate) > 0.85)
+        assertEquals(0.40, bilibiliReplacementScore(origin, candidate), 0.0001)
     }
 
     @Test
-    fun replacementRejectsLargeDurationDifference() {
-        val origin = track("netease", "Night Song", "Alice", durationMs = 200_000)
-        val candidate = track("qqmusic", "Night Song", "Alice", durationMs = 230_000)
+    fun bilibiliScoreKeepsOriginalKeywordVersions() {
+        val origin = track(
+            source = "netease",
+            title = "晴天 Remix",
+            artists = "周杰伦",
+        )
+        val candidate = track(
+            source = "bilibili",
+            title = "周杰伦 晴天 REMIX",
+            artists = "Uploader",
+        )
 
-        assertEquals(0.0, replacementMatchScore(origin, candidate), 0.0001)
+        assertEquals(0.60, bilibiliReplacementScore(origin, candidate), 0.0001)
     }
 
     @Test
-    fun matchingAlbumImprovesConfidence() {
-        val origin = track("netease", "Night Song", "Alice", album = "Moon", durationMs = 200_000)
-        val sameAlbum = track("qqmusic", "Night Song", "Alice", album = "Moon", durationMs = 200_000)
-        val otherAlbum = track("ytmusic", "Night Song", "Alice", album = "Different Collection", durationMs = 200_000)
-
-        assertTrue(replacementMatchScore(origin, sameAlbum) > replacementMatchScore(origin, otherAlbum))
-    }
-
-    @Test
-    fun artistSetsIgnoreOrderingAndCommonSeparators() {
-        val origin = track("netease", "Together", "Alice / Bob", durationMs = 180_000)
-        val candidate = track("qqmusic", "Together", "Bob & Alice", durationMs = 180_000)
-
-        assertTrue(replacementMatchScore(origin, candidate) > 0.90)
-    }
-
-    @Test
-    fun bilibiliScoreUsesSameZeroToOneConfidenceScale() {
+    fun bilibiliScoreAppliesRelativeDurationPenalty() {
         val origin = track(
             source = "netease",
             title = "Night Song",
@@ -68,47 +80,12 @@ class KotlinProviderRepositoryReplacementTest {
         )
         val candidate = track(
             source = "bilibili",
-            title = "ALICE - Night Song Hi-Res MV",
+            title = "ALICE - night song Hi-Res MV",
             artists = "Uploader",
-            durationMs = 201_000,
+            durationMs = 300_000,
         )
 
-        val score = bilibiliReplacementScore(origin, candidate)
-        assertTrue(score in 0.80..1.0)
-    }
-
-    @Test
-    fun automaticSelectionAbstainsWhenTopCandidatesAreTooClose() = runTest {
-        val first = ReplacementCandidate(track("qqmusic", "First", "Artist", id = "first"), 0.90)
-        val second = ReplacementCandidate(track("ytmusic", "Second", "Artist", id = "second"), 0.87)
-        val attempts = mutableListOf<String>()
-
-        val selected = selectRankedReplacementCandidate(
-            candidates = listOf(first, second),
-            minScoreMargin = 0.06,
-            resolve = { candidate ->
-                attempts += candidate.id
-                "payload:${candidate.id}"
-            },
-        )
-
-        assertNull(selected)
-        assertEquals(listOf("first"), attempts)
-    }
-
-    @Test
-    fun automaticSelectionAcceptsClearWinner() = runTest {
-        val first = ReplacementCandidate(track("qqmusic", "First", "Artist", id = "first"), 0.92)
-        val second = ReplacementCandidate(track("ytmusic", "Second", "Artist", id = "second"), 0.80)
-
-        val selected = selectRankedReplacementCandidate(
-            candidates = listOf(first, second),
-            minScoreMargin = 0.06,
-            resolve = { candidate -> "payload:${candidate.id}" },
-        )
-
-        assertNotNull(selected)
-        assertEquals("first", selected.first.id)
+        assertEquals(0.55, bilibiliReplacementScore(origin, candidate), 0.0001)
     }
 
     @Test
@@ -175,18 +152,35 @@ class KotlinProviderRepositoryReplacementTest {
         assertEquals("First result", ranked.last().track.title)
     }
 
+    @Test
+    fun rankedCandidateResolverDoesNotTryCandidatesAfterFirstPlayableResult() = runTest {
+        val first = ReplacementCandidate(track("qqmusic", "First", "Artist", id = "first"), 0.9)
+        val second = ReplacementCandidate(track("bilibili", "Second", "Artist", id = "second"), 0.8)
+        val attempts = mutableListOf<String>()
+
+        val selected = selectRankedReplacementCandidate(
+            candidates = listOf(first, second),
+            resolve = { candidate ->
+                attempts += candidate.id
+                "payload:${candidate.id}"
+            },
+        )
+
+        assertEquals(listOf("first"), attempts)
+        assertEquals("first", selected?.first?.id)
+    }
+
     private fun track(
         source: String,
         title: String,
         artists: String,
-        album: String = "",
         durationMs: Long? = null,
         id: String = "$source:$title",
     ): MusicTrack = MusicTrack(
         id = id,
         title = title,
         artists = artists,
-        album = album,
+        album = "",
         source = source,
         sourceType = TrackSourceType.Provider,
         durationMs = durationMs,
