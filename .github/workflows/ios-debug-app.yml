@@ -4,10 +4,34 @@ name: iOS Debug App
   push:
     branches:
       - master
+    paths:
+      - "iosApp/**"
+      - "shared/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/ios-debug-app.yml"
   pull_request:
     branches:
       - master
+    paths:
+      - "iosApp/**"
+      - "shared/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/ios-debug-app.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -40,9 +64,8 @@ jobs:
       - name: Run shared tests
         run: ./gradlew :shared:allTests
 
-  build-debug-app:
-    name: Build debug iOS app
-    needs: test
+  build-debug-simulator:
+    name: Build debug iOS simulator app
     runs-on: macos-26
     environment: ios-debug-app
     timeout-minutes: 45
@@ -95,6 +118,60 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
+      - name: Package debug app bundle
+        run: |
+          mkdir -p build/artifacts
+          tar -cf build/artifacts/FuoEvolve-debug-ios-simulator.tar \
+            -C build/ios-ci/Build/Products/Debug-iphonesimulator \
+            FuoEvolve.app
+
+      - name: Upload debug app
+        uses: actions/upload-artifact@v7
+        with:
+          name: FuoEvolve-debug-ios-simulator
+          path: build/artifacts/FuoEvolve-debug-ios-simulator.tar
+          archive: false
+          if-no-files-found: error
+
+  build-debug-device:
+    name: Build debug iOS device app
+    runs-on: macos-26
+    environment: ios-debug-app
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-publish: true
+          build-scan-terms-of-use-url: https://gradle.com/terms-of-service
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-${{ runner.arch }}-konan-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Resolve Swift package dependencies
+        run: |
+          defaults write com.apple.dt.Xcode IDEPackageSupportUseBuiltinSCM YES
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project iosApp/FuoEvolve.xcodeproj \
+            -scheme FuoEvolve \
+            -derivedDataPath build/ios-ci \
+            -clonedSourcePackagesDirPath build/ios-ci/SourcePackages
+
       - name: Build debug device app
         run: |
           xcodebuild \
@@ -110,30 +187,15 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Package debug app bundle
-        run: |
-          mkdir -p build/artifacts
-          tar -cf build/artifacts/FuoEvolve-debug-ios-simulator.tar \
-            -C build/ios-ci/Build/Products/Debug-iphonesimulator \
-            FuoEvolve.app
-
       - name: Package debug IPA
         run: |
-          mkdir -p build/ipa/Payload
+          mkdir -p build/ipa/Payload build/artifacts
           ditto \
             build/ios-ci/Build/Products/Debug-iphoneos/FuoEvolve.app \
             build/ipa/Payload/FuoEvolve.app
           ditto -c -k --sequesterRsrc --keepParent \
             build/ipa/Payload \
             build/artifacts/FuoEvolve-debug-ios.ipa
-
-      - name: Upload debug app
-        uses: actions/upload-artifact@v7
-        with:
-          name: FuoEvolve-debug-ios-simulator
-          path: build/artifacts/FuoEvolve-debug-ios-simulator.tar
-          archive: false
-          if-no-files-found: error
 
       - name: Upload debug IPA
         uses: actions/upload-artifact@v7
