@@ -4,7 +4,31 @@ name: Android APK
   push:
     branches:
       - master
+    paths:
+      - "androidApp/**"
+      - "shared/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/android-apk.yml"
   pull_request:
+    paths:
+      - "androidApp/**"
+      - "shared/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/android-apk.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -47,7 +71,6 @@ jobs:
 
   build-release-apks:
     name: Build signed multi-ABI release APK
-    needs: test
     runs-on: ubuntu-latest
     environment: android-apk
     timeout-minutes: 45
