@@ -37,7 +37,7 @@ jobs:
         run: ./gradlew :shared:allTests :shared:koverXmlReportDebug :shared:koverVerifyDebug
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           disable_search: true
           fail_ci_if_error: true
