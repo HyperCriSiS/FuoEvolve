@@ -76,7 +76,7 @@ class BilibiliProvider(
                 coverUrl = normalizeCover(item.stringOrNull("pic")),
                 durationMs = parseDurationMs(item.string("duration")),
                 providerUrl = "https://www.bilibili.com/video/$bvid",
-            )
+            ).copy(providerTags = parseSearchTags(item.stringOrNull("tag")))
         }
         return ProviderSearchResults(tracks = tracks)
     }
@@ -531,7 +531,7 @@ class BilibiliProvider(
             coverUrl = normalizeCover(item.stringOrNull("pic") ?: item.stringOrNull("cover")),
             durationMs = item.long("duration")?.times(1_000) ?: parseDurationMs(item.string("duration")),
             providerUrl = "https://www.bilibili.com/video/$bvid",
-        )
+        ).copy(providerTags = parseSearchTags(item.stringOrNull("tag")))
     }
 
     private fun kotlinx.serialization.json.JsonObject.toFavoritePlaylist(
@@ -634,6 +634,13 @@ class BilibiliProvider(
         if (parts.isEmpty()) return null
         return parts.fold(0L) { total, part -> total * 60 + part } * 1_000
     }
+
+    private fun parseSearchTags(value: String?): List<String> = value
+        ?.split(',', '，')
+        ?.map { tag -> tag.trim() }
+        ?.filter { tag -> tag.isNotBlank() }
+        ?.distinct()
+        .orEmpty()
 
     private fun String.keyFromUrl(): String = substringAfterLast('/').substringBeforeLast('.')
 
