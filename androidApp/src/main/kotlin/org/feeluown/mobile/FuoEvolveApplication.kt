@@ -62,6 +62,10 @@ class FuoEvolveApplication : Application() {
         AndroidPlaybackQueueStore(applicationContext)
     }
 
+    private val playbackResumeStore: AndroidPlaybackResumeStore by lazy {
+        AndroidPlaybackResumeStore(applicationContext)
+    }
+
     private val resourceCacheRepository: AndroidResourceCacheRepository by lazy {
         AndroidResourceCacheRepository(applicationContext)
     }
@@ -126,6 +130,35 @@ class FuoEvolveApplication : Application() {
                     .collect { (trackId, lyrics) ->
                         if (trackId != null) {
                             playbackEngine.publishLockScreenLyrics(trackId, lyrics)
+                        }
+                    }
+            }
+            appScope.launch {
+                snapshotFlow {
+                    controller.playbackState.let { state ->
+                        Triple(
+                            state.currentTrack?.id,
+                            state.status,
+                            state.queue.map { it.id } to state.queueIndex,
+                        )
+                    }
+                }
+                    .distinctUntilChanged()
+                    .collect { (trackId, status, _) ->
+                        // Queue restoration can briefly replace a valid restored currentTrack with
+                        // null. Re-publish the Android resume snapshot for that transition too, not
+                        // only when a non-empty queue appears, so the mini player remains visible.
+                        playbackEngine.republishRestoredState()
+
+                        if (
+                            trackId != null &&
+                            (status == PlayerStatus.Playing || status == PlayerStatus.Paused)
+                        ) {
+                            // The store captured the controller's complete queue before its async IO
+                            // suspension. Flush that exact snapshot rather than reconstructing from
+                            // the UI display queue, which would lose already-played items.
+                            playbackQueueStore.flushLatest()
+                            playbackResumeStore.flush()
                         }
                     }
             }
