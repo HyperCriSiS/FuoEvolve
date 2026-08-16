@@ -1331,12 +1331,19 @@ fun AudioQualityRow(
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             AudioQualityPolicy.entries.forEachIndexed { index, policy ->
                 SegmentedButton(
+                    modifier = Modifier.weight(1f),
                     selected = selected == policy,
                     onClick = { onSelect(policy) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = AudioQualityPolicy.entries.size),
                     colors = settingsSegmentedButtonColors(),
+                    icon = {},
                 ) {
-                    Text(policy.label)
+                    Text(
+                        text = policy.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }
