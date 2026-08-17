@@ -40,6 +40,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Delete
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -71,6 +73,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
@@ -91,6 +94,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -389,6 +393,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                                     shuffleEnabled = controller.isShuffleEnabled,
                                     shuffleAvailable = !controller.isFmQueueActive,
                                     onShuffle = controller::toggleShuffle,
+                                    sleepTimerAction = { SleepTimerAction(controller) },
                                     extraAction = currentTrack?.let { track ->
                                         {
                                             NowPlayingTrackAction(controller = controller, track = track)
@@ -483,6 +488,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                     shuffleEnabled = controller.isShuffleEnabled,
                     shuffleAvailable = !controller.isFmQueueActive,
                     onShuffle = controller::toggleShuffle,
+                    sleepTimerAction = { SleepTimerAction(controller) },
                     extraAction = currentTrack?.let { track ->
                         {
                             NowPlayingTrackAction(controller = controller, track = track)
@@ -492,6 +498,187 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
             }
             QueueBottomSheet(controller)
         }
+    }
+}
+
+@Composable
+private fun SleepTimerAction(controller: FuoPlayerController) {
+    var showSheet by remember { mutableStateOf(false) }
+    val timerState = controller.sleepTimerState
+    val isActive = timerState.mode != SleepTimerMode.Off
+    val contentDescription = when (timerState.mode) {
+        SleepTimerMode.Off -> "睡眠定时"
+        SleepTimerMode.Duration -> "睡眠定时，剩余 ${formatSleepTimerRemaining(timerState.remainingMs ?: 0L)}"
+        SleepTimerMode.EndOfTrack -> "当前曲目结束后暂停"
+    }
+    Box {
+        RoundControlButton(
+            imageVector = Icons.Filled.Timer,
+            contentDescription = contentDescription,
+            onClick = { showSheet = true },
+            selected = isActive,
+        )
+        if (showSheet) {
+            SleepTimerBottomSheet(
+                controller = controller,
+                onDismiss = { showSheet = false },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SleepTimerBottomSheet(
+    controller: FuoPlayerController,
+    onDismiss: () -> Unit,
+) {
+    val timerState = controller.sleepTimerState
+    var showCustomDurationDialog by remember { mutableStateOf(false) }
+    var customMinutesText by remember { mutableStateOf("") }
+    val customMinutes = customMinutesText.toIntOrNull()
+    val customMinutesValid = customMinutes?.let {
+        it in SLEEP_TIMER_MIN_MINUTES..SLEEP_TIMER_MAX_MINUTES
+    } == true
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "睡眠定时",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (timerState.mode != SleepTimerMode.Off) {
+                    TextButton(onClick = {
+                        controller.clearSleepTimer()
+                        onDismiss()
+                    }) {
+                        Text("关闭定时")
+                    }
+                }
+            }
+            when (timerState.mode) {
+                SleepTimerMode.Duration -> Text(
+                    text = "将在 ${formatSleepTimerRemaining(timerState.remainingMs ?: 0L)} 后暂停播放",
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                SleepTimerMode.EndOfTrack -> Text(
+                    text = "当前曲目（含全部多段内容）播放完后暂停",
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                SleepTimerMode.Off -> Text(
+                    text = "选择暂停播放的时机",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "按时长",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SLEEP_TIMER_PRESET_MINUTES.chunked(3).forEach { rowMinutes ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowMinutes.forEach { minutes ->
+                        FilterChip(
+                            selected = false,
+                            onClick = {
+                                controller.setSleepTimerDurationMinutes(minutes)
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("$minutes 分钟") },
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = timerState.mode == SleepTimerMode.EndOfTrack,
+                    onClick = {
+                        controller.setSleepTimerToEndOfTrack()
+                        onDismiss()
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("当前曲目结束") },
+                )
+                FilterChip(
+                    selected = false,
+                    onClick = { showCustomDurationDialog = true },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("自定义时长") },
+                )
+            }
+        }
+    }
+
+    if (showCustomDurationDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomDurationDialog = false },
+            title = { Text("自定义睡眠定时") },
+            text = {
+                TextField(
+                    value = customMinutesText,
+                    onValueChange = { value ->
+                        customMinutesText = value.filter(Char::isDigit)
+                    },
+                    singleLine = true,
+                    isError = customMinutesText.isNotBlank() && !customMinutesValid,
+                    label = { Text("分钟") },
+                    supportingText = {
+                        Text("请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟")
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = customMinutesValid,
+                    onClick = {
+                        customMinutes?.let(controller::setSleepTimerDurationMinutes)
+                        showCustomDurationDialog = false
+                        onDismiss()
+                    },
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomDurationDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+}
+
+private fun formatSleepTimerRemaining(remainingMs: Long): String {
+    val totalSeconds = (remainingMs.coerceAtLeast(0L) + 999L) / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return when {
+        minutes >= 60L -> "${minutes / 60L}小时${minutes % 60L}分"
+        minutes > 0L -> "${minutes}分${seconds}秒"
+        else -> "${seconds}秒"
     }
 }
 
@@ -1174,6 +1361,7 @@ fun PlayerControls(
     shuffleAvailable: Boolean = true,
     onShuffle: (() -> Unit)? = null,
     onRepeat: (() -> Unit)? = null,
+    sleepTimerAction: (@Composable () -> Unit)? = null,
     extraAction: (@Composable () -> Unit)? = null,
 ) {
     Row(
@@ -1215,6 +1403,7 @@ fun PlayerControls(
             iconSize = if (compact) 24.dp else 26.dp,
         )
         when {
+            !compact && sleepTimerAction != null -> sleepTimerAction()
             !compact && extraAction != null -> extraAction()
             !compact && onRepeat != null -> RepeatModeTextButton(
                 repeatMode = repeatMode,
