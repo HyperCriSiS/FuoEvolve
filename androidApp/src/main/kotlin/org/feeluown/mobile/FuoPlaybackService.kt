@@ -221,7 +221,7 @@ class FuoPlaybackService : MediaSessionService() {
                     holdAtCurrentEnd = false
                 } else if (
                     wasEnabled &&
-                    player?.playbackState == Player.STATE_ENDED &&
+                    isAtCurrentPlaybackEnd() &&
                     isFinalPlaybackPart(activePlayback)
                 ) {
                     holdAtCurrentEnd = true
@@ -599,6 +599,7 @@ class FuoPlaybackService : MediaSessionService() {
         val prepared = activePlayback ?: return
         val currentPlayer = player ?: return
         val shouldHold = shouldHoldAtCurrentEnd()
+        val heldAtEnd = shouldHold && isAtCurrentPlaybackEnd()
         if (currentPlayer.playbackState == Player.STATE_ENDED && pendingPreloadError != null && !shouldHold) {
             mutablePlaybackState.value = PlaybackState(
                 status = PlayerStatus.Error,
@@ -616,8 +617,9 @@ class FuoPlaybackService : MediaSessionService() {
             return
         }
         val status = when {
-            currentPlayer.playbackState == Player.STATE_ENDED && hasPendingOrLoadingRequest() && !shouldHold -> PlayerStatus.Loading
-            currentPlayer.playbackState == Player.STATE_ENDED -> PlayerStatus.Ended
+            (currentPlayer.playbackState == Player.STATE_ENDED || heldAtEnd) &&
+                hasPendingOrLoadingRequest() && !shouldHold -> PlayerStatus.Loading
+            currentPlayer.playbackState == Player.STATE_ENDED || heldAtEnd -> PlayerStatus.Ended
             currentPlayer.isPlaying -> PlayerStatus.Playing
             currentPlayer.playbackState == Player.STATE_BUFFERING &&
                 currentPlayer.playWhenReady &&
@@ -649,6 +651,13 @@ class FuoPlaybackService : MediaSessionService() {
 
     private fun shouldHoldAtCurrentEnd(): Boolean =
         holdAtCurrentEnd || (stopAfterCurrentTrack && isFinalPlaybackPart(activePlayback))
+
+    private fun isAtCurrentPlaybackEnd(): Boolean {
+        val currentPlayer = player ?: return false
+        if (currentPlayer.playbackState == Player.STATE_ENDED) return true
+        val duration = currentPlayer.duration
+        return duration > 0L && currentPlayer.currentPosition >= duration
+    }
 
     private fun isFinalPlaybackPart(prepared: PreparedPlayback?): Boolean {
         val payload = prepared?.payload ?: return false
