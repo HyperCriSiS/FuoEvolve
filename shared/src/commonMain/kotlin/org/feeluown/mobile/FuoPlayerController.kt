@@ -366,8 +366,6 @@ class FuoPlayerController(
     private var replacementCandidatesJob: Job? = null
     private var pendingManualReplacementSwitch: PendingManualReplacementSwitch? = null
     private var suppressPlaybackRecoveryRequestSerial: Long? = null
-    private var lyricsLoadJob: Job? = null
-    private var lyricsLoadedForTrackId: String? = null
     private var playbackParts: List<PlaybackPart> = emptyList()
     private var currentPartIndex: Int = -1
     private val settingsUpdates = Channel<AppSettings>(capacity = Channel.UNLIMITED)
@@ -497,6 +495,14 @@ class FuoPlayerController(
         nowMillis = nowMillis,
         onFeedback = { playbackFeedback = it },
     )
+    private val playbackLyricsController = PlaybackLyricsController(
+        providerRepository = providerRepository,
+        scope = scope,
+        currentRequestSerial = { playRequestSerial },
+        currentTrackId = { currentQueueTrack()?.id ?: playbackState.currentTrack?.id },
+        currentLyrics = { playbackState.lyrics },
+        updateLyrics = { lyrics -> playbackState = playbackState.copy(lyrics = lyrics) },
+    )
 
     init {
         scope.launch {
@@ -600,9 +606,13 @@ class FuoPlayerController(
                     currentTrack = currentQueueTrack() ?: engineState.currentTrack,
                     playbackParts = engineState.playbackParts.ifEmpty { playbackParts },
                     currentPartIndex = engineState.currentPartIndex.takeIf { it >= 0 } ?: currentPartIndex,
-                    lyrics = mergedPlaybackLyrics(engineState),
+                    lyrics = playbackLyricsController.mergedLyrics(
+                        engineState = engineState,
+                        currentQueueTrackId = currentQueueTrack()?.id,
+                        previousPlaybackState = playbackState,
+                    ),
                 )
-                maybeLoadLyrics(playbackState.currentTrack)
+                playbackLyricsController.maybeLoad(playbackState.currentTrack)
                 if (engineState.playbackParts.isNotEmpty()) {
                     playbackParts = engineState.playbackParts
                     currentPartIndex = engineState.currentPartIndex
@@ -3039,68 +3049,6 @@ class FuoPlayerController(
             ?: track.providerId?.substringBefore(":")?.takeIf { it.isNotBlank() }
     }
 
-    private fun mergedPlaybackLyrics(engineState: PlaybackState): String? {
-        val engineTrackId = engineState.currentTrack?.id
-        val currentId = currentQueueTrack()?.id
-            ?: engineTrackId
-            ?: playbackState.currentTrack?.id
-        engineState.lyrics?.takeIf {
-            it.isNotBlank() && (engineTrackId == null || engineTrackId == currentId)
-        }?.let { return it }
-        val previousTrackId = playbackState.currentTrack?.id
-        return playbackState.lyrics?.takeIf {
-            it.isNotBlank() && previousTrackId != null && previousTrackId == currentId
-        }
-    }
-
-    private fun maybeLoadLyrics(track: MusicTrack?) {
-        if (track == null) return
-        if (!playbackState.lyrics.isNullOrBlank()) {
-            lyricsLoadedForTrackId = track.id
-            return
-        }
-        track.lyrics?.takeIf { it.isNotBlank() }?.let {
-            playbackState = playbackState.copy(lyrics = it)
-            lyricsLoadedForTrackId = track.id
-            return
-        }
-        if (lyricsLoadedForTrackId == track.id) return
-        lyricsLoadedForTrackId = track.id
-        val requestSerial = playRequestSerial
-        lyricsLoadJob?.cancel()
-        lyricsLoadJob = scope.launch {
-            val lyrics = runCatching {
-                providerRepository.lyrics(lyricSourceTrackForPlayback(track))
-            }.getOrNull()?.takeIf { it.isNotBlank() }
-            if (requestSerial != playRequestSerial) return@launch
-            val currentId = currentQueueTrack()?.id ?: playbackState.currentTrack?.id
-            if (currentId != track.id) return@launch
-            if (!lyrics.isNullOrBlank()) {
-                playbackState = playbackState.copy(lyrics = lyrics)
-            }
-        }
-    }
-
-    private fun lyricSourceTrackForPlayback(track: MusicTrack): MusicTrack {
-        if (!track.isSmartReplacement) return track
-        val originalId = track.originalId?.takeIf { it.isNotBlank() } ?: return track
-        val originalSource = track.originalSource?.takeIf { it.isNotBlank() }
-            ?: originalId.substringBefore(':').takeIf { it.isNotBlank() }
-            ?: track.source
-        return track.copy(
-            id = originalId,
-            providerId = originalId,
-            source = originalSource,
-            providerName = track.originalProviderName ?: track.providerName,
-            title = track.originalTitle ?: track.title,
-            artists = track.originalArtists ?: track.artists,
-            album = track.originalAlbum ?: track.album,
-            coverUrl = track.originalCoverUrl ?: track.coverUrl,
-            isSmartReplacement = false,
-            lyrics = null,
-        )
-    }
-
     private fun play(
         track: MusicTrack,
         sourceQueue: List<MusicTrack>,
@@ -3154,8 +3102,7 @@ class FuoPlayerController(
             currentPartIndex = -1
         }
         updateCurrentTrack(playbackTrack)
-        lyricsLoadJob?.cancel()
-        lyricsLoadedForTrackId = null
+        playbackLyricsController.resetForPlaybackRequest()
         playbackState = playbackState.copy(
             status = PlayerStatus.Loading,
             currentTrack = playbackTrack,
@@ -3175,7 +3122,7 @@ class FuoPlayerController(
             ?.let { index -> playbackParts.getOrNull(index) }
             ?.toTrack(playbackTrack)
             ?: playbackTrack
-        maybeLoadLyrics(playbackTrack)
+        playbackLyricsController.maybeLoad(playbackTrack)
         if (!playbackEngine.resolvesResourcesInternally) {
             scope.launch playRequest@{
                 runCatching {
@@ -3280,7 +3227,7 @@ class FuoPlayerController(
                         playbackParts = playbackParts,
                         currentPartIndex = currentPartIndex,
                     )
-                    maybeLoadLyrics(playableTrack)
+                    playbackLyricsController.maybeLoad(playableTrack)
                     persistPlaybackQueue()
                     message = messageAfterStart
                         ?: currentPlaybackPartLabel()?.let { "${playableTrack.title} · $it" }
