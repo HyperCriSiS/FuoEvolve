@@ -2303,12 +2303,8 @@ private data class RawLyricLine(
     val order: Int,
 )
 
-const val LYRIC_TRANSLATION_MARKER = "\
-__FUO_LYRIC_TRANSLATION__\
-"
-const val LYRIC_ROMANIZATION_MARKER = "\
-__FUO_LYRIC_ROMANIZATION__\
-"
+const val LYRIC_TRANSLATION_MARKER = "\n__FUO_LYRIC_TRANSLATION__\n"
+const val LYRIC_ROMANIZATION_MARKER = "\n__FUO_LYRIC_ROMANIZATION__\n"
 
 fun composeLyricsWithTranslation(main: String, translation: String?): String =
     composeLyricsWithRichTracks(main = main, translation = translation)
@@ -2372,8 +2368,7 @@ fun attachLyricTranslations(lines: List<LyricLine>, translationRaw: String?): Li
                 .map(String::trim)
                 .filter(String::isNotBlank)
                 .distinct()
-                .joinToString("\
-")
+                .joinToString("\n")
         }
     return lines.map { line ->
         if (line.timeMs == Long.MAX_VALUE || !line.translation.isNullOrBlank()) return@map line
@@ -2403,8 +2398,7 @@ fun attachLyricRomanization(lines: List<LyricLine>, romanizationRaw: String?): L
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
-            .joinToString("\
-")
+            .joinToString("\n")
             .takeIf { it.isNotBlank() && it != line.text.trim() }
             ?: return@mapIndexed line
         val words = secondary.words
