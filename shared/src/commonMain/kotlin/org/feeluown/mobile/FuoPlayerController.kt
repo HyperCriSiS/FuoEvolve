@@ -264,8 +264,8 @@ class FuoPlayerController(
         private set
     var playbackState by mutableStateOf(PlaybackState())
         private set
-    var sleepTimerState by mutableStateOf(SleepTimerState())
-        private set
+    val sleepTimerState: SleepTimerState
+        get() = sleepTimerController.state
     var trackChangeDirection by mutableStateOf(TrackChangeDirection.Next)
         private set
     var cacheUsage by settingsUiState::cacheUsage
@@ -364,8 +364,6 @@ class FuoPlayerController(
     private var suppressPlaybackRecoveryRequestSerial: Long? = null
     private var lyricsLoadJob: Job? = null
     private var lyricsLoadedForTrackId: String? = null
-    private var sleepTimerJob: Job? = null
-    private var sleepTimerSerial: Long = 0L
     private var localMusicRefreshSerial: Long = 0
     private var recommendContentRefreshSerial: Long = 0
     private var musicContentRefreshSerial: Long = 0
@@ -397,6 +395,13 @@ class FuoPlayerController(
         setLoading = { isLoading = it },
         setMessage = { message = it },
         onError = { setError(it) },
+    )
+    private val sleepTimerController = SleepTimerController(
+        scope = scope,
+        playbackEngine = playbackEngine,
+        nowMillis = nowMillis,
+        currentTrackId = { currentQueueTrack()?.id ?: playbackState.currentTrack?.id },
+        onFeedback = { playbackFeedback = it },
     )
     private val offlineLibraryCoordinator = OfflineLibraryControllerCoordinator(
         scope = scope,
@@ -471,7 +476,7 @@ class FuoPlayerController(
                 engineState.currentTrack?.let(::synchronizePlaybackTrack)
                 val queueTrackId = currentQueueTrack()?.id
                 if (queueTrackId != null) {
-                    clearEndOfTrackTimerIfTrackChanged(queueTrackId)
+                    sleepTimerController.clearIfTrackChanged(queueTrackId)
                 }
                 var shouldAutoAdvance = false
                 var shouldCompleteEndOfTrackTimer = false
@@ -497,11 +502,7 @@ class FuoPlayerController(
                             val isFinalPlaybackPart = activeParts.isEmpty() ||
                                 activePartIndex !in activeParts.indices ||
                                 activePartIndex >= activeParts.lastIndex
-                            if (
-                                sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-                                sleepTimerState.targetTrackId == endedTrackId &&
-                                isFinalPlaybackPart
-                            ) {
+                            if (sleepTimerController.shouldCompleteEndOfTrack(endedTrackId, isFinalPlaybackPart)) {
                                 shouldCompleteEndOfTrackTimer = true
                             } else {
                                 shouldAutoAdvance = true
@@ -527,8 +528,7 @@ class FuoPlayerController(
                 }
                 isLoading = engineState.status == PlayerStatus.Loading
                 if (shouldCompleteEndOfTrackTimer) {
-                    resetSleepTimer()
-                    playbackFeedback = "当前曲目已播放完，播放已暂停"
+                    sleepTimerController.completeEndOfTrack()
                 } else if (shouldAutoAdvance) {
                     next()
                 } else if (engineState.status == PlayerStatus.Error) {
@@ -909,83 +909,15 @@ class FuoPlayerController(
     }
 
     fun setSleepTimerDurationMinutes(minutes: Int) {
-        if (currentSleepTimerTrackId() == null) {
-            playbackFeedback = "请先播放一首歌曲"
-            return
-        }
-        if (minutes !in SLEEP_TIMER_MIN_MINUTES..SLEEP_TIMER_MAX_MINUTES) {
-            playbackFeedback = "请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟"
-            return
-        }
-        val durationMs = minutes.toLong() * 60_000L
-        val deadlineMs = nowMillis() + durationMs
-        replaceSleepTimer(
-            SleepTimerState(
-                mode = SleepTimerMode.Duration,
-                deadlineMs = deadlineMs,
-                remainingMs = durationMs,
-            ),
-        )
+        sleepTimerController.setDurationMinutes(minutes)
     }
 
     fun setSleepTimerToEndOfTrack() {
-        val trackId = currentSleepTimerTrackId()
-        if (trackId == null) {
-            playbackFeedback = "请先播放一首歌曲"
-            return
-        }
-        replaceSleepTimer(
-            SleepTimerState(
-                mode = SleepTimerMode.EndOfTrack,
-                targetTrackId = trackId,
-            ),
-        )
+        sleepTimerController.setToEndOfTrack()
     }
 
     fun clearSleepTimer() {
-        resetSleepTimer()
-    }
-
-    private fun currentSleepTimerTrackId(): String? = currentQueueTrack()?.id
-        ?: playbackState.currentTrack?.id
-
-    private fun replaceSleepTimer(state: SleepTimerState) {
-        resetSleepTimer()
-        sleepTimerState = state
-        playbackEngine.setStopAfterCurrentTrack(state.mode == SleepTimerMode.EndOfTrack)
-        if (state.mode != SleepTimerMode.Duration) return
-        val deadlineMs = state.deadlineMs ?: return
-        val serial = sleepTimerSerial
-        sleepTimerJob = scope.launch {
-            while (serial == sleepTimerSerial) {
-                val remainingMs = deadlineMs - nowMillis()
-                if (remainingMs <= 0L) {
-                    resetSleepTimer()
-                    playbackEngine.pause()
-                    playbackFeedback = "睡眠定时已结束，播放已暂停"
-                    break
-                }
-                sleepTimerState = sleepTimerState.copy(remainingMs = remainingMs)
-                delay(minOf(remainingMs, 1_000L))
-            }
-        }
-    }
-
-    private fun resetSleepTimer() {
-        sleepTimerSerial += 1L
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        sleepTimerState = SleepTimerState()
-        playbackEngine.setStopAfterCurrentTrack(false)
-    }
-
-    private fun clearEndOfTrackTimerIfTrackChanged(trackId: String?) {
-        if (
-            sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-            sleepTimerState.targetTrackId != trackId
-        ) {
-            resetSleepTimer()
-        }
+        sleepTimerController.clear()
     }
 
     fun onDownloadParallelismChange(value: Int) {
@@ -1819,11 +1751,11 @@ class FuoPlayerController(
                     message = "未获取到歌词"
                     localMetadataSearchMessage = "未获取到歌词"
                 } else {
-                        runCatching {
-                            localRepository.saveLyrics(track, lyrics)
-                            updateLocalMusicScanSettings()
-                            localRepository.refreshDatabase()
-                        }.onSuccess {
+                    runCatching {
+                        localRepository.saveLyrics(track, lyrics)
+                        updateLocalMusicScanSettings()
+                        localRepository.refreshDatabase()
+                    }.onSuccess {
                         localTracks = it
                         val updatedTrack = it.firstOrNull { item -> item.id == track.id } ?: track.copy(lyrics = lyrics)
                         updateLocalTrackCopies(track.id, updatedTrack)
@@ -4182,13 +4114,7 @@ class FuoPlayerController(
         messageAfterStart: String? = null,
         suppressPlaybackRecovery: Boolean = false,
     ) {
-        clearEndOfTrackTimerIfTrackChanged(track.id)
-        if (
-            sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-            sleepTimerState.targetTrackId == track.id
-        ) {
-            playbackEngine.setStopAfterCurrentTrack(true)
-        }
+        sleepTimerController.prepareTrack(track.id)
         val requestSerial = ++playRequestSerial
         suppressPlaybackRecoveryRequestSerial = requestSerial.takeIf { suppressPlaybackRecovery }
         val playbackTrack = if (manualSelection != null) {
@@ -4627,7 +4553,7 @@ class FuoPlayerController(
         val currentOriginalId = currentTrack.originalId ?: currentTrack.id
         if (
             currentOriginalId != pending.originalTrackId ||
-                currentTrack.replacementId != pending.selection.replacementId
+            currentTrack.replacementId != pending.selection.replacementId
         ) {
             return
         }
