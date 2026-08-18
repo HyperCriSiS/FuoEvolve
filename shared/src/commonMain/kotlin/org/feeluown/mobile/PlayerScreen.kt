@@ -16,6 +16,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -417,14 +418,18 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
     }
     Surface(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val compactPortrait = maxHeight < 720.dp || maxHeight < maxWidth * 1.55f
+            val portraitSpacing = if (compactPortrait) 8.dp else 14.dp
+            val portraitBottomPadding = if (compactPortrait) 28.dp else 82.dp
+            val portraitHorizontalPadding = if (compactPortrait) 16.dp else 20.dp
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 82.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                    .padding(horizontal = portraitHorizontalPadding)
+                    .padding(bottom = portraitBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(portraitSpacing),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -499,6 +504,7 @@ private fun FullPlayerContent(controller: FuoPlayerController) {
                     onPrevious = controller::previous,
                     onToggle = controller::toggle,
                     onNext = controller::next,
+                    dense = compactPortrait,
                     shuffleEnabled = controller.isShuffleEnabled,
                     shuffleAvailable = !controller.isFmQueueActive,
                     onShuffle = controller::toggleShuffle,
@@ -1553,6 +1559,7 @@ fun PlayerControls(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    dense: Boolean = false,
     shuffleEnabled: Boolean = false,
     repeatMode: RepeatMode = RepeatMode.QUEUE,
     shuffleAvailable: Boolean = true,
@@ -1587,8 +1594,16 @@ fun PlayerControls(
             isPlaying = state.status == PlayerStatus.Playing,
             isLoading = state.status == PlayerStatus.Loading,
             onClick = onToggle,
-            size = if (compact) 48.dp else 64.dp,
-            iconSize = if (compact) 26.dp else 34.dp,
+            size = when {
+                compact -> 48.dp
+                dense -> 56.dp
+                else -> 64.dp
+            },
+            iconSize = when {
+                compact -> 26.dp
+                dense -> 30.dp
+                else -> 34.dp
+            },
             prominent = !compact,
         )
         RoundControlButton(
@@ -1750,6 +1765,7 @@ fun ProgressBlock(state: PlaybackState, onSeek: (Long) -> Unit) {
 @Composable
 fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifier) {
     val lines = remember(state.lyrics) { parseLyrics(state.lyrics) }
+    val displayLines = lines.takeIf { it.isNotEmpty() } ?: listOf(LyricLine(0, "暂无歌词"))
     val listState = rememberLazyListState()
     val renderPositionMs = rememberKaraokePositionMs(
         positionMs = state.positionMs,
@@ -1787,8 +1803,20 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
     }
 
     LaunchedEffect(currentIndex, lines.size) {
-        if (currentIndex >= 0) {
-            listState.animateScrollToItem((currentIndex - 2).coerceAtLeast(0))
+        if (currentIndex < 0) return@LaunchedEffect
+        val targetListIndex = currentIndex + 1
+        if (listState.layoutInfo.visibleItemsInfo.none { it.index == targetListIndex }) {
+            listState.scrollToItem(targetListIndex)
+            withFrameNanos { }
+        }
+        val layoutInfo = listState.layoutInfo
+        val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetListIndex }
+            ?: return@LaunchedEffect
+        val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+        val itemCenter = itemInfo.offset + itemInfo.size / 2f
+        val scrollDelta = itemCenter - viewportCenter
+        if (kotlin.math.abs(scrollDelta) > 1f) {
+            listState.animateScrollBy(scrollDelta)
         }
     }
 
@@ -1797,76 +1825,86 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.medium,
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.padding(FuoSpacing.lg),
-        ) {
-            val displayLines = lines.takeIf { it.isNotEmpty() } ?: listOf(LyricLine(0, "暂无歌词"))
-            itemsIndexed(displayLines) { index, line ->
-                val active = index == currentIndex
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = linePadding),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    line.romanization?.takeIf { it.isNotBlank() }?.let { romanization ->
-                        if (active && !line.romanizationWords.isNullOrEmpty()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val edgeSpacerHeight = maxHeight / 2
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = FuoSpacing.lg),
+            ) {
+                item(key = "lyrics-top-spacer") {
+                    Spacer(modifier = Modifier.height(edgeSpacerHeight))
+                }
+                itemsIndexed(displayLines) { index, line ->
+                    val active = index == currentIndex
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = linePadding),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        line.romanization?.takeIf { it.isNotBlank() }?.let { romanization ->
+                            if (active && !line.romanizationWords.isNullOrEmpty()) {
+                                KaraokeLyricText(
+                                    words = line.romanizationWords,
+                                    positionMs = renderPositionMs,
+                                    style = romanizationStyle,
+                                    activeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f),
+                                    inactiveColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                Text(
+                                    text = romanization,
+                                    style = romanizationStyle,
+                                    color = if (active) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+                                    },
+                                    fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                        if (active && !line.words.isNullOrEmpty()) {
                             KaraokeLyricText(
-                                words = line.romanizationWords,
+                                words = line.words,
                                 positionMs = renderPositionMs,
-                                style = romanizationStyle,
-                                activeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f),
-                                inactiveColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
-                                fontWeight = FontWeight.Medium,
+                                style = activeStyle,
+                                activeColor = MaterialTheme.colorScheme.primary,
+                                inactiveColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
                             Text(
-                                text = romanization,
-                                style = romanizationStyle,
+                                text = line.text,
+                                style = if (active) activeStyle else inactiveStyle,
                                 color = if (active) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f)
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f)
                                 },
-                                fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
+                            Text(
+                                text = translation,
+                                style = translationStyle,
+                                color = MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = if (active) 0.52f else 0.38f,
+                                ),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
-                    if (active && !line.words.isNullOrEmpty()) {
-                        KaraokeLyricText(
-                            words = line.words,
-                            positionMs = renderPositionMs,
-                            style = activeStyle,
-                            activeColor = MaterialTheme.colorScheme.primary,
-                            inactiveColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.34f),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        Text(
-                            text = line.text,
-                            style = if (active) activeStyle else inactiveStyle,
-                            color = if (active) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f)
-                            },
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
-                        Text(
-                            text = translation,
-                            style = translationStyle,
-                            color = MaterialTheme.colorScheme.onSurface.copy(
-                                alpha = if (active) 0.52f else 0.38f,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                }
+                item(key = "lyrics-bottom-spacer") {
+                    Spacer(modifier = Modifier.height(edgeSpacerHeight))
                 }
             }
         }
@@ -2265,8 +2303,12 @@ private data class RawLyricLine(
     val order: Int,
 )
 
-const val LYRIC_TRANSLATION_MARKER = "\n__FUO_LYRIC_TRANSLATION__\n"
-const val LYRIC_ROMANIZATION_MARKER = "\n__FUO_LYRIC_ROMANIZATION__\n"
+const val LYRIC_TRANSLATION_MARKER = "\
+__FUO_LYRIC_TRANSLATION__\
+"
+const val LYRIC_ROMANIZATION_MARKER = "\
+__FUO_LYRIC_ROMANIZATION__\
+"
 
 fun composeLyricsWithTranslation(main: String, translation: String?): String =
     composeLyricsWithRichTracks(main = main, translation = translation)
@@ -2330,7 +2372,8 @@ fun attachLyricTranslations(lines: List<LyricLine>, translationRaw: String?): Li
                 .map(String::trim)
                 .filter(String::isNotBlank)
                 .distinct()
-                .joinToString("\n")
+                .joinToString("\
+")
         }
     return lines.map { line ->
         if (line.timeMs == Long.MAX_VALUE || !line.translation.isNullOrBlank()) return@map line
@@ -2360,7 +2403,8 @@ fun attachLyricRomanization(lines: List<LyricLine>, romanizationRaw: String?): L
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
-            .joinToString("\n")
+            .joinToString("\
+")
             .takeIf { it.isNotBlank() && it != line.text.trim() }
             ?: return@mapIndexed line
         val words = secondary.words
