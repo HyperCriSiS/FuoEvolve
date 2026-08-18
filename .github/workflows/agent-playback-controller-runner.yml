@@ -31,7 +31,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Apply refactor
-        run: python3 .github/agent/refactor-playback-controller.py
+        shell: bash
+        run: |
+          if [ -f .github/agent/refactor-playback-controller.py ]; then
+            python3 .github/agent/refactor-playback-controller.py
+          else
+            echo "Refactor already applied"
+          fi
 
       - name: Run shared tests
         run: ./gradlew :shared:allTests
