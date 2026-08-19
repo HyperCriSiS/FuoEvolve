@@ -54,12 +54,12 @@ internal class AudioRecognitionController(
 
     override fun dispatch(action: RecognitionAction) {
         when (action) {
-  RecognitionAction.Reset -> reset()
-  RecognitionAction.Start -> start()
-  RecognitionAction.Cancel -> cancel()
-  RecognitionAction.Retry -> retry()
-  RecognitionAction.Close -> close()
-  RecognitionAction.CancelIfInProgress -> cancelIfInProgress()
+            RecognitionAction.Reset -> reset()
+            RecognitionAction.Start -> start()
+            RecognitionAction.Cancel -> cancel()
+            RecognitionAction.Retry -> retry()
+            RecognitionAction.Close -> close()
+            RecognitionAction.CancelIfInProgress -> cancelIfInProgress()
         }
     }
 
@@ -70,39 +70,39 @@ internal class AudioRecognitionController(
     private fun start() {
         if (recognitionJob?.isActive == true) return
         if (isPlaybackActive()) {
-  pausePlayback()
+            pausePlayback()
         }
         mutableUiState.value = RecognitionUiState.Capturing(
-  capturedMs = 0,
-  windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
+            capturedMs = 0,
+            windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
         )
         val serial = ++recognitionSerial
         recognitionJob = scope.launch {
-  runCatching {
-      repository.recognize { event ->
-          if (serial == recognitionSerial) {
-              handleEvent(event)
-          }
-      }
-  }.onSuccess { songs ->
-      if (serial == recognitionSerial) {
-          mutableUiState.value = resultState(songs)
-      }
-  }.onFailure { throwable ->
-      if (
-          serial == recognitionSerial &&
-          throwable !is CancellationException &&
-          mutableUiState.value != RecognitionUiState.Cancelled &&
-          mutableUiState.value != RecognitionUiState.NoResult
-      ) {
-          mutableUiState.value = RecognitionUiState.Error(
-              throwable.message ?: "听歌识曲失败",
-          )
-      }
-  }
-  if (serial == recognitionSerial) {
-      recognitionJob = null
-  }
+            runCatching {
+                repository.recognize { event ->
+                    if (serial == recognitionSerial) {
+                        handleEvent(event)
+                    }
+                }
+            }.onSuccess { songs ->
+                if (serial == recognitionSerial) {
+                    mutableUiState.value = resultState(songs)
+                }
+            }.onFailure { throwable ->
+                if (
+                    serial == recognitionSerial &&
+                    throwable !is CancellationException &&
+                    mutableUiState.value != RecognitionUiState.Cancelled &&
+                    mutableUiState.value != RecognitionUiState.NoResult
+                ) {
+                    mutableUiState.value = RecognitionUiState.Error(
+                        throwable.message ?: "听歌识曲失败",
+                    )
+                }
+            }
+            if (serial == recognitionSerial) {
+                recognitionJob = null
+            }
         }
     }
 
@@ -130,35 +130,35 @@ internal class AudioRecognitionController(
 
     private fun cancelIfInProgress() {
         if (isInProgress()) {
-  cancel()
+            cancel()
         }
     }
 
     private fun isInProgress(): Boolean =
         mutableUiState.value is RecognitionUiState.Capturing ||
-  mutableUiState.value == RecognitionUiState.Matching
+            mutableUiState.value == RecognitionUiState.Matching
 
     private fun handleEvent(event: AudioRecognitionEvent) {
         mutableUiState.value = when (event) {
-  is AudioRecognitionEvent.Capturing -> RecognitionUiState.Capturing(
-      capturedMs = event.capturedMs,
-      windowDurationMs = event.windowDurationMs,
-  )
-  is AudioRecognitionEvent.Matching -> RecognitionUiState.Matching
-  is AudioRecognitionEvent.NoMatch -> {
-      if (event.attempt >= AUDIO_RECOGNITION_MAX_ATTEMPTS) {
-          stopWithoutResult()
-          RecognitionUiState.NoResult
-      } else {
-          RecognitionUiState.Capturing(
-              capturedMs = 0,
-              windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
-          )
-      }
-  }
-  is AudioRecognitionEvent.Success -> resultState(event.songs)
-  is AudioRecognitionEvent.Error -> RecognitionUiState.Error(event.message)
-  AudioRecognitionEvent.Cancelled -> RecognitionUiState.Cancelled
+            is AudioRecognitionEvent.Capturing -> RecognitionUiState.Capturing(
+                capturedMs = event.capturedMs,
+                windowDurationMs = event.windowDurationMs,
+            )
+            is AudioRecognitionEvent.Matching -> RecognitionUiState.Matching
+            is AudioRecognitionEvent.NoMatch -> {
+                if (event.attempt >= AUDIO_RECOGNITION_MAX_ATTEMPTS) {
+                    stopWithoutResult()
+                    RecognitionUiState.NoResult
+                } else {
+                    RecognitionUiState.Capturing(
+                        capturedMs = 0,
+                        windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
+                    )
+                }
+            }
+            is AudioRecognitionEvent.Success -> resultState(event.songs)
+            is AudioRecognitionEvent.Error -> RecognitionUiState.Error(event.message)
+            AudioRecognitionEvent.Cancelled -> RecognitionUiState.Cancelled
         }
     }
 
@@ -171,12 +171,12 @@ internal class AudioRecognitionController(
 
     private fun resultState(songs: List<RecognizedSong>): RecognitionUiState {
         val distinctSongs = songs.distinctBy {
-  it.neteaseSongId ?: "${it.title}\u0000${it.artists.joinToString()}"
+            it.neteaseSongId ?: "${it.title}\u0000${it.artists.joinToString()}"
         }
         return if (distinctSongs.isEmpty()) {
-  RecognitionUiState.NoResult
+            RecognitionUiState.NoResult
         } else {
-  RecognitionUiState.Success(distinctSongs)
+            RecognitionUiState.Success(distinctSongs)
         }
     }
 }
