@@ -27,9 +27,9 @@ data class PlaybackSessionState(
 /**
  * Narrow app-scoped playback contract for platform integrations and cross-feature consumers.
  *
- * The legacy player controller may back this contract during migration, but consumers must only
- * depend on this state/transport surface so ownership can move into a dedicated runtime without
- * another platform-wide rewrite.
+ * Implementations own the published session state and transport policy. Consumers depend only on
+ * this surface so the underlying engine, queue coordinator, and platform adapters can evolve
+ * independently.
  */
 interface PlaybackSession {
     val state: StateFlow<PlaybackSessionState>

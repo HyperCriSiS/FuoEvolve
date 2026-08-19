@@ -12,6 +12,7 @@ plugins {
 val migratedControllerBoundaryRoots = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition",
+    "playback/runtime/src/commonMain/kotlin",
 )
 val migratedControllerBoundaryFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppFeaturePorts.kt",
@@ -20,14 +21,15 @@ val migratedControllerBoundaryFiles = listOf(
     "androidApp/src/main/kotlin/org/feeluown/mobile/FuoPlaybackService.kt",
     "androidApp/src/main/kotlin/org/feeluown/mobile/LyriconLyricsPublisher.kt",
 )
-val retiredControllerCompatFiles = listOf(
+val retiredControllerCompatibilityFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRouteCompat.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRouteCompat.kt",
+    "androidApp/src/main/kotlin/org/feeluown/mobile/ControllerPlaybackSession.kt",
 )
 
 tasks.register("checkArchitectureBoundaries") {
     group = "verification"
-    description = "Reject legacy controller dependencies or retired compat shims in migrated boundaries."
+    description = "Reject legacy controller dependencies or retired compatibility files in migrated boundaries."
 
     val sourceFiles = provider {
         buildList {
@@ -44,16 +46,16 @@ tasks.register("checkArchitectureBoundaries") {
     inputs.files(sourceFiles)
 
     doLast {
-        val retiredCompatViolations = retiredControllerCompatFiles
+        val retiredCompatViolations = retiredControllerCompatibilityFiles
             .map(rootProject::file)
             .filter { it.isFile }
             .map { it.relativeTo(rootProject.projectDir).invariantSeparatorsPath }
         if (retiredCompatViolations.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Retired app-shell compatibility shims were reintroduced:")
+                    appendLine("Retired controller compatibility files were reintroduced:")
                     retiredCompatViolations.forEach { appendLine(" - $it") }
-                    append("Compose Search/Recognition through their app ports instead.")
+                    append("Use app ports or the dedicated playback runtime boundary instead.")
                 },
             )
         }

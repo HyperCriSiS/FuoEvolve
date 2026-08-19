@@ -14,11 +14,12 @@ The first compile-time module boundaries are now explicit:
 
 - `:core:model` owns stable cross-feature model contracts used by architecture APIs.
 - `:playback:api` owns the app-scoped playback session contract and depends only on `:core:model` plus coroutines.
+- `:playback:runtime` owns the default `PlaybackSession` state/transport implementation and depends only on `:playback:api` plus coroutines.
 - `:provider:api` owns provider-neutral cross-feature capability contracts.
-- `:shared` consumes those API modules and contains the current feature implementations and compatibility adapters.
-- `:androidApp` consumes `:shared` plus the playback/core APIs required by platform integrations.
+- `:shared` contains the current feature implementations and legacy playback/provider contracts that are still being migrated.
+- `:androidApp` consumes `:shared` plus playback/core APIs and adapts the existing platform engine/queue coordinator into `:playback:runtime`.
 
-These modules intentionally start small. New cross-feature/platform contracts should move into the appropriate API module instead of expanding the flat shared contract surface. Feature implementation modules can be split later after their ownership boundaries are stable.
+These modules intentionally start small. New cross-feature/platform contracts should move into the appropriate API/runtime module instead of expanding the flat shared contract surface. Feature implementation modules can be split later after their ownership boundaries are stable.
 
 ## Shared source layout
 
@@ -28,7 +29,7 @@ The first migration stage groups existing source files physically while keeping 
 - `core/model/`: legacy shared models during migration; stable new architecture models belong in `:core:model`.
 - `core/ui/`: design system and cross-feature UI/platform abstractions.
 - `feature/<name>/`: feature-local controller, state and UI.
-- `feature/playback/`: playback orchestration, the temporary session adapter and player UI.
+- `feature/playback/`: the remaining legacy playback coordinator and player UI while they migrate onto the runtime contract.
 
 Provider protocol implementations remain under `provider/<provider>` because they already have a useful adapter boundary.
 
@@ -36,9 +37,9 @@ Provider protocol implementations remain under `provider/<provider>` because the
 
 Feature state should have one owner. New feature work should expose immutable UI state (preferably `StateFlow`) instead of adding new delegated properties to `FuoPlayerController`.
 
-App-scoped navigation belongs to `AppNavigator` / `FuoAppViewModel`. Playback-specific overlays and session state belong to the playback feature. Avoid introducing new app-global `isLoading`, `message`, or error flags; loading and errors should be feature-local.
+App-scoped navigation belongs to `AppNavigator` / `FuoAppViewModel`. Playback-specific platform/session state now belongs to `DefaultPlaybackRuntime`. Avoid introducing new app-global `isLoading`, `message`, or error flags; loading and errors should be feature-local.
 
-Platform playback integrations must consume `PlaybackSession`, not the global controller. `ControllerPlaybackSession` is a temporary compatibility adapter over the current controller-owned runtime; it establishes the replacement seam before runtime ownership is moved completely into a dedicated playback implementation.
+Platform playback integrations must consume `PlaybackSession`, not the global controller. `ControllerPlaybackSession` has been retired. `DefaultPlaybackRuntime` now owns the published session state and play/pause/toggle policy. The Android composition edge still supplies the current queue/lyrics presentation and three temporary queue-transition callbacks (`startCurrent`, `previous`, `next`) while queue selection and resource-resolution policy are extracted from the legacy coordinator.
 
 ## Repository dependencies
 
@@ -50,9 +51,11 @@ Platform dependency construction is isolated in platform containers. Android use
 
 Search and Recognition are composed through explicit `SearchAppPort` / `RecognitionAppPort` contracts. Their routes and feature UI no longer accept `FuoPlayerController`. During the remaining migration, platform composition roots may adapt still-centralized controller operations to those ports; the dependency must not leak back into the feature or app route contract.
 
+Android playback uses `AndroidPlaybackRuntime.kt` as a composition-edge adapter. The shared runtime module remains controller-free; only the adapter may bridge the remaining queue coordinator until that policy is moved into playback-owned components.
+
 ## Architecture fitness check
 
-`checkArchitectureBoundaries` rejects new `FuoPlayerController` code dependencies inside migrated Search/Recognition feature boundaries, their app-port contracts/routes, and Android playback service/Lyricon integration. It also rejects reintroduction of the retired `SearchRouteCompat` / `RecognitionRouteCompat` app-shell shims.
+`checkArchitectureBoundaries` rejects new `FuoPlayerController` code dependencies inside migrated Search/Recognition boundaries, the entire `:playback:runtime` common source tree, app-port contracts/routes, and Android playback service/Lyricon integration. It also rejects reintroduction of the retired Search/Recognition route shims and `ControllerPlaybackSession` adapter.
 
 ## Migration rule
 
