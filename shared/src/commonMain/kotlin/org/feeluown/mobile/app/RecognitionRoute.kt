@@ -17,11 +17,11 @@ internal fun RecognitionRoute(
     AudioRecognitionFeatureScreen(
         uiState = uiState,
         actions = RecognitionFeatureActions(
-  dispatch = appViewModel::dispatchRecognition,
-  onBack = appViewModel::closeRecognition,
-  onSearchSong = appViewModel::searchRecognizedSong,
-  canOpenNeteaseDetail = controller::canOpenRecognizedNeteaseDetail,
-  onOpenNeteaseDetail = controller::openRecognizedNeteaseDetail,
+            dispatch = appViewModel::dispatchRecognition,
+            onBack = appViewModel::closeRecognition,
+            onSearchSong = appViewModel::searchRecognizedSong,
+            canOpenNeteaseDetail = controller::canOpenRecognizedNeteaseDetail,
+            onOpenNeteaseDetail = controller::openRecognizedNeteaseDetail,
         ),
         hasMicrophonePermission = hasMicrophonePermission,
         onRequestMicrophonePermission = onRequestMicrophonePermission,
