@@ -160,6 +160,14 @@ private class IosAppContainer(
     private val playbackQueueStore = IosPlaybackQueueStore()
     private val resourceCacheRepository = IosResourceCacheRepository()
     private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)
+    private val recognitionController: RecognitionFeatureController by lazy {
+        createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = scope,
+            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },
+            pausePlayback = playbackEngine::pause,
+        )
+    }
     var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())
         private set
 
@@ -178,11 +186,13 @@ private class IosAppContainer(
         oauthDeviceCodeAssistant = IosOAuthDeviceCodeAssistant(oauthDeviceCodeOutput),
         scope = scope,
         searchFeatureController = searchController,
+        recognitionFeatureController = recognitionController,
     )
 
     val appViewModel = FuoAppViewModel(
         controller = controller,
         searchController = searchController,
+        recognitionController = recognitionController,
         settingsRepository = settingsRepository,
         providerSessionRepository = providerSessionRepository,
         navigator = navigator,
@@ -201,7 +211,7 @@ private class IosAppContainer(
     fun requestMicrophonePermission() {
         audioRecognitionOutput.requestPermission { granted ->
             hasMicrophonePermission = granted
-            controller.onMicrophonePermissionChange(granted)
+            appViewModel.onMicrophonePermissionChange(granted)
         }
     }
 

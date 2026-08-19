@@ -166,11 +166,13 @@ sealed interface AppIntent {
 class FuoAppViewModel(
     val controller: FuoPlayerController,
     private val searchController: SearchFeatureController,
+    private val recognitionController: RecognitionFeatureController,
     private val settingsRepository: AppSettingsRepository,
     providerSessionRepository: ProviderSessionRepository,
     private val navigator: AppNavigator,
 ) : ViewModel() {
     val searchUiState: StateFlow<SearchUiState> = searchController.uiState
+    val recognitionUiState: StateFlow<RecognitionUiState> = recognitionController.uiState
 
     val uiState: StateFlow<AppUiState> = combine(
         settingsRepository.state,
@@ -194,6 +196,34 @@ class FuoAppViewModel(
 
     fun searchRecognizedSong(song: RecognizedSong) {
         searchController.searchRecognizedSong(song)
+    }
+
+    fun dispatchRecognition(action: RecognitionAction) {
+        recognitionController.dispatch(action)
+    }
+
+    fun openRecognition() {
+        recognitionController.dispatch(RecognitionAction.Reset)
+        navigator.navigate(AppRoute.AudioRecognition)
+    }
+
+    fun closeRecognition() {
+        recognitionController.dispatch(RecognitionAction.Close)
+        navigator.pop(AppRoute.AudioRecognition)
+    }
+
+    fun onMicrophonePermissionChange(hasPermission: Boolean) {
+        if (
+            hasPermission &&
+            navigator.contains(AppRoute.AudioRecognition) &&
+            recognitionController.uiState.value == RecognitionUiState.Idle
+        ) {
+            recognitionController.dispatch(RecognitionAction.Start)
+        }
+    }
+
+    fun onAppBackgrounded() {
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
     }
 
     fun dispatch(intent: AppIntent) {

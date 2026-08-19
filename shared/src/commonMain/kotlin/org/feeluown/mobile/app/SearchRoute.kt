@@ -9,7 +9,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 internal fun SearchRoute(
     appViewModel: FuoAppViewModel,
     controller: FuoPlayerController,
-    onOpenRecognition: () -> Unit,
 ) {
     val uiState by appViewModel.searchUiState.collectAsStateWithLifecycle()
 
@@ -44,6 +43,6 @@ internal fun SearchRoute(
             onOpenPlaylist = { playlist -> controller.openPlaylist(playlist) },
             onOpenVideo = controller::openVideo,
         ),
-        onOpenRecognition = onOpenRecognition,
+        onOpenRecognition = appViewModel::openRecognition,
     )
 }

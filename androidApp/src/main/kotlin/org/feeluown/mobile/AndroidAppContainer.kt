@@ -147,6 +147,15 @@ internal class AndroidAppContainer(
         AndroidAudioRecognitionRepository(context)
     }
 
+    private val recognitionController: RecognitionFeatureController by lazy {
+        createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = appScope,
+            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },
+            pausePlayback = playbackEngine::pause,
+        )
+    }
+
     val controller: FuoPlayerController by lazy {
         FuoPlayerController(
             providerRepository = providerRepository,
@@ -164,6 +173,7 @@ internal class AndroidAppContainer(
             oauthDeviceCodeAssistant = AndroidOAuthDeviceCodeAssistant(context),
             scope = appScope,
             searchFeatureController = searchController,
+            recognitionFeatureController = recognitionController,
         ).also(::wireController)
     }
 
@@ -171,6 +181,7 @@ internal class AndroidAppContainer(
         FuoAppViewModel(
             controller = controller,
             searchController = searchController,
+            recognitionController = recognitionController,
             settingsRepository = settingsRepository,
             providerSessionRepository = providerSessionRepository,
             navigator = navigator,

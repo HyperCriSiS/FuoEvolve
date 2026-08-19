@@ -53,8 +53,8 @@ private const val MAX_SEARCH_HISTORY_ITEMS = 20
  *
  * The screen owns no application-level controller dependency: search-specific actions are
  * dispatched through [SearchAction], while cross-feature operations are represented as narrow
- * callbacks. [FuoPlayerController] is adapted to this contract in SearchScreenBridge.kt during
- * the controller migration.
+ * callbacks. App-shell composition adapts cross-feature operations without exposing
+ * [FuoPlayerController] as the feature state/action contract.
  */
 internal data class SearchFeatureActions(
     val dispatch: (SearchAction) -> Unit,

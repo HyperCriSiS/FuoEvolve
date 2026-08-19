@@ -51,6 +51,7 @@ class FuoPlayerController(
     private val oauthDeviceCodeAssistant: OAuthDeviceCodeAssistant = NoOpOAuthDeviceCodeAssistant,
     private val scope: CoroutineScope,
     searchFeatureController: SearchFeatureController? = null,
+    recognitionFeatureController: RecognitionFeatureController? = null,
     private val nowMillis: () -> Long = ::currentTimeMillis,
 ) {
     private val providerState = ProviderControllerState()
@@ -236,11 +237,8 @@ class FuoPlayerController(
         get() = navigator.contains(AppRoute.Search)
     val isRecognitionOpen: Boolean
         get() = navigator.contains(AppRoute.AudioRecognition)
-    var recognitionUiState: RecognitionUiState
-        get() = audioRecognitionController.uiState
-        private set(value) {
-            audioRecognitionController.uiState = value
-        }
+    val recognitionUiState: RecognitionUiState
+        get() = recognitionController.uiState.value
     var isFullPlayerOpen by mutableStateOf(false)
         private set
     var isVideoFullscreen by mutableStateOf(false)
@@ -373,12 +371,13 @@ class FuoPlayerController(
     private var playbackParts: List<PlaybackPart> = emptyList()
     private var currentPartIndex: Int = -1
     private val settingsUpdates = Channel<AppSettings>(capacity = Channel.UNLIMITED)
-    private val audioRecognitionController = AudioRecognitionController(
-        repository = audioRecognitionRepository,
-        scope = scope,
-        isPlaybackActive = { playbackState.status == PlayerStatus.Playing },
-        pausePlayback = { playbackEngine.pause() },
-    )
+    private val recognitionController: RecognitionFeatureController = recognitionFeatureController
+        ?: createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = scope,
+            isPlaybackActive = { playbackState.status == PlayerStatus.Playing },
+            pausePlayback = { playbackEngine.pause() },
+        )
     private val resourceCacheController = ResourceCacheController(
         repository = resourceCacheRepository,
         state = settingsUiState,
@@ -693,39 +692,39 @@ class FuoPlayerController(
     }
 
     fun openRecognition() {
-        audioRecognitionController.reset()
+        recognitionController.dispatch(RecognitionAction.Reset)
         navigator.navigate(AppRoute.AudioRecognition)
     }
 
     fun onMicrophonePermissionChange(hasPermission: Boolean) {
         if (hasPermission && isRecognitionOpen && recognitionUiState == RecognitionUiState.Idle) {
-            startRecognition()
+            recognitionController.dispatch(RecognitionAction.Start)
         }
     }
 
     fun startRecognition() {
-        audioRecognitionController.start()
+        recognitionController.dispatch(RecognitionAction.Start)
     }
 
     fun cancelRecognition() {
-        audioRecognitionController.cancel()
+        recognitionController.dispatch(RecognitionAction.Cancel)
     }
 
     fun retryRecognition() {
-        audioRecognitionController.retry()
+        recognitionController.dispatch(RecognitionAction.Retry)
     }
 
     fun closeRecognition() {
-        audioRecognitionController.close()
+        recognitionController.dispatch(RecognitionAction.Close)
         navigator.pop(AppRoute.AudioRecognition)
     }
 
     fun onRecognitionScreenDisposed() {
-        audioRecognitionController.cancelIfInProgress()
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
     }
 
     fun onAppBackgrounded() {
-        audioRecognitionController.cancelIfInProgress()
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
     }
 
     fun searchRecognizedSong(song: RecognizedSong) = searchController.searchRecognizedSong(song)
