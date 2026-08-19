@@ -63,8 +63,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Run architecture checks, shared tests and coverage
-        run: ./gradlew checkArchitectureBoundaries :shared:allTests :shared:koverXmlReportDebug
+      - name: Run architecture checks, playback runtime tests, shared tests and coverage
+        run: ./gradlew checkArchitectureBoundaries :playback:runtime:allTests :shared:allTests :shared:koverXmlReportDebug
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7

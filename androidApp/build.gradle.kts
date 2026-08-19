@@ -119,6 +119,7 @@ dependencies {
     implementation(project(":shared"))
     implementation(project(":core:model"))
     implementation(project(":playback:api"))
+    implementation(project(":playback:runtime"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.compose.material3.expressive)

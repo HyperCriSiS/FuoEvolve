@@ -18,6 +18,7 @@ rootProject.name = "FuoEvolve"
 
 include(":core:model")
 include(":playback:api")
+include(":playback:runtime")
 include(":provider:api")
 include(":shared")
 include(":androidApp")

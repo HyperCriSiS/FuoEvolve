@@ -29,7 +29,6 @@ The first playback runtime seam is now established.
 
 - `:playback:api` defines `PlaybackSession` and immutable `PlaybackSessionState` as the platform/cross-feature playback contract.
 - Android's media-session transport wiring, lock-screen lyric publication, durable queue/resume flushing, and Lyricon integration consume `PlaybackSession` instead of reading playback state directly from the global controller.
-- `ControllerPlaybackSession` is intentionally a compatibility adapter: the existing controller still owns orchestration, while platform callers are decoupled from that ownership so a dedicated runtime can replace the adapter without another service integration rewrite.
 - `:core:model` provides the stable `TrackRef` used by the playback API, and `:provider:api` starts the provider-neutral compile-time boundary used by Search.
 - `checkArchitectureBoundaries` prevents migrated Search/Recognition and platform playback boundaries from regaining direct controller dependencies.
 
@@ -42,9 +41,22 @@ Search and Recognition no longer require controller-specific app-shell bridges.
 - Android and iOS composition roots implement those ports. While sibling playback/download/provider-detail responsibilities remain centralized, the controller dependency is confined to the composition edge instead of leaking into route or feature contracts.
 - The architecture fitness check fails if either retired compat file is reintroduced.
 
+## Phase 5: dedicated playback runtime
+
+Playback platform state and transport policy now have a dedicated owner.
+
+- New `:playback:runtime` contains `DefaultPlaybackRuntime`, which owns the authoritative `PlaybackSessionState` consumed by platform integrations.
+- Runtime state combines engine timing/status/error with queue/current-track/lyrics presentation supplied at the composition edge.
+- Play/pause/toggle decisions now live in the runtime and call the engine directly for pause/resume instead of round-tripping through `FuoPlayerController`.
+- The former Android-only `ControllerPlaybackSession` adapter is removed. Android now uses `AndroidPlaybackRuntime.kt` only to adapt the existing engine and the remaining legacy queue coordinator into the controller-free runtime module.
+- Only `startCurrent`, `previous`, and `next` remain as temporary queue-transition callbacks to the legacy coordinator; queue selection and resource resolution are intentionally deferred so this slice stays behavior-preserving.
+- Focused runtime tests cover state composition and transport dispatch, and CI runs `:playback:runtime:allTests` on both Android and iOS workflows.
+- Architecture fitness rules scan the runtime module and reject reintroduction of `ControllerPlaybackSession`.
+
 ## Next phases
 
-1. Move actual playback orchestration/state ownership from `ControllerPlaybackSession` into a dedicated runtime implementation; then migrate player UI to the same session contract.
-2. Replace controller-backed Search/Recognition app-port operations as their sibling playback/download/provider-detail owners become explicit domain/feature ports.
-3. Apply the feature-owned state plus app-shell composition pattern to local music, downloads, provider content, and settings.
-4. Continue moving stable contracts into compile-time modules and retire legacy aggregate provider dependencies and global loading/message state.
+1. Migrate mini/full player UI and playback overlays to `PlaybackSession`/runtime-owned UI state, expanding the playback action contract only for UI capabilities that are actually needed.
+2. Move the remaining `startCurrent` / `previous` / `next` queue-transition policy and resource-start orchestration out of `FuoPlayerController`, removing the final runtime queue bridge.
+3. Replace controller-backed Search/Recognition app-port operations as their sibling playback/download/provider-detail owners become explicit domain/feature ports.
+4. Apply the feature-owned state plus app-shell composition pattern to local music, downloads, provider content, and settings.
+5. Continue moving stable contracts into compile-time modules and retire legacy aggregate provider dependencies and global loading/message state.
