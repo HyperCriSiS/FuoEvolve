@@ -142,7 +142,14 @@ jobs:
               continue
             fi
 
-            branch_commit_at="$(jq -r '.commit.commit.committer.date // .commit.commit.author.date // empty' <<<"$branch_json")"
+            current_sha="$(jq -r '.commit.sha // empty' <<<"$branch_json")"
+            if [[ -z "$current_sha" ]]; then
+              echo "KEEP no commit SHA: $branch"
+              ((skipped+=1))
+              continue
+            fi
+            commit_json="$(gh api "repos/$REPO/commits/$current_sha")"
+            branch_commit_at="$(jq -r '.commit.committer.date // .commit.author.date // empty' <<<"$commit_json")"
             if [[ -z "$branch_commit_at" ]]; then
               echo "KEEP no commit timestamp: $branch"
               ((skipped+=1))
