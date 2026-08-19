@@ -12,9 +12,15 @@ sealed interface SearchAction {
     data object Submit : SearchAction
 }
 
-@Suppress("UNUSED_PARAMETER")
-internal class SearchController(
-    providerRepository: ProviderMusicRepository,
+/**
+ * Owns search state and search-specific operations.
+ *
+ * New callers should use the narrow [ProviderSearchRepository] constructor. The legacy
+ * [ProviderMusicRepository] constructor remains only while [FuoPlayerController] still creates
+ * the feature controller and shares its compatibility state facade.
+ */
+internal class SearchController private constructor(
+    private val providerRepository: ProviderSearchRepository,
     private val localRepository: LocalMusicRepository,
     private val scope: CoroutineScope,
     private val state: SearchControllerState,
@@ -22,11 +28,52 @@ internal class SearchController(
     private val providerExists: (String) -> Boolean,
     private val openSearch: () -> Unit,
     private val persistSettings: () -> Unit,
-    setLoading: (Boolean) -> Unit,
-    setMessage: (String) -> Unit,
-    onError: (Throwable) -> Unit,
 ) {
-    private val providerRepository: ProviderSearchRepository = ProviderSearchRepositoryView(providerRepository)
+    constructor(
+        providerRepository: ProviderSearchRepository,
+        localRepository: LocalMusicRepository,
+        scope: CoroutineScope,
+        providerIdsForSearch: () -> List<String>,
+        providerExists: (String) -> Boolean,
+        openSearch: () -> Unit,
+        persistSettings: () -> Unit,
+        initialState: SearchUiState = SearchUiState(),
+    ) : this(
+        providerRepository = providerRepository,
+        localRepository = localRepository,
+        scope = scope,
+        state = SearchControllerState(initialState),
+        providerIdsForSearch = providerIdsForSearch,
+        providerExists = providerExists,
+        openSearch = openSearch,
+        persistSettings = persistSettings,
+    )
+
+    /** Compatibility constructor for the FuoPlayerController migration facade. */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(
+        providerRepository: ProviderMusicRepository,
+        localRepository: LocalMusicRepository,
+        scope: CoroutineScope,
+        state: SearchControllerState,
+        providerIdsForSearch: () -> List<String>,
+        providerExists: (String) -> Boolean,
+        openSearch: () -> Unit,
+        persistSettings: () -> Unit,
+        setLoading: (Boolean) -> Unit,
+        setMessage: (String) -> Unit,
+        onError: (Throwable) -> Unit,
+    ) : this(
+        providerRepository = ProviderSearchRepositoryView(providerRepository),
+        localRepository = localRepository,
+        scope = scope,
+        state = state,
+        providerIdsForSearch = providerIdsForSearch,
+        providerExists = providerExists,
+        openSearch = openSearch,
+        persistSettings = persistSettings,
+    )
+
     val uiState = state.uiState
 
     fun dispatch(action: SearchAction) {
