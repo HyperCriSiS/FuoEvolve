@@ -91,6 +91,39 @@ internal class AndroidAppContainer(
 
     private val navigator by lazy { AppNavigator() }
 
+    private val searchController: SearchFeatureController by lazy {
+        val initialSettings = settingsRepository.state.value.settings
+        createSearchFeatureController(
+            providerRepository = providerRepository,
+            localRepository = localRepository,
+            scope = appScope,
+            providerIdsForSearch = {
+                val activeProviderIds = providerSessionRepository.state.value.authStates.keys
+                settingsRepository.state.value.settings
+                    .searchProviderIdsForFeature()
+                    .filter(activeProviderIds::contains)
+            },
+            providerExists = { providerId ->
+                providerId in providerSessionRepository.state.value.authStates
+            },
+            openSearch = { navigator.navigate(AppRoute.Search) },
+            onPreferencesChanged = { searchScope, selectedProviderId ->
+                appScope.launch {
+                    settingsRepository.update { settings ->
+                        settings.copy(
+                            searchScope = searchScope,
+                            selectedSearchProviderId = selectedProviderId,
+                        )
+                    }
+                }
+            },
+            initialState = SearchUiState(
+                searchScope = initialSettings.searchScope,
+                selectedSearchProviderId = initialSettings.selectedSearchProviderId,
+            ),
+        )
+    }
+
     private val playbackQueueStore: AndroidPlaybackQueueStore by lazy {
         AndroidPlaybackQueueStore(context)
     }
@@ -114,6 +147,15 @@ internal class AndroidAppContainer(
         AndroidAudioRecognitionRepository(context)
     }
 
+    private val recognitionController: RecognitionFeatureController by lazy {
+        createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = appScope,
+            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },
+            pausePlayback = playbackEngine::pause,
+        )
+    }
+
     val controller: FuoPlayerController by lazy {
         FuoPlayerController(
             providerRepository = providerRepository,
@@ -130,12 +172,16 @@ internal class AndroidAppContainer(
             audioRecognitionRepository = audioRecognitionRepository,
             oauthDeviceCodeAssistant = AndroidOAuthDeviceCodeAssistant(context),
             scope = appScope,
+            searchFeatureController = searchController,
+            recognitionFeatureController = recognitionController,
         ).also(::wireController)
     }
 
     val appViewModel: FuoAppViewModel by lazy {
         FuoAppViewModel(
             controller = controller,
+            searchController = searchController,
+            recognitionController = recognitionController,
             settingsRepository = settingsRepository,
             providerSessionRepository = providerSessionRepository,
             navigator = navigator,

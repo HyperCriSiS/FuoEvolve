@@ -38,19 +38,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
+internal data class RecognitionFeatureActions(
+    val dispatch: (RecognitionAction) -> Unit,
+    val onBack: () -> Unit,
+    val onSearchSong: (RecognizedSong) -> Unit,
+    val canOpenNeteaseDetail: (RecognizedSong) -> Boolean,
+    val onOpenNeteaseDetail: (RecognizedSong) -> Unit,
+)
+
+/** Recognition UI depends only on feature state/actions and narrow cross-feature callbacks. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioRecognitionScreen(
-    controller: FuoPlayerController,
+internal fun AudioRecognitionFeatureScreen(
+    uiState: RecognitionUiState,
+    actions: RecognitionFeatureActions,
     hasMicrophonePermission: Boolean,
     onRequestMicrophonePermission: () -> Unit,
 ) {
-    DisposableEffect(controller) {
-        onDispose(controller::onRecognitionScreenDisposed)
+    DisposableEffect(Unit) {
+        onDispose { actions.dispatch(RecognitionAction.CancelIfInProgress) }
     }
-    LaunchedEffect(hasMicrophonePermission, controller.recognitionUiState) {
-        if (hasMicrophonePermission && controller.recognitionUiState == RecognitionUiState.Idle) {
-            controller.startRecognition()
+    LaunchedEffect(hasMicrophonePermission, uiState) {
+        if (hasMicrophonePermission && uiState == RecognitionUiState.Idle) {
+            actions.dispatch(RecognitionAction.Start)
         }
     }
     Scaffold(
@@ -58,22 +68,20 @@ fun AudioRecognitionScreen(
             CenterAlignedTopAppBar(
                 title = { Text("听歌识曲") },
                 navigationIcon = {
-                    IconButton(onClick = controller::closeRecognition) {
+                    IconButton(onClick = actions.onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
             )
         },
         bottomBar = {
-            if (controller.recognitionUiState is RecognitionUiState.Capturing ||
-                controller.recognitionUiState is RecognitionUiState.Matching
-            ) {
+            if (uiState is RecognitionUiState.Capturing || uiState is RecognitionUiState.Matching) {
                 Surface(tonalElevation = 3.dp) {
                     OutlinedButton(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        onClick = controller::cancelRecognition,
+                        onClick = { actions.dispatch(RecognitionAction.Cancel) },
                     ) {
                         Icon(Icons.Filled.Stop, contentDescription = null)
                         Spacer(Modifier.size(8.dp))
@@ -85,7 +93,8 @@ fun AudioRecognitionScreen(
     ) { paddingValues ->
         if (hasMicrophonePermission) {
             RecognitionContent(
-                controller = controller,
+                uiState = uiState,
+                actions = actions,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
@@ -131,10 +140,11 @@ private fun MicrophonePermissionContent(
 
 @Composable
 private fun RecognitionContent(
-    controller: FuoPlayerController,
+    uiState: RecognitionUiState,
+    actions: RecognitionFeatureActions,
     modifier: Modifier,
 ) {
-    when (val state = controller.recognitionUiState) {
+    when (val state = uiState) {
         RecognitionUiState.Idle -> ListeningContent(
             modifier = modifier,
             title = "正在准备麦克风",
@@ -154,7 +164,7 @@ private fun RecognitionContent(
             progress = null,
         )
         is RecognitionUiState.Success -> RecognitionResults(
-            controller = controller,
+            actions = actions,
             songs = state.songs,
             modifier = modifier,
         )
@@ -163,21 +173,21 @@ private fun RecognitionContent(
             title = "暂未识别到歌曲",
             message = "可以让手机更靠近声音来源，或换到安静一点的环境再试一次。",
             actionLabel = "重新识别",
-            onAction = controller::retryRecognition,
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
         is RecognitionUiState.Error -> RecognitionMessage(
             modifier = modifier,
             title = "识别失败",
             message = state.message,
             actionLabel = "重试",
-            onAction = controller::retryRecognition,
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
         RecognitionUiState.Cancelled -> RecognitionMessage(
             modifier = modifier,
             title = "已停止识别",
             message = "准备好后，可以再次开始识别。",
             actionLabel = "重新识别",
-            onAction = controller::retryRecognition,
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
     }
 }
@@ -223,7 +233,7 @@ private fun ListeningContent(
 
 @Composable
 private fun RecognitionResults(
-    controller: FuoPlayerController,
+    actions: RecognitionFeatureActions,
     songs: List<RecognizedSong>,
     modifier: Modifier,
 ) {
@@ -240,7 +250,7 @@ private fun RecognitionResults(
             )
         }
         items(songs, key = { it.neteaseSongId ?: "${it.title}:${it.artists}" }) { song ->
-            RecognizedSongCard(controller, song)
+            RecognizedSongCard(actions, song)
         }
         item { Spacer(Modifier.size(16.dp)) }
     }
@@ -248,7 +258,7 @@ private fun RecognitionResults(
 
 @Composable
 private fun RecognizedSongCard(
-    controller: FuoPlayerController,
+    actions: RecognitionFeatureActions,
     song: RecognizedSong,
 ) {
     Surface(
@@ -302,13 +312,13 @@ private fun RecognizedSongCard(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { controller.searchRecognizedSong(song) }) {
+                Button(onClick = { actions.onSearchSong(song) }) {
                     Icon(Icons.Filled.Search, contentDescription = null)
                     Spacer(Modifier.size(6.dp))
                     Text("搜索")
                 }
-                if (controller.canOpenRecognizedNeteaseDetail(song)) {
-                    OutlinedButton(onClick = { controller.openRecognizedNeteaseDetail(song) }) {
+                if (actions.canOpenNeteaseDetail(song)) {
+                    OutlinedButton(onClick = { actions.onOpenNeteaseDetail(song) }) {
                         Text("查看网易云详情")
                     }
                 }

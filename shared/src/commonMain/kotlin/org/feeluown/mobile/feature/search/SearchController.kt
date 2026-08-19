@@ -1,6 +1,7 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
@@ -12,24 +13,113 @@ sealed interface SearchAction {
     data object Submit : SearchAction
 }
 
-@Suppress("UNUSED_PARAMETER")
-internal class SearchController(
+/**
+ * Search feature boundary consumed by the app shell and compatibility callers.
+ *
+ * The app composition root owns the concrete controller. `FuoPlayerController` may delegate to
+ * the same instance while the rest of the application is migrated, but it must not create a
+ * second search state when an owner is supplied.
+ */
+interface SearchFeatureController {
+    val uiState: StateFlow<SearchUiState>
+
+    fun dispatch(action: SearchAction)
+
+    fun applyPreferences(
+        searchScope: SearchScope,
+        selectedSearchProviderId: String?,
+    )
+
+    fun normalizeProviderSelection(providerIds: Set<String>)
+
+    fun searchRecognizedSong(song: RecognizedSong)
+
+    fun searchText(text: String, providerId: String?)
+}
+
+/**
+ * Composition-root factory. The aggregate provider repository is adapted here so the feature
+ * implementation itself remains dependent on [ProviderSearchRepository].
+ */
+fun createSearchFeatureController(
     providerRepository: ProviderMusicRepository,
+    localRepository: LocalMusicRepository,
+    scope: CoroutineScope,
+    providerIdsForSearch: () -> List<String>,
+    providerExists: (String) -> Boolean,
+    openSearch: () -> Unit,
+    onPreferencesChanged: (SearchScope, String?) -> Unit,
+    initialState: SearchUiState = SearchUiState(),
+): SearchFeatureController = SearchController(
+    providerRepository = ProviderSearchRepositoryView(providerRepository),
+    localRepository = localRepository,
+    scope = scope,
+    providerIdsForSearch = providerIdsForSearch,
+    providerExists = providerExists,
+    openSearch = openSearch,
+    onPreferencesChanged = onPreferencesChanged,
+    initialState = initialState,
+)
+
+/** Owns search state and search-specific operations. */
+internal class SearchController private constructor(
+    private val providerRepository: ProviderSearchRepository,
     private val localRepository: LocalMusicRepository,
     private val scope: CoroutineScope,
     private val state: SearchControllerState,
     private val providerIdsForSearch: () -> List<String>,
     private val providerExists: (String) -> Boolean,
     private val openSearch: () -> Unit,
-    private val persistSettings: () -> Unit,
-    setLoading: (Boolean) -> Unit,
-    setMessage: (String) -> Unit,
-    onError: (Throwable) -> Unit,
-) {
-    private val providerRepository: ProviderSearchRepository = ProviderSearchRepositoryView(providerRepository)
-    val uiState = state.uiState
+    private val onPreferencesChanged: (SearchScope, String?) -> Unit,
+) : SearchFeatureController {
+    constructor(
+        providerRepository: ProviderSearchRepository,
+        localRepository: LocalMusicRepository,
+        scope: CoroutineScope,
+        providerIdsForSearch: () -> List<String>,
+        providerExists: (String) -> Boolean,
+        openSearch: () -> Unit,
+        onPreferencesChanged: (SearchScope, String?) -> Unit,
+        initialState: SearchUiState = SearchUiState(),
+    ) : this(
+        providerRepository = providerRepository,
+        localRepository = localRepository,
+        scope = scope,
+        state = SearchControllerState(initialState),
+        providerIdsForSearch = providerIdsForSearch,
+        providerExists = providerExists,
+        openSearch = openSearch,
+        onPreferencesChanged = onPreferencesChanged,
+    )
 
-    fun dispatch(action: SearchAction) {
+    /** Compatibility constructor for standalone legacy `FuoPlayerController` instances. */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(
+        providerRepository: ProviderMusicRepository,
+        localRepository: LocalMusicRepository,
+        scope: CoroutineScope,
+        state: SearchControllerState,
+        providerIdsForSearch: () -> List<String>,
+        providerExists: (String) -> Boolean,
+        openSearch: () -> Unit,
+        persistSettings: () -> Unit,
+        setLoading: (Boolean) -> Unit,
+        setMessage: (String) -> Unit,
+        onError: (Throwable) -> Unit,
+    ) : this(
+        providerRepository = ProviderSearchRepositoryView(providerRepository),
+        localRepository = localRepository,
+        scope = scope,
+        state = state,
+        providerIdsForSearch = providerIdsForSearch,
+        providerExists = providerExists,
+        openSearch = openSearch,
+        onPreferencesChanged = { _, _ -> persistSettings() },
+    )
+
+    override val uiState: StateFlow<SearchUiState> = state.uiState
+
+    override fun dispatch(action: SearchAction) {
         when (action) {
             is SearchAction.QueryChanged -> onQueryChange(action.value)
             is SearchAction.ScopeChanged -> onScopeChange(action.value)
@@ -39,13 +129,33 @@ internal class SearchController(
         }
     }
 
-    fun normalizeProviderSelection(providerIds: Set<String>) {
+    override fun applyPreferences(
+        searchScope: SearchScope,
+        selectedSearchProviderId: String?,
+    ) {
+        state.update { current ->
+            current.copy(
+                searchScope = searchScope,
+                selectedSearchProviderId = selectedSearchProviderId,
+            )
+        }
+    }
+
+    override fun normalizeProviderSelection(providerIds: Set<String>) {
         if (state.selectedSearchProviderId !in providerIds) {
+            val previous = state.uiState.value
             state.update { current ->
                 current.copy(
                     selectedSearchProviderId = null,
                     searchScope = if (current.searchScope == SearchScope.Provider) SearchScope.All else current.searchScope,
                 )
+            }
+            val current = state.uiState.value
+            if (
+                previous.searchScope != current.searchScope ||
+                previous.selectedSearchProviderId != current.selectedSearchProviderId
+            ) {
+                notifyPreferencesChanged()
             }
         }
     }
@@ -61,7 +171,7 @@ internal class SearchController(
                 selectedSearchProviderId = current.selectedSearchProviderId.takeIf { value == SearchScope.Provider },
             )
         }
-        persistSettings()
+        notifyPreferencesChanged()
         if (state.query.isNotBlank()) search()
     }
 
@@ -72,7 +182,7 @@ internal class SearchController(
                 selectedSearchProviderId = providerId,
             )
         }
-        persistSettings()
+        notifyPreferencesChanged()
         if (state.query.isNotBlank()) search()
     }
 
@@ -80,7 +190,7 @@ internal class SearchController(
         state.providerSearchTab = value
     }
 
-    fun searchRecognizedSong(song: RecognizedSong) {
+    override fun searchRecognizedSong(song: RecognizedSong) {
         state.update {
             it.copy(
                 query = buildList {
@@ -92,11 +202,12 @@ internal class SearchController(
                 providerSearchTab = ProviderSearchTab.Songs,
             )
         }
+        notifyPreferencesChanged()
         openSearch()
         search()
     }
 
-    fun searchText(text: String, providerId: String?) {
+    override fun searchText(text: String, providerId: String?) {
         val keyword = text.trim()
         if (keyword.isBlank()) {
             state.message = "没有可搜索的信息"
@@ -113,6 +224,7 @@ internal class SearchController(
                 current.copy(query = keyword)
             }
         }
+        notifyPreferencesChanged()
         openSearch()
         search()
     }
@@ -186,6 +298,10 @@ internal class SearchController(
             }
             state.isLoading = false
         }
+    }
+
+    private fun notifyPreferencesChanged() {
+        onPreferencesChanged(state.searchScope, state.selectedSearchProviderId)
     }
 
     private fun mergeResults(local: List<MusicTrack>, provider: List<MusicTrack>): List<MusicTrack> {

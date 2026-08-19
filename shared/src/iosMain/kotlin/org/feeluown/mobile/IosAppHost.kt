@@ -9,6 +9,7 @@ import androidx.compose.ui.window.ComposeUIViewController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import platform.UIKit.UIViewController
 
 internal fun handleIosLocalPlaylistImportResult(
@@ -124,9 +125,49 @@ private class IosAppContainer(
     private val playbackEngine = IosNativeAudioEngine(scope, audioOutput, settingsRepository)
     private val providerSessionRepository = DefaultProviderSessionRepository(providerRepository)
     private val navigator = AppNavigator()
+    private val searchController: SearchFeatureController by lazy {
+        val initialSettings = settingsRepository.state.value.settings
+        createSearchFeatureController(
+            providerRepository = providerRepository,
+            localRepository = localRepository,
+            scope = scope,
+            providerIdsForSearch = {
+                val activeProviderIds = providerSessionRepository.state.value.authStates.keys
+                settingsRepository.state.value.settings
+                    .searchProviderIdsForFeature()
+                    .filter(activeProviderIds::contains)
+            },
+            providerExists = { providerId ->
+                providerId in providerSessionRepository.state.value.authStates
+            },
+            openSearch = { navigator.navigate(AppRoute.Search) },
+            onPreferencesChanged = { searchScope, selectedProviderId ->
+                scope.launch {
+                    settingsRepository.update { settings ->
+                        settings.copy(
+                            searchScope = searchScope,
+                            selectedSearchProviderId = selectedProviderId,
+                        )
+                    }
+                }
+            },
+            initialState = SearchUiState(
+                searchScope = initialSettings.searchScope,
+                selectedSearchProviderId = initialSettings.selectedSearchProviderId,
+            ),
+        )
+    }
     private val playbackQueueStore = IosPlaybackQueueStore()
     private val resourceCacheRepository = IosResourceCacheRepository()
     private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)
+    private val recognitionController: RecognitionFeatureController by lazy {
+        createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = scope,
+            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },
+            pausePlayback = playbackEngine::pause,
+        )
+    }
     var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())
         private set
 
@@ -144,10 +185,14 @@ private class IosAppContainer(
         audioRecognitionRepository = audioRecognitionRepository,
         oauthDeviceCodeAssistant = IosOAuthDeviceCodeAssistant(oauthDeviceCodeOutput),
         scope = scope,
+        searchFeatureController = searchController,
+        recognitionFeatureController = recognitionController,
     )
 
     val appViewModel = FuoAppViewModel(
         controller = controller,
+        searchController = searchController,
+        recognitionController = recognitionController,
         settingsRepository = settingsRepository,
         providerSessionRepository = providerSessionRepository,
         navigator = navigator,
@@ -166,7 +211,7 @@ private class IosAppContainer(
     fun requestMicrophonePermission() {
         audioRecognitionOutput.requestPermission { granted ->
             hasMicrophonePermission = granted
-            controller.onMicrophonePermissionChange(granted)
+            appViewModel.onMicrophonePermissionChange(granted)
         }
     }
 

@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.RequestPermission(),
             ) { granted ->
                 hasMicrophonePermission = granted
-                controller.onMicrophonePermissionChange(granted)
+                appViewModel.onMicrophonePermissionChange(granted)
             }
             val notificationPermissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission(),
@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
                         hasImagePermission = imagePermission
                         hasMicrophonePermission = microphonePermission
                         controller.onLocalMusicPermissionChange(audioPermission)
-                        controller.onMicrophonePermissionChange(microphonePermission)
+                        appViewModel.onMicrophonePermissionChange(microphonePermission)
                     }
                 }
                 lifecycleOwner.lifecycle.addObserver(observer)
@@ -290,8 +290,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        val controller = (application as FuoEvolveApplication).controller
-        controller.onAppBackgrounded()
+        val appViewModel = (application as FuoEvolveApplication).appViewModel
+        appViewModel.onAppBackgrounded()
         super.onStop()
     }
 

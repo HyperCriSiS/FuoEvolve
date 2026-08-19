@@ -50,11 +50,12 @@ class FuoPlayerController(
     private val audioRecognitionRepository: AudioRecognitionRepository = UnsupportedAudioRecognitionRepository,
     private val oauthDeviceCodeAssistant: OAuthDeviceCodeAssistant = NoOpOAuthDeviceCodeAssistant,
     private val scope: CoroutineScope,
+    searchFeatureController: SearchFeatureController? = null,
+    recognitionFeatureController: RecognitionFeatureController? = null,
     private val nowMillis: () -> Long = ::currentTimeMillis,
 ) {
     private val providerState = ProviderControllerState()
     private val providerAuthState = ProviderAuthControllerState()
-    private val searchState = SearchControllerState()
     private val localMusicState = LocalMusicControllerState()
     private val downloadState = DownloadControllerState()
     private val playlistState = PlaylistControllerState()
@@ -194,24 +195,24 @@ class FuoPlayerController(
         private set
     var localTracks by localMusicState::tracks
         private set
-    var query by searchState::query
-        private set
-    var searchScope by searchState::searchScope
-        private set
-    var selectedSearchProviderId by searchState::selectedSearchProviderId
-        private set
+    val query: String
+        get() = searchController.uiState.value.query
+    val searchScope: SearchScope
+        get() = searchController.uiState.value.searchScope
+    val selectedSearchProviderId: String?
+        get() = searchController.uiState.value.selectedSearchProviderId
     var selectedSettingsProviderId by mutableStateOf<String?>(null)
         private set
     var settingsLoginProviderId by mutableStateOf<String?>(null)
         private set
     var providerLoginMode by mutableStateOf(ProviderLoginMode.WebView)
         private set
-    var searchResults by searchState::searchResults
-        private set
-    var providerSearchResults by searchState::providerSearchResults
-        private set
-    var providerSearchTab by searchState::providerSearchTab
-        private set
+    val searchResults: List<MusicTrack>
+        get() = searchController.uiState.value.searchResults
+    val providerSearchResults: ProviderSearchResults
+        get() = searchController.uiState.value.providerSearchResults
+    val providerSearchTab: ProviderSearchTab
+        get() = searchController.uiState.value.providerSearchTab
     val searchUiState
         get() = searchController.uiState
     var homeSection by mutableStateOf(HomeSection.Recommend)
@@ -236,11 +237,8 @@ class FuoPlayerController(
         get() = navigator.contains(AppRoute.Search)
     val isRecognitionOpen: Boolean
         get() = navigator.contains(AppRoute.AudioRecognition)
-    var recognitionUiState: RecognitionUiState
-        get() = audioRecognitionController.uiState
-        private set(value) {
-            audioRecognitionController.uiState = value
-        }
+    val recognitionUiState: RecognitionUiState
+        get() = recognitionController.uiState.value
     var isFullPlayerOpen by mutableStateOf(false)
         private set
     var isVideoFullscreen by mutableStateOf(false)
@@ -373,12 +371,13 @@ class FuoPlayerController(
     private var playbackParts: List<PlaybackPart> = emptyList()
     private var currentPartIndex: Int = -1
     private val settingsUpdates = Channel<AppSettings>(capacity = Channel.UNLIMITED)
-    private val audioRecognitionController = AudioRecognitionController(
-        repository = audioRecognitionRepository,
-        scope = scope,
-        isPlaybackActive = { playbackState.status == PlayerStatus.Playing },
-        pausePlayback = { playbackEngine.pause() },
-    )
+    private val recognitionController: RecognitionFeatureController = recognitionFeatureController
+        ?: createRecognitionFeatureController(
+            repository = audioRecognitionRepository,
+            scope = scope,
+            isPlaybackActive = { playbackState.status == PlayerStatus.Playing },
+            pausePlayback = { playbackEngine.pause() },
+        )
     private val resourceCacheController = ResourceCacheController(
         repository = resourceCacheRepository,
         state = settingsUiState,
@@ -414,18 +413,14 @@ class FuoPlayerController(
         setMessage = { message = it },
         onError = { setError(it) },
     )
-    private val searchController = SearchController(
-        providerRepository = providerRepository,
+    private val searchController: SearchFeatureController = searchFeatureController ?: SearchController(
+        providerRepository = ProviderSearchRepositoryView(providerRepository),
         localRepository = localRepository,
         scope = scope,
-        state = searchState,
         providerIdsForSearch = ::searchProviderIdsForSearch,
         providerExists = { providerId -> providers.any { it.providerId == providerId } },
         openSearch = { navigator.navigate(AppRoute.Search) },
-        persistSettings = ::persistSettings,
-        setLoading = { isLoading = it },
-        setMessage = { message = it },
-        onError = { setError(it) },
+        onPreferencesChanged = { _, _ -> persistSettings() },
     )
     private val localMusicController = LocalMusicController(
         repository = localRepository,
@@ -697,39 +692,39 @@ class FuoPlayerController(
     }
 
     fun openRecognition() {
-        audioRecognitionController.reset()
+        recognitionController.dispatch(RecognitionAction.Reset)
         navigator.navigate(AppRoute.AudioRecognition)
     }
 
     fun onMicrophonePermissionChange(hasPermission: Boolean) {
         if (hasPermission && isRecognitionOpen && recognitionUiState == RecognitionUiState.Idle) {
-            startRecognition()
+            recognitionController.dispatch(RecognitionAction.Start)
         }
     }
 
     fun startRecognition() {
-        audioRecognitionController.start()
+        recognitionController.dispatch(RecognitionAction.Start)
     }
 
     fun cancelRecognition() {
-        audioRecognitionController.cancel()
+        recognitionController.dispatch(RecognitionAction.Cancel)
     }
 
     fun retryRecognition() {
-        audioRecognitionController.retry()
+        recognitionController.dispatch(RecognitionAction.Retry)
     }
 
     fun closeRecognition() {
-        audioRecognitionController.close()
+        recognitionController.dispatch(RecognitionAction.Close)
         navigator.pop(AppRoute.AudioRecognition)
     }
 
     fun onRecognitionScreenDisposed() {
-        audioRecognitionController.cancelIfInProgress()
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
     }
 
     fun onAppBackgrounded() {
-        audioRecognitionController.cancelIfInProgress()
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
     }
 
     fun searchRecognizedSong(song: RecognizedSong) = searchController.searchRecognizedSong(song)
@@ -1244,13 +1239,14 @@ class FuoPlayerController(
     fun onDynamicCoverColorEnabledChange(value: Boolean) =
         settingsController.onDynamicCoverColorEnabledChange(value)
 
-    fun onQueryChange(value: String) = searchController.onQueryChange(value)
+    fun onQueryChange(value: String) = searchController.dispatch(SearchAction.QueryChanged(value))
 
-    fun onSearchScopeChange(value: SearchScope) = searchController.onScopeChange(value)
+    fun onSearchScopeChange(value: SearchScope) = searchController.dispatch(SearchAction.ScopeChanged(value))
 
-    fun onSearchProviderChange(providerId: String) = searchController.onProviderChange(providerId)
+    fun onSearchProviderChange(providerId: String) = searchController.dispatch(SearchAction.ProviderChanged(providerId))
 
-    fun onProviderSearchTabChange(value: ProviderSearchTab) = searchController.onProviderTabChange(value)
+    fun onProviderSearchTabChange(value: ProviderSearchTab) =
+        searchController.dispatch(SearchAction.ProviderTabChanged(value))
 
     fun onHomeSectionChange(value: HomeSection) {
         homeSection = value
@@ -1326,7 +1322,7 @@ class FuoPlayerController(
     fun downloadLocalLyrics(track: MusicTrack, providerTrack: MusicTrack) =
         localMusicController.downloadLyrics(track, providerTrack)
 
-    fun search() = searchController.search()
+    fun search() = searchController.dispatch(SearchAction.Submit)
 
     private fun searchTrackText(text: String, providerId: String?) =
         searchController.searchText(text, providerId)
@@ -2959,12 +2955,7 @@ class FuoPlayerController(
         if (settingsLoginProviderId !in providerIds) {
             settingsLoginProviderId = null
         }
-        if (selectedSearchProviderId !in providerIds) {
-            selectedSearchProviderId = null
-            if (searchScope == SearchScope.Provider) {
-                searchScope = SearchScope.All
-            }
-        }
+        searchController.normalizeProviderSelection(providerIds)
         providerSessionRepository.updateProviders(loadedProviders)
         providerCapabilities = providerRepository.providerCapabilities()
             .associateBy { it.providerId }
@@ -3850,8 +3841,10 @@ class FuoPlayerController(
             .mapNotNull(::canonicalLocalMusicDirectoryId)
             .toSet()
         localMusicMinDurationSeconds = settings.localMusicMinDurationSeconds
-        searchScope = settings.searchScope
-        selectedSearchProviderId = settings.selectedSearchProviderId
+        searchController.applyPreferences(
+            searchScope = settings.searchScope,
+            selectedSearchProviderId = settings.selectedSearchProviderId,
+        )
         selectedSettingsProviderId = settings.selectedSettingsProviderId
         providerLoginMode = settings.providerLoginMode
         enabledProviderIds = settings.enabledProviderIds.ifEmpty { DEFAULT_ENABLED_PROVIDER_IDS }

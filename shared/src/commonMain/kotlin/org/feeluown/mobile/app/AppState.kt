@@ -162,13 +162,18 @@ sealed interface AppIntent {
     data class UpdateThemeColorSpec(val value: ThemeColorSpec) : AppIntent
 }
 
-/** 应用壳层 ViewModel：组合设置、登录会话和导航三个全局单一事实源。 */
+/** 应用壳层 ViewModel：组合设置、登录会话、导航和 feature owner。 */
 class FuoAppViewModel(
     val controller: FuoPlayerController,
+    private val searchController: SearchFeatureController,
+    private val recognitionController: RecognitionFeatureController,
     private val settingsRepository: AppSettingsRepository,
     providerSessionRepository: ProviderSessionRepository,
     private val navigator: AppNavigator,
 ) : ViewModel() {
+    val searchUiState: StateFlow<SearchUiState> = searchController.uiState
+    val recognitionUiState: StateFlow<RecognitionUiState> = recognitionController.uiState
+
     val uiState: StateFlow<AppUiState> = combine(
         settingsRepository.state,
         providerSessionRepository.state,
@@ -184,6 +189,42 @@ class FuoAppViewModel(
             backStack = navigator.backStack.value,
         ),
     )
+
+    fun dispatchSearch(action: SearchAction) {
+        searchController.dispatch(action)
+    }
+
+    fun searchRecognizedSong(song: RecognizedSong) {
+        searchController.searchRecognizedSong(song)
+    }
+
+    fun dispatchRecognition(action: RecognitionAction) {
+        recognitionController.dispatch(action)
+    }
+
+    fun openRecognition() {
+        recognitionController.dispatch(RecognitionAction.Reset)
+        navigator.navigate(AppRoute.AudioRecognition)
+    }
+
+    fun closeRecognition() {
+        recognitionController.dispatch(RecognitionAction.Close)
+        navigator.pop(AppRoute.AudioRecognition)
+    }
+
+    fun onMicrophonePermissionChange(hasPermission: Boolean) {
+        if (
+            hasPermission &&
+            navigator.contains(AppRoute.AudioRecognition) &&
+            recognitionController.uiState.value == RecognitionUiState.Idle
+        ) {
+            recognitionController.dispatch(RecognitionAction.Start)
+        }
+    }
+
+    fun onAppBackgrounded() {
+        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
+    }
 
     fun dispatch(intent: AppIntent) {
         when (intent) {

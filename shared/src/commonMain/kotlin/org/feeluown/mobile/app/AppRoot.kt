@@ -350,7 +350,7 @@ fun AppRoot(
                                                 onRequestAudioPermission = onRequestAudioPermission,
                                                 hasImagePermission = hasImagePermission,
                                                 onRequestImagePermission = onRequestImagePermission,
-                                                onOpenRecognition = controller::openRecognition,
+                                                onOpenRecognition = appViewModel::openRecognition,
                                             )
                                             AppRoute.DebugLogs -> DebugLogScreen(controller)
                                             AppRoute.DownloadManager -> DownloadManagerScreen(controller)
@@ -371,11 +371,12 @@ fun AppRoot(
                                                 onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
                                                 onStartYtmusicOAuth = onStartYtmusicOAuth,
                                             )
-                                            AppRoute.Search -> SearchScreen(
+                                            AppRoute.Search -> SearchRoute(
+                                                appViewModel = appViewModel,
                                                 controller = controller,
-                                                onOpenRecognition = controller::openRecognition,
                                             )
-                                            AppRoute.AudioRecognition -> AudioRecognitionScreen(
+                                            AppRoute.AudioRecognition -> RecognitionRoute(
+                                                appViewModel = appViewModel,
                                                 controller = controller,
                                                 hasMicrophonePermission = hasMicrophonePermission,
                                                 onRequestMicrophonePermission = onRequestMicrophonePermission,
