@@ -33,7 +33,9 @@ jobs:
       - name: Apply refactor
         shell: bash
         run: |
-          if [ -f .github/agent/refactor-playback-controller.py ]; then
+          if [ -f .github/agent/run-queue-refactor.py ]; then
+            python3 .github/agent/run-queue-refactor.py
+          elif [ -f .github/agent/refactor-playback-controller.py ]; then
             python3 .github/agent/refactor-playback-controller.py
           else
             echo "Refactor already applied"
@@ -45,7 +47,7 @@ jobs:
       - name: Commit refactored sources
         shell: bash
         run: |
-          rm -f .github/agent/refactor-playback-controller.py
+          rm -f .github/agent/refactor-playback-controller.py .github/agent/run-queue-refactor.py
           rmdir .github/agent 2>/dev/null || true
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
