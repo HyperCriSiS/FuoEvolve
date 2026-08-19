@@ -97,9 +97,14 @@ internal class AndroidAppContainer(
             providerRepository = providerRepository,
             localRepository = localRepository,
             scope = appScope,
-            providerIdsForSearch = { settingsRepository.state.value.settings.searchProviderIdsForFeature() },
+            providerIdsForSearch = {
+                val activeProviderIds = providerSessionRepository.state.value.authStates.keys
+                settingsRepository.state.value.settings
+                    .searchProviderIdsForFeature()
+                    .filter(activeProviderIds::contains)
+            },
             providerExists = { providerId ->
-                settingsRepository.state.value.settings.hasSearchProvider(providerId)
+                providerId in providerSessionRepository.state.value.authStates
             },
             openSearch = { navigator.navigate(AppRoute.Search) },
             onPreferencesChanged = { searchScope, selectedProviderId ->
