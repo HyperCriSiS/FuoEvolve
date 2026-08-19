@@ -54,7 +54,7 @@ fun SearchScreen(
                 }
             },
             onOpenMediaItem = controller::openMediaItem,
-            onOpenPlaylist = controller::openPlaylist,
+            onOpenPlaylist = { playlist -> controller.openPlaylist(playlist) },
             onOpenVideo = controller::openVideo,
         ),
         onOpenRecognition = onOpenRecognition,
