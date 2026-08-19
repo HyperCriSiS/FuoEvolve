@@ -31,6 +31,28 @@ jobs:
           embedded = source.split(marker, 1)[1].split('\n          PY', 1)[0]
           lines = embedded.splitlines()
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
+
+          target_literal = '"""                                                onOpenRecognition = controller::openRecognition,"""'
+          if script.count(target_literal) != 1:
+              raise SystemExit('AppRoot standalone recognition replacement not found exactly once')
+          target_pos = script.index(target_literal)
+          call_start = script.rfind('replace_once(', 0, target_pos)
+          call_end = script.index('\n)', target_pos) + 2
+          call = script[call_start:call_end]
+          patched_call = call.replace('replace_once(', 'replace_count(', 1)
+          patched_call = patched_call[:-2] + '\n    2,\n)'
+          script = script[:call_start] + patched_call + script[call_end:]
+
+          search_marker = 'AppRoute.Search -> SearchRoute('
+          search_pos = script.index(search_marker)
+          old_search_callback = 'onOpenRecognition = controller::openRecognition,'
+          callback_pos = script.index(old_search_callback, search_pos)
+          script = (
+              script[:callback_pos]
+              + 'onOpenRecognition = appViewModel::openRecognition,'
+              + script[callback_pos + len(old_search_callback):]
+          )
+
           exec(compile(script, '<recognition-migration>', 'exec'))
           PY
 
