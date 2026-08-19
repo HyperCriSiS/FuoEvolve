@@ -5,3 +5,5 @@ Feature directories are a migration boundary, not new Kotlin packages yet. Sourc
 New feature-specific controller/state/UI files should be placed in the corresponding feature directory. Cross-feature models belong in `core/model`; reusable Compose/UI abstractions belong in `core/ui`; app shell/navigation belongs in `app`.
 
 Do not add new feature behavior to `FuoPlayerController` unless it is playback-specific. Prefer feature-local state and narrow provider capability interfaces.
+
+Feature UI should not take `FuoPlayerController` as its long-term state/action contract. During migration, keep controller-specific wiring in a small bridge and make the feature screen depend on feature state plus narrow callbacks. Search is the first feature following this pattern (`SearchFeatureScreen` + `SearchScreenBridge`). The bridge is compatibility code and should disappear once the feature controller is constructed by the app composition root.
