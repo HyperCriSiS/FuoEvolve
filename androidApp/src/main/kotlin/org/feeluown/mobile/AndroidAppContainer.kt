@@ -91,6 +91,34 @@ internal class AndroidAppContainer(
 
     private val navigator by lazy { AppNavigator() }
 
+    private val searchController: SearchFeatureController by lazy {
+        val initialSettings = settingsRepository.state.value.settings
+        createSearchFeatureController(
+            providerRepository = providerRepository,
+            localRepository = localRepository,
+            scope = appScope,
+            providerIdsForSearch = { settingsRepository.state.value.settings.searchProviderIdsForFeature() },
+            providerExists = { providerId ->
+                settingsRepository.state.value.settings.hasSearchProvider(providerId)
+            },
+            openSearch = { navigator.navigate(AppRoute.Search) },
+            onPreferencesChanged = { searchScope, selectedProviderId ->
+                appScope.launch {
+                    settingsRepository.update { settings ->
+                        settings.copy(
+                            searchScope = searchScope,
+                            selectedSearchProviderId = selectedProviderId,
+                        )
+                    }
+                }
+            },
+            initialState = SearchUiState(
+                searchScope = initialSettings.searchScope,
+                selectedSearchProviderId = initialSettings.selectedSearchProviderId,
+            ),
+        )
+    }
+
     private val playbackQueueStore: AndroidPlaybackQueueStore by lazy {
         AndroidPlaybackQueueStore(context)
     }
@@ -130,12 +158,14 @@ internal class AndroidAppContainer(
             audioRecognitionRepository = audioRecognitionRepository,
             oauthDeviceCodeAssistant = AndroidOAuthDeviceCodeAssistant(context),
             scope = appScope,
+            searchFeatureController = searchController,
         ).also(::wireController)
     }
 
     val appViewModel: FuoAppViewModel by lazy {
         FuoAppViewModel(
             controller = controller,
+            searchController = searchController,
             settingsRepository = settingsRepository,
             providerSessionRepository = providerSessionRepository,
             navigator = navigator,

@@ -371,7 +371,8 @@ fun AppRoot(
                                                 onImportYtmusicOAuthFile = onImportYtmusicOAuthFile,
                                                 onStartYtmusicOAuth = onStartYtmusicOAuth,
                                             )
-                                            AppRoute.Search -> SearchScreen(
+                                            AppRoute.Search -> SearchRoute(
+                                                appViewModel = appViewModel,
                                                 controller = controller,
                                                 onOpenRecognition = controller::openRecognition,
                                             )
