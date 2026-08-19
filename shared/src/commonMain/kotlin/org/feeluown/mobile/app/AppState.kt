@@ -162,13 +162,16 @@ sealed interface AppIntent {
     data class UpdateThemeColorSpec(val value: ThemeColorSpec) : AppIntent
 }
 
-/** 应用壳层 ViewModel：组合设置、登录会话和导航三个全局单一事实源。 */
+/** 应用壳层 ViewModel：组合设置、登录会话、导航和 feature owner。 */
 class FuoAppViewModel(
     val controller: FuoPlayerController,
+    private val searchController: SearchFeatureController,
     private val settingsRepository: AppSettingsRepository,
     providerSessionRepository: ProviderSessionRepository,
     private val navigator: AppNavigator,
 ) : ViewModel() {
+    val searchUiState: StateFlow<SearchUiState> = searchController.uiState
+
     val uiState: StateFlow<AppUiState> = combine(
         settingsRepository.state,
         providerSessionRepository.state,
@@ -184,6 +187,14 @@ class FuoAppViewModel(
             backStack = navigator.backStack.value,
         ),
     )
+
+    fun dispatchSearch(action: SearchAction) {
+        searchController.dispatch(action)
+    }
+
+    fun searchRecognizedSong(song: RecognizedSong) {
+        searchController.searchRecognizedSong(song)
+    }
 
     fun dispatch(intent: AppIntent) {
         when (intent) {
