@@ -1,0 +1,919 @@
+name: Recognition ownership migration
+
+on:
+  push:
+    branches:
+      - agent/refactor-player-controller-search-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: agent/refactor-player-controller-search-boundary
+          fetch-depth: 0
+
+      - name: Refactor recognition ownership
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}\n--- target ---\n{old}")
+              file.write_text(text.replace(old, new, 1))
+
+          def replace_count(path: str, old: str, new: str, expected: int) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f"{path}: expected {expected} matches, found {count}\n--- target ---\n{old}")
+              file.write_text(text.replace(old, new))
+
+          Path("shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognitionController.kt").write_text(r'''package org.feeluown.mobile
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+sealed interface RecognitionAction {
+    data object Reset : RecognitionAction
+    data object Start : RecognitionAction
+    data object Cancel : RecognitionAction
+    data object Retry : RecognitionAction
+    data object Close : RecognitionAction
+    data object CancelIfInProgress : RecognitionAction
+}
+
+/** Feature-owned recognition state and operations. */
+interface RecognitionFeatureController {
+    val uiState: StateFlow<RecognitionUiState>
+
+    fun dispatch(action: RecognitionAction)
+}
+
+/** Composition-root factory for the recognition feature owner. */
+fun createRecognitionFeatureController(
+    repository: AudioRecognitionRepository,
+    scope: CoroutineScope,
+    isPlaybackActive: () -> Boolean,
+    pausePlayback: () -> Unit,
+    initialState: RecognitionUiState = RecognitionUiState.Idle,
+): RecognitionFeatureController = AudioRecognitionController(
+    repository = repository,
+    scope = scope,
+    isPlaybackActive = isPlaybackActive,
+    pausePlayback = pausePlayback,
+    initialState = initialState,
+)
+
+internal class AudioRecognitionController(
+    private val repository: AudioRecognitionRepository,
+    private val scope: CoroutineScope,
+    private val isPlaybackActive: () -> Boolean,
+    private val pausePlayback: () -> Unit,
+    initialState: RecognitionUiState = RecognitionUiState.Idle,
+) : RecognitionFeatureController {
+    private val mutableUiState = MutableStateFlow(initialState)
+    override val uiState: StateFlow<RecognitionUiState> = mutableUiState.asStateFlow()
+
+    private var recognitionJob: Job? = null
+    private var recognitionSerial: Long = 0
+
+    override fun dispatch(action: RecognitionAction) {
+        when (action) {
+            RecognitionAction.Reset -> reset()
+            RecognitionAction.Start -> start()
+            RecognitionAction.Cancel -> cancel()
+            RecognitionAction.Retry -> retry()
+            RecognitionAction.Close -> close()
+            RecognitionAction.CancelIfInProgress -> cancelIfInProgress()
+        }
+    }
+
+    private fun reset() {
+        mutableUiState.value = RecognitionUiState.Idle
+    }
+
+    private fun start() {
+        if (recognitionJob?.isActive == true) return
+        if (isPlaybackActive()) {
+            pausePlayback()
+        }
+        mutableUiState.value = RecognitionUiState.Capturing(
+            capturedMs = 0,
+            windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
+        )
+        val serial = ++recognitionSerial
+        recognitionJob = scope.launch {
+            runCatching {
+                repository.recognize { event ->
+                    if (serial == recognitionSerial) {
+                        handleEvent(event)
+                    }
+                }
+            }.onSuccess { songs ->
+                if (serial == recognitionSerial) {
+                    mutableUiState.value = resultState(songs)
+                }
+            }.onFailure { throwable ->
+                if (
+                    serial == recognitionSerial &&
+                    throwable !is CancellationException &&
+                    mutableUiState.value != RecognitionUiState.Cancelled &&
+                    mutableUiState.value != RecognitionUiState.NoResult
+                ) {
+                    mutableUiState.value = RecognitionUiState.Error(
+                        throwable.message ?: "听歌识曲失败",
+                    )
+                }
+            }
+            if (serial == recognitionSerial) {
+                recognitionJob = null
+            }
+        }
+    }
+
+    private fun cancel() {
+        recognitionSerial += 1
+        repository.cancel()
+        recognitionJob?.cancel()
+        recognitionJob = null
+        mutableUiState.value = RecognitionUiState.Cancelled
+    }
+
+    private fun retry() {
+        cancel()
+        mutableUiState.value = RecognitionUiState.Idle
+        start()
+    }
+
+    private fun close() {
+        recognitionSerial += 1
+        repository.cancel()
+        recognitionJob?.cancel()
+        recognitionJob = null
+        mutableUiState.value = RecognitionUiState.Idle
+    }
+
+    private fun cancelIfInProgress() {
+        if (isInProgress()) {
+            cancel()
+        }
+    }
+
+    private fun isInProgress(): Boolean =
+        mutableUiState.value is RecognitionUiState.Capturing ||
+            mutableUiState.value == RecognitionUiState.Matching
+
+    private fun handleEvent(event: AudioRecognitionEvent) {
+        mutableUiState.value = when (event) {
+            is AudioRecognitionEvent.Capturing -> RecognitionUiState.Capturing(
+                capturedMs = event.capturedMs,
+                windowDurationMs = event.windowDurationMs,
+            )
+            is AudioRecognitionEvent.Matching -> RecognitionUiState.Matching
+            is AudioRecognitionEvent.NoMatch -> {
+                if (event.attempt >= AUDIO_RECOGNITION_MAX_ATTEMPTS) {
+                    stopWithoutResult()
+                    RecognitionUiState.NoResult
+                } else {
+                    RecognitionUiState.Capturing(
+                        capturedMs = 0,
+                        windowDurationMs = AUDIO_RECOGNITION_WINDOW_MS,
+                    )
+                }
+            }
+            is AudioRecognitionEvent.Success -> resultState(event.songs)
+            is AudioRecognitionEvent.Error -> RecognitionUiState.Error(event.message)
+            AudioRecognitionEvent.Cancelled -> RecognitionUiState.Cancelled
+        }
+    }
+
+    private fun stopWithoutResult() {
+        recognitionSerial += 1
+        recognitionJob?.cancel()
+        repository.cancel()
+        recognitionJob = null
+    }
+
+    private fun resultState(songs: List<RecognizedSong>): RecognitionUiState {
+        val distinctSongs = songs.distinctBy {
+            it.neteaseSongId ?: "${it.title}\u0000${it.artists.joinToString()}"
+        }
+        return if (distinctSongs.isEmpty()) {
+            RecognitionUiState.NoResult
+        } else {
+            RecognitionUiState.Success(distinctSongs)
+        }
+    }
+}
+''')
+
+          Path("shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognitionScreen.kt").write_text(r'''package org.feeluown.mobile
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+
+internal data class RecognitionFeatureActions(
+    val dispatch: (RecognitionAction) -> Unit,
+    val onBack: () -> Unit,
+    val onSearchSong: (RecognizedSong) -> Unit,
+    val canOpenNeteaseDetail: (RecognizedSong) -> Boolean,
+    val onOpenNeteaseDetail: (RecognizedSong) -> Unit,
+)
+
+/** Recognition UI depends only on feature state/actions and narrow cross-feature callbacks. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioRecognitionFeatureScreen(
+    uiState: RecognitionUiState,
+    actions: RecognitionFeatureActions,
+    hasMicrophonePermission: Boolean,
+    onRequestMicrophonePermission: () -> Unit,
+) {
+    DisposableEffect(Unit) {
+        onDispose { actions.dispatch(RecognitionAction.CancelIfInProgress) }
+    }
+    LaunchedEffect(hasMicrophonePermission, uiState) {
+        if (hasMicrophonePermission && uiState == RecognitionUiState.Idle) {
+            actions.dispatch(RecognitionAction.Start)
+        }
+    }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("听歌识曲") },
+                navigationIcon = {
+                    IconButton(onClick = actions.onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+        bottomBar = {
+            if (uiState is RecognitionUiState.Capturing || uiState is RecognitionUiState.Matching) {
+                Surface(tonalElevation = 3.dp) {
+                    OutlinedButton(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        onClick = { actions.dispatch(RecognitionAction.Cancel) },
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("停止识别")
+                    }
+                }
+            }
+        },
+    ) { paddingValues ->
+        if (hasMicrophonePermission) {
+            RecognitionContent(
+                uiState = uiState,
+                actions = actions,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+            )
+        } else {
+            MicrophonePermissionContent(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                onRequestPermission = onRequestMicrophonePermission,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MicrophonePermissionContent(
+    modifier: Modifier,
+    onRequestPermission: () -> Unit,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        RecognitionIcon()
+        Spacer(Modifier.size(24.dp))
+        Text("需要麦克风权限", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = "录音仅在内存中用于生成音频指纹，不会保存或上传原始音频。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.size(24.dp))
+        Button(onClick = onRequestPermission) {
+            Icon(Icons.Filled.Mic, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("授权并开始识别")
+        }
+    }
+}
+
+@Composable
+private fun RecognitionContent(
+    uiState: RecognitionUiState,
+    actions: RecognitionFeatureActions,
+    modifier: Modifier,
+) {
+    when (val state = uiState) {
+        RecognitionUiState.Idle -> ListeningContent(
+            modifier = modifier,
+            title = "正在准备麦克风",
+            subtitle = "录音不会保存到设备",
+            progress = null,
+        )
+        is RecognitionUiState.Capturing -> ListeningContent(
+            modifier = modifier,
+            title = "正在聆听",
+            subtitle = "请靠近声音来源，并保持周围环境安静",
+            progress = (state.capturedMs.toFloat() / state.windowDurationMs).coerceIn(0f, 1f),
+        )
+        RecognitionUiState.Matching -> ListeningContent(
+            modifier = modifier,
+            title = "正在寻找这首歌",
+            subtitle = "马上就好，请继续让音乐播放",
+            progress = null,
+        )
+        is RecognitionUiState.Success -> RecognitionResults(
+            actions = actions,
+            songs = state.songs,
+            modifier = modifier,
+        )
+        RecognitionUiState.NoResult -> RecognitionMessage(
+            modifier = modifier,
+            title = "暂未识别到歌曲",
+            message = "可以让手机更靠近声音来源，或换到安静一点的环境再试一次。",
+            actionLabel = "重新识别",
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
+        )
+        is RecognitionUiState.Error -> RecognitionMessage(
+            modifier = modifier,
+            title = "识别失败",
+            message = state.message,
+            actionLabel = "重试",
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
+        )
+        RecognitionUiState.Cancelled -> RecognitionMessage(
+            modifier = modifier,
+            title = "已停止识别",
+            message = "准备好后，可以再次开始识别。",
+            actionLabel = "重新识别",
+            onAction = { actions.dispatch(RecognitionAction.Retry) },
+        )
+    }
+}
+
+@Composable
+private fun ListeningContent(
+    modifier: Modifier,
+    title: String,
+    subtitle: String,
+    progress: Float?,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        RecognitionIcon()
+        Spacer(Modifier.size(24.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.size(8.dp))
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.size(24.dp))
+        if (progress != null) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            CircularProgressIndicator()
+        }
+        Spacer(Modifier.size(16.dp))
+        Text(
+            "只会向识别接口发送音频指纹",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun RecognitionResults(
+    actions: RecognitionFeatureActions,
+    songs: List<RecognizedSong>,
+    modifier: Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text(
+                text = "识别到 ${songs.size} 首歌曲",
+                modifier = Modifier.padding(top = 16.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        items(songs, key = { it.neteaseSongId ?: "${it.title}:${it.artists}" }) { song ->
+            RecognizedSongCard(actions, song)
+        }
+        item { Spacer(Modifier.size(16.dp)) }
+    }
+}
+
+@Composable
+private fun RecognizedSongCard(
+    actions: RecognitionFeatureActions,
+    song: RecognizedSong,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(FuoSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CoverBox(
+                    track = MusicTrack(
+                        id = song.neteaseSongId.orEmpty(),
+                        title = song.title,
+                        artists = song.artists.joinToString(" / "),
+                        album = song.album,
+                        source = "netease",
+                        sourceType = TrackSourceType.Provider,
+                        coverUrl = song.coverUrl,
+                    ),
+                    modifier = Modifier.size(64.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        song.title.ifBlank { "未知歌曲" },
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        song.artists.joinToString(" / ").ifBlank { "未知歌手" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (song.album.isNotBlank()) {
+                        Text(
+                            song.album,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { actions.onSearchSong(song) }) {
+                    Icon(Icons.Filled.Search, contentDescription = null)
+                    Spacer(Modifier.size(6.dp))
+                    Text("搜索")
+                }
+                if (actions.canOpenNeteaseDetail(song)) {
+                    OutlinedButton(onClick = { actions.onOpenNeteaseDetail(song) }) {
+                        Text("查看网易云详情")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecognitionMessage(
+    modifier: Modifier,
+    title: String,
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        RecognitionIcon()
+        Spacer(Modifier.size(24.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.size(8.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.size(24.dp))
+        Button(onClick = onAction) {
+            Icon(Icons.Filled.Refresh, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(actionLabel)
+        }
+    }
+}
+
+@Composable
+private fun RecognitionIcon() {
+    Surface(
+        modifier = Modifier.size(112.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Icon(
+            Icons.Filled.Mic,
+            contentDescription = null,
+            modifier = Modifier.padding(28.dp),
+        )
+    }
+}
+''')
+
+          Path("shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRoute.kt").write_text(r'''package org.feeluown.mobile
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+/** App-shell composition for the recognition feature. */
+@Composable
+internal fun RecognitionRoute(
+    appViewModel: FuoAppViewModel,
+    controller: FuoPlayerController,
+    hasMicrophonePermission: Boolean,
+    onRequestMicrophonePermission: () -> Unit,
+) {
+    val uiState by appViewModel.recognitionUiState.collectAsStateWithLifecycle()
+
+    AudioRecognitionFeatureScreen(
+        uiState = uiState,
+        actions = RecognitionFeatureActions(
+            dispatch = appViewModel::dispatchRecognition,
+            onBack = appViewModel::closeRecognition,
+            onSearchSong = appViewModel::searchRecognizedSong,
+            canOpenNeteaseDetail = controller::canOpenRecognizedNeteaseDetail,
+            onOpenNeteaseDetail = controller::openRecognizedNeteaseDetail,
+        ),
+        hasMicrophonePermission = hasMicrophonePermission,
+        onRequestMicrophonePermission = onRequestMicrophonePermission,
+    )
+}
+''')
+
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppState.kt",
+              """class FuoAppViewModel(\n    val controller: FuoPlayerController,\n    private val searchController: SearchFeatureController,\n    private val settingsRepository: AppSettingsRepository,""",
+              """class FuoAppViewModel(\n    val controller: FuoPlayerController,\n    private val searchController: SearchFeatureController,\n    private val recognitionController: RecognitionFeatureController,\n    private val settingsRepository: AppSettingsRepository,""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppState.kt",
+              """    val searchUiState: StateFlow<SearchUiState> = searchController.uiState\n\n    val uiState: StateFlow<AppUiState> = combine(""",
+              """    val searchUiState: StateFlow<SearchUiState> = searchController.uiState\n    val recognitionUiState: StateFlow<RecognitionUiState> = recognitionController.uiState\n\n    val uiState: StateFlow<AppUiState> = combine(""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppState.kt",
+              """    fun searchRecognizedSong(song: RecognizedSong) {\n        searchController.searchRecognizedSong(song)\n    }\n\n    fun dispatch(intent: AppIntent) {""",
+              """    fun searchRecognizedSong(song: RecognizedSong) {\n        searchController.searchRecognizedSong(song)\n    }\n\n    fun dispatchRecognition(action: RecognitionAction) {\n        recognitionController.dispatch(action)\n    }\n\n    fun openRecognition() {\n        recognitionController.dispatch(RecognitionAction.Reset)\n        navigator.navigate(AppRoute.AudioRecognition)\n    }\n\n    fun closeRecognition() {\n        recognitionController.dispatch(RecognitionAction.Close)\n        navigator.pop(AppRoute.AudioRecognition)\n    }\n\n    fun onMicrophonePermissionChange(hasPermission: Boolean) {\n        if (\n            hasPermission &&\n            navigator.contains(AppRoute.AudioRecognition) &&\n            recognitionController.uiState.value == RecognitionUiState.Idle\n        ) {\n            recognitionController.dispatch(RecognitionAction.Start)\n        }\n    }\n\n    fun onAppBackgrounded() {\n        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)\n    }\n\n    fun dispatch(intent: AppIntent) {""",
+          )
+
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppRoot.kt",
+              """                                                onOpenRecognition = controller::openRecognition,""",
+              """                                                onOpenRecognition = appViewModel::openRecognition,""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppRoot.kt",
+              """                                            AppRoute.Search -> SearchRoute(\n                                                appViewModel = appViewModel,\n                                                controller = controller,\n                                                onOpenRecognition = controller::openRecognition,\n                                            )\n                                            AppRoute.AudioRecognition -> AudioRecognitionScreen(\n                                                controller = controller,\n                                                hasMicrophonePermission = hasMicrophonePermission,\n                                                onRequestMicrophonePermission = onRequestMicrophonePermission,\n                                            )""",
+              """                                            AppRoute.Search -> SearchRoute(\n                                                appViewModel = appViewModel,\n                                                controller = controller,\n                                            )\n                                            AppRoute.AudioRecognition -> RecognitionRoute(\n                                                appViewModel = appViewModel,\n                                                controller = controller,\n                                                hasMicrophonePermission = hasMicrophonePermission,\n                                                onRequestMicrophonePermission = onRequestMicrophonePermission,\n                                            )""",
+          )
+
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt",
+              """internal fun SearchRoute(\n    appViewModel: FuoAppViewModel,\n    controller: FuoPlayerController,\n    onOpenRecognition: () -> Unit,\n) {""",
+              """internal fun SearchRoute(\n    appViewModel: FuoAppViewModel,\n    controller: FuoPlayerController,\n) {""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt",
+              """        onOpenRecognition = onOpenRecognition,""",
+              """        onOpenRecognition = appViewModel::openRecognition,""",
+          )
+
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchScreen.kt",
+              """ * callbacks. [FuoPlayerController] is adapted to this contract in SearchScreenBridge.kt during\n * the controller migration.""",
+              """ * callbacks. App-shell composition adapts cross-feature operations without exposing\n * [FuoPlayerController] as the feature state/action contract.""",
+          )
+
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt",
+              """    searchFeatureController: SearchFeatureController? = null,\n    private val nowMillis: () -> Long = ::currentTimeMillis,""",
+              """    searchFeatureController: SearchFeatureController? = null,\n    recognitionFeatureController: RecognitionFeatureController? = null,\n    private val nowMillis: () -> Long = ::currentTimeMillis,""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt",
+              """    var recognitionUiState: RecognitionUiState\n        get() = audioRecognitionController.uiState\n        private set(value) {\n            audioRecognitionController.uiState = value\n        }""",
+              """    val recognitionUiState: RecognitionUiState\n        get() = recognitionController.uiState.value""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt",
+              """    private val audioRecognitionController = AudioRecognitionController(\n        repository = audioRecognitionRepository,\n        scope = scope,\n        isPlaybackActive = { playbackState.status == PlayerStatus.Playing },\n        pausePlayback = { playbackEngine.pause() },\n    )""",
+              """    private val recognitionController: RecognitionFeatureController = recognitionFeatureController\n        ?: createRecognitionFeatureController(\n            repository = audioRecognitionRepository,\n            scope = scope,\n            isPlaybackActive = { playbackState.status == PlayerStatus.Playing },\n            pausePlayback = { playbackEngine.pause() },\n        )""",
+          )
+          replace_once(
+              "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt",
+              """    fun openRecognition() {\n        audioRecognitionController.reset()\n        navigator.navigate(AppRoute.AudioRecognition)\n    }\n\n    fun onMicrophonePermissionChange(hasPermission: Boolean) {\n        if (hasPermission && isRecognitionOpen && recognitionUiState == RecognitionUiState.Idle) {\n            startRecognition()\n        }\n    }\n\n    fun startRecognition() {\n        audioRecognitionController.start()\n    }\n\n    fun cancelRecognition() {\n        audioRecognitionController.cancel()\n    }\n\n    fun retryRecognition() {\n        audioRecognitionController.retry()\n    }\n\n    fun closeRecognition() {\n        audioRecognitionController.close()\n        navigator.pop(AppRoute.AudioRecognition)\n    }\n\n    fun onRecognitionScreenDisposed() {\n        audioRecognitionController.cancelIfInProgress()\n    }\n\n    fun onAppBackgrounded() {\n        audioRecognitionController.cancelIfInProgress()\n    }""",
+              """    fun openRecognition() {\n        recognitionController.dispatch(RecognitionAction.Reset)\n        navigator.navigate(AppRoute.AudioRecognition)\n    }\n\n    fun onMicrophonePermissionChange(hasPermission: Boolean) {\n        if (hasPermission && isRecognitionOpen && recognitionUiState == RecognitionUiState.Idle) {\n            recognitionController.dispatch(RecognitionAction.Start)\n        }\n    }\n\n    fun startRecognition() {\n        recognitionController.dispatch(RecognitionAction.Start)\n    }\n\n    fun cancelRecognition() {\n        recognitionController.dispatch(RecognitionAction.Cancel)\n    }\n\n    fun retryRecognition() {\n        recognitionController.dispatch(RecognitionAction.Retry)\n    }\n\n    fun closeRecognition() {\n        recognitionController.dispatch(RecognitionAction.Close)\n        navigator.pop(AppRoute.AudioRecognition)\n    }\n\n    fun onRecognitionScreenDisposed() {\n        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)\n    }\n\n    fun onAppBackgrounded() {\n        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)\n    }""",
+          )
+          controller_text = Path("shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt").read_text()
+          if "audioRecognitionController" in controller_text:
+              raise SystemExit("FuoPlayerController still references audioRecognitionController")
+
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/AndroidAppContainer.kt",
+              """    private val audioRecognitionRepository: AndroidAudioRecognitionRepository by lazy {\n        AndroidAudioRecognitionRepository(context)\n    }\n\n    val controller: FuoPlayerController by lazy {""",
+              """    private val audioRecognitionRepository: AndroidAudioRecognitionRepository by lazy {\n        AndroidAudioRecognitionRepository(context)\n    }\n\n    private val recognitionController: RecognitionFeatureController by lazy {\n        createRecognitionFeatureController(\n            repository = audioRecognitionRepository,\n            scope = appScope,\n            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },\n            pausePlayback = playbackEngine::pause,\n        )\n    }\n\n    val controller: FuoPlayerController by lazy {""",
+          )
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/AndroidAppContainer.kt",
+              """            searchFeatureController = searchController,\n        ).also(::wireController)""",
+              """            searchFeatureController = searchController,\n            recognitionFeatureController = recognitionController,\n        ).also(::wireController)""",
+          )
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/AndroidAppContainer.kt",
+              """            controller = controller,\n            searchController = searchController,\n            settingsRepository = settingsRepository,""",
+              """            controller = controller,\n            searchController = searchController,\n            recognitionController = recognitionController,\n            settingsRepository = settingsRepository,""",
+          )
+
+          replace_once(
+              "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
+              """    private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)\n    var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())""",
+              """    private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)\n    private val recognitionController: RecognitionFeatureController by lazy {\n        createRecognitionFeatureController(\n            repository = audioRecognitionRepository,\n            scope = scope,\n            isPlaybackActive = { playbackEngine.state.value.status == PlayerStatus.Playing },\n            pausePlayback = playbackEngine::pause,\n        )\n    }\n    var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())""",
+          )
+          replace_once(
+              "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
+              """        searchFeatureController = searchController,\n    )""",
+              """        searchFeatureController = searchController,\n        recognitionFeatureController = recognitionController,\n    )""",
+          )
+          replace_once(
+              "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
+              """        controller = controller,\n        searchController = searchController,\n        settingsRepository = settingsRepository,""",
+              """        controller = controller,\n        searchController = searchController,\n        recognitionController = recognitionController,\n        settingsRepository = settingsRepository,""",
+          )
+          replace_once(
+              "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
+              """            hasMicrophonePermission = granted\n            controller.onMicrophonePermissionChange(granted)""",
+              """            hasMicrophonePermission = granted\n            appViewModel.onMicrophonePermissionChange(granted)""",
+          )
+
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/MainActivity.kt",
+              """                hasMicrophonePermission = granted\n                controller.onMicrophonePermissionChange(granted)""",
+              """                hasMicrophonePermission = granted\n                appViewModel.onMicrophonePermissionChange(granted)""",
+          )
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/MainActivity.kt",
+              """                        controller.onMicrophonePermissionChange(microphonePermission)""",
+              """                        appViewModel.onMicrophonePermissionChange(microphonePermission)""",
+          )
+          replace_once(
+              "androidApp/src/main/kotlin/org/feeluown/mobile/MainActivity.kt",
+              """    override fun onStop() {\n        val controller = (application as FuoEvolveApplication).controller\n        controller.onAppBackgrounded()\n        super.onStop()\n    }""",
+              """    override fun onStop() {\n        val appViewModel = (application as FuoEvolveApplication).appViewModel\n        appViewModel.onAppBackgrounded()\n        super.onStop()\n    }""",
+          )
+
+          Path("shared/src/commonTest/kotlin/org/feeluown/mobile/AudioRecognitionControllerTest.kt").write_text(r'''package org.feeluown.mobile
+
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+
+class AudioRecognitionControllerTest {
+    @Test
+    fun startOwnsStateAndPausesActivePlayback() = runTest {
+        val song = RecognizedSong(
+            neteaseSongId = "123",
+            title = "Song",
+            artists = listOf("Artist"),
+            album = "Album",
+        )
+        val repository = object : AudioRecognitionRepository {
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
+                onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 1_000))
+                onEvent(AudioRecognitionEvent.Matching(attempt = 1))
+                return listOf(song, song)
+            }
+
+            override fun cancel() = Unit
+        }
+        var pauseCount = 0
+        val controller = createRecognitionFeatureController(
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { true },
+            pausePlayback = { pauseCount += 1 },
+        )
+
+        controller.dispatch(RecognitionAction.Start)
+        advanceUntilIdle()
+
+        assertEquals(1, pauseCount)
+        assertEquals(RecognitionUiState.Success(listOf(song)), controller.uiState.value)
+    }
+
+    @Test
+    fun cancelIfInProgressCancelsRepositoryAndPublishesCancelled() = runTest {
+        var cancelCount = 0
+        val repository = object : AudioRecognitionRepository {
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
+                onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 500))
+                awaitCancellation()
+            }
+
+            override fun cancel() {
+                cancelCount += 1
+            }
+        }
+        val controller = createRecognitionFeatureController(
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { false },
+            pausePlayback = {},
+        )
+
+        controller.dispatch(RecognitionAction.Start)
+        runCurrent()
+        assertIs<RecognitionUiState.Capturing>(controller.uiState.value)
+
+        controller.dispatch(RecognitionAction.CancelIfInProgress)
+        runCurrent()
+
+        assertEquals(1, cancelCount)
+        assertEquals(RecognitionUiState.Cancelled, controller.uiState.value)
+    }
+
+    @Test
+    fun closeReturnsFeatureToIdle() = runTest {
+        val repository = object : AudioRecognitionRepository {
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> = emptyList()
+            override fun cancel() = Unit
+        }
+        val controller = createRecognitionFeatureController(
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { false },
+            pausePlayback = {},
+            initialState = RecognitionUiState.Cancelled,
+        )
+
+        controller.dispatch(RecognitionAction.Close)
+
+        assertEquals(RecognitionUiState.Idle, controller.uiState.value)
+    }
+}
+''')
+
+          Path("docs/player-controller-refactor.md").write_text(r'''# FuoPlayerController refactor
+
+The controller migration is intentionally incremental. `FuoPlayerController` remains a compatibility facade while feature state and UI contracts move to narrower owners.
+
+## Phase 1: search ownership
+
+Search ownership has moved out of `FuoPlayerController`.
+
+- `SearchFeatureScreen` consumes `SearchUiState`, provider/download snapshots, `SearchAction`, and narrow cross-feature callbacks instead of `FuoPlayerController`.
+- `SearchFeatureController` is constructed by the Android/iOS composition roots. The same owner instance is injected into `FuoAppViewModel` and the compatibility `FuoPlayerController` facade, so production has one search state owner.
+- `SearchRoute` is the app-shell composition point for search UI. The temporary bridge has been removed.
+- Search scope/provider preferences are restored into the feature owner and persisted through `AppSettingsRepository`.
+- Search provider ordering/selection comes from `AppSettings`, while actual provider availability is gated by initialized `ProviderSessionRepository` providers.
+
+## Phase 2: recognition ownership
+
+Recognition now follows the same ownership model.
+
+- `RecognitionFeatureController` owns `StateFlow<RecognitionUiState>` and recognition operations through `RecognitionAction`.
+- Android/iOS composition roots construct the recognition owner from the platform `AudioRecognitionRepository` and `PlaybackEngine`; pausing active playback no longer routes through `FuoPlayerController`.
+- `RecognitionRoute` composes `AudioRecognitionFeatureScreen` from feature state/actions plus narrow provider-detail/search callbacks.
+- Permission changes and app-background cancellation enter through `FuoAppViewModel`, not the global controller.
+- `FuoPlayerController` keeps only compatibility delegates to the same injected recognition owner, so production still has a single recognition state.
+- Focused controller tests cover success/state ownership, playback pause, cancellation, and close/reset behavior.
+
+## Next phases
+
+1. Remove remaining Search/Recognition compatibility delegates as local-music metadata lookup, provider detail navigation, and playback result actions move to explicit app/domain boundaries.
+2. Apply the feature-owned state plus app-shell composition pattern to local music, downloads, provider content, and settings.
+3. Extract playback runtime ownership into a `PlaybackSession` so platform services and player UI no longer coordinate through `FuoPlayerController`.
+4. Remove remaining legacy aggregate provider dependencies and global loading/message state as feature owners become authoritative.
+''')
+
+          Path("shared/src/commonMain/kotlin/org/feeluown/mobile/feature/README.md").write_text(r'''# Feature source layout
+
+Feature directories are a migration boundary, not new Kotlin packages yet. Source files continue to declare `org.feeluown.mobile` so this restructuring does not change symbol visibility or require a broad import rewrite.
+
+New feature-specific controller/state/UI files should be placed in the corresponding feature directory. Cross-feature models belong in `core/model`; reusable Compose/UI abstractions belong in `core/ui`; app shell/navigation belongs in `app`.
+
+Do not add new feature behavior to `FuoPlayerController` unless it is playback-specific. Prefer feature-local state and narrow provider capability interfaces.
+
+Feature UI should not take `FuoPlayerController` as its long-term state/action contract. App-shell composition should connect a feature-owned state/controller to narrow cross-feature callbacks. Search and recognition are the reference migrations: their feature controllers are created by the platform composition roots, app-shell routes wire their screens, and `FuoPlayerController` only retains temporary compatibility delegates to the same owners. New migrations should avoid adding a bridge or duplicate feature state when the feature owner can be injected directly.
+''')
+          PY
+
+      - name: Commit migrated sources
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/refactor-recognition-once.yml
+          git add \
+            androidApp/src/main/kotlin/org/feeluown/mobile/AndroidAppContainer.kt \
+            androidApp/src/main/kotlin/org/feeluown/mobile/MainActivity.kt \
+            docs/player-controller-refactor.md \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppRoot.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppState.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRoute.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/feature/README.md \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/FuoPlayerController.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognitionController.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognitionScreen.kt \
+            shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchScreen.kt \
+            shared/src/commonTest/kotlin/org/feeluown/mobile/AudioRecognitionControllerTest.kt \
+            shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt
+          git diff --cached --check
+          git commit -m "refactor: decouple recognition from FuoPlayerController"
+          git push origin HEAD:agent/refactor-player-controller-search-boundary
