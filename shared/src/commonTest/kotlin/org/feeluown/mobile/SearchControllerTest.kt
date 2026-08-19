@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 class SearchControllerTest {
     @Test
     fun narrowControllerOwnsUiStateAndDispatchesSearchActions() = runTest {
-        var persistedSettings = 0
+        val persistedPreferences = mutableListOf<Pair<SearchScope, String?>>()
         val controller = SearchController(
             providerRepository = EmptyProviderSearchRepository,
             localRepository = EmptyLocalMusicRepository,
@@ -15,7 +15,9 @@ class SearchControllerTest {
             providerIdsForSearch = { listOf("netease") },
             providerExists = { it == "netease" },
             openSearch = {},
-            persistSettings = { persistedSettings += 1 },
+            onPreferencesChanged = { searchScope, providerId ->
+                persistedPreferences += searchScope to providerId
+            },
         )
 
         controller.dispatch(SearchAction.ScopeChanged(SearchScope.Local))
@@ -27,7 +29,33 @@ class SearchControllerTest {
         assertEquals(SearchScope.Provider, controller.uiState.value.searchScope)
         assertEquals("netease", controller.uiState.value.selectedSearchProviderId)
         assertEquals(ProviderSearchTab.Albums, controller.uiState.value.providerSearchTab)
-        assertEquals(2, persistedSettings)
+        assertEquals(
+            listOf(
+                SearchScope.Local to null,
+                SearchScope.Provider to "netease",
+            ),
+            persistedPreferences,
+        )
+    }
+
+    @Test
+    fun applyingPersistedPreferencesDoesNotWriteThemBack() = runTest {
+        var writes = 0
+        val controller = SearchController(
+            providerRepository = EmptyProviderSearchRepository,
+            localRepository = EmptyLocalMusicRepository,
+            scope = this,
+            providerIdsForSearch = { listOf("netease") },
+            providerExists = { it == "netease" },
+            openSearch = {},
+            onPreferencesChanged = { _, _ -> writes += 1 },
+        )
+
+        controller.applyPreferences(SearchScope.Provider, "netease")
+
+        assertEquals(SearchScope.Provider, controller.uiState.value.searchScope)
+        assertEquals("netease", controller.uiState.value.selectedSearchProviderId)
+        assertEquals(0, writes)
     }
 }
 
