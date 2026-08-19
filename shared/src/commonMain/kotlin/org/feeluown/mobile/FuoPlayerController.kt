@@ -265,8 +265,11 @@ class FuoPlayerController(
         private set
     var playbackState by mutableStateOf(PlaybackState())
         private set
-    var sleepTimerState by mutableStateOf(SleepTimerState())
-        private set
+    var sleepTimerState: SleepTimerState
+        get() = sleepTimerController.state
+        private set(value) {
+            sleepTimerController.state = value
+        }
     var trackChangeDirection by mutableStateOf(TrackChangeDirection.Next)
         private set
     var cacheUsage by settingsUiState::cacheUsage
@@ -363,10 +366,6 @@ class FuoPlayerController(
     private var replacementCandidatesJob: Job? = null
     private var pendingManualReplacementSwitch: PendingManualReplacementSwitch? = null
     private var suppressPlaybackRecoveryRequestSerial: Long? = null
-    private var lyricsLoadJob: Job? = null
-    private var lyricsLoadedForTrackId: String? = null
-    private var sleepTimerJob: Job? = null
-    private var sleepTimerSerial: Long = 0L
     private var playbackParts: List<PlaybackPart> = emptyList()
     private var currentPartIndex: Int = -1
     private val settingsUpdates = Channel<AppSettings>(capacity = Channel.UNLIMITED)
@@ -490,6 +489,20 @@ class FuoPlayerController(
         setMessage = { message = it },
         onError = { setError(it) },
     )
+    private val sleepTimerController = PlaybackSleepTimerController(
+        playbackEngine = playbackEngine,
+        scope = scope,
+        nowMillis = nowMillis,
+        onFeedback = { playbackFeedback = it },
+    )
+    private val playbackLyricsController = PlaybackLyricsController(
+        providerRepository = providerRepository,
+        scope = scope,
+        currentRequestSerial = { playRequestSerial },
+        currentTrackId = { currentQueueTrack()?.id ?: playbackState.currentTrack?.id },
+        currentLyrics = { playbackState.lyrics },
+        updateLyrics = { lyrics -> playbackState = playbackState.copy(lyrics = lyrics) },
+    )
 
     init {
         scope.launch {
@@ -545,7 +558,7 @@ class FuoPlayerController(
                 engineState.currentTrack?.let(::synchronizePlaybackTrack)
                 val queueTrackId = currentQueueTrack()?.id
                 if (queueTrackId != null) {
-                    clearEndOfTrackTimerIfTrackChanged(queueTrackId)
+                    sleepTimerController.onTrackChanged(queueTrackId)
                 }
                 var shouldAutoAdvance = false
                 var shouldCompleteEndOfTrackTimer = false
@@ -572,9 +585,10 @@ class FuoPlayerController(
                                 activePartIndex !in activeParts.indices ||
                                 activePartIndex >= activeParts.lastIndex
                             if (
-                                sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-                                sleepTimerState.targetTrackId == endedTrackId &&
-                                isFinalPlaybackPart
+                                sleepTimerController.shouldCompleteEndOfTrack(
+                                    trackId = endedTrackId,
+                                    isFinalPlaybackPart = isFinalPlaybackPart,
+                                )
                             ) {
                                 shouldCompleteEndOfTrackTimer = true
                             } else {
@@ -592,17 +606,20 @@ class FuoPlayerController(
                     currentTrack = currentQueueTrack() ?: engineState.currentTrack,
                     playbackParts = engineState.playbackParts.ifEmpty { playbackParts },
                     currentPartIndex = engineState.currentPartIndex.takeIf { it >= 0 } ?: currentPartIndex,
-                    lyrics = mergedPlaybackLyrics(engineState),
+                    lyrics = playbackLyricsController.mergedLyrics(
+                        engineState = engineState,
+                        currentQueueTrackId = currentQueueTrack()?.id,
+                        previousPlaybackState = playbackState,
+                    ),
                 )
-                maybeLoadLyrics(playbackState.currentTrack)
+                playbackLyricsController.maybeLoad(playbackState.currentTrack)
                 if (engineState.playbackParts.isNotEmpty()) {
                     playbackParts = engineState.playbackParts
                     currentPartIndex = engineState.currentPartIndex
                 }
                 isLoading = engineState.status == PlayerStatus.Loading
                 if (shouldCompleteEndOfTrackTimer) {
-                    resetSleepTimer()
-                    playbackFeedback = "当前曲目已播放完，播放已暂停"
+                    sleepTimerController.completeEndOfTrack()
                 } else if (shouldAutoAdvance) {
                     next()
                 } else if (engineState.status == PlayerStatus.Error) {
@@ -876,83 +893,20 @@ class FuoPlayerController(
     }
 
     fun setSleepTimerDurationMinutes(minutes: Int) {
-        if (currentSleepTimerTrackId() == null) {
-            playbackFeedback = "请先播放一首歌曲"
-            return
-        }
-        if (minutes !in SLEEP_TIMER_MIN_MINUTES..SLEEP_TIMER_MAX_MINUTES) {
-            playbackFeedback = "请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟"
-            return
-        }
-        val durationMs = minutes.toLong() * 60_000L
-        val deadlineMs = nowMillis() + durationMs
-        replaceSleepTimer(
-            SleepTimerState(
-                mode = SleepTimerMode.Duration,
-                deadlineMs = deadlineMs,
-                remainingMs = durationMs,
-            ),
+        sleepTimerController.setDurationMinutes(
+            minutes = minutes,
+            currentTrackId = currentQueueTrack()?.id ?: playbackState.currentTrack?.id,
         )
     }
 
     fun setSleepTimerToEndOfTrack() {
-        val trackId = currentSleepTimerTrackId()
-        if (trackId == null) {
-            playbackFeedback = "请先播放一首歌曲"
-            return
-        }
-        replaceSleepTimer(
-            SleepTimerState(
-                mode = SleepTimerMode.EndOfTrack,
-                targetTrackId = trackId,
-            ),
+        sleepTimerController.setToEndOfTrack(
+            currentTrackId = currentQueueTrack()?.id ?: playbackState.currentTrack?.id,
         )
     }
 
     fun clearSleepTimer() {
-        resetSleepTimer()
-    }
-
-    private fun currentSleepTimerTrackId(): String? = currentQueueTrack()?.id
-        ?: playbackState.currentTrack?.id
-
-    private fun replaceSleepTimer(state: SleepTimerState) {
-        resetSleepTimer()
-        sleepTimerState = state
-        playbackEngine.setStopAfterCurrentTrack(state.mode == SleepTimerMode.EndOfTrack)
-        if (state.mode != SleepTimerMode.Duration) return
-        val deadlineMs = state.deadlineMs ?: return
-        val serial = sleepTimerSerial
-        sleepTimerJob = scope.launch {
-            while (serial == sleepTimerSerial) {
-                val remainingMs = deadlineMs - nowMillis()
-                if (remainingMs <= 0L) {
-                    resetSleepTimer()
-                    playbackEngine.pause()
-                    playbackFeedback = "睡眠定时已结束，播放已暂停"
-                    break
-                }
-                sleepTimerState = sleepTimerState.copy(remainingMs = remainingMs)
-                delay(minOf(remainingMs, 1_000L))
-            }
-        }
-    }
-
-    private fun resetSleepTimer() {
-        sleepTimerSerial += 1L
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        sleepTimerState = SleepTimerState()
-        playbackEngine.setStopAfterCurrentTrack(false)
-    }
-
-    private fun clearEndOfTrackTimerIfTrackChanged(trackId: String?) {
-        if (
-            sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-            sleepTimerState.targetTrackId != trackId
-        ) {
-            resetSleepTimer()
-        }
+        sleepTimerController.clear()
     }
 
     fun onDownloadParallelismChange(value: Int) = downloadController.onParallelismChange(value)
@@ -3095,68 +3049,6 @@ class FuoPlayerController(
             ?: track.providerId?.substringBefore(":")?.takeIf { it.isNotBlank() }
     }
 
-    private fun mergedPlaybackLyrics(engineState: PlaybackState): String? {
-        val engineTrackId = engineState.currentTrack?.id
-        val currentId = currentQueueTrack()?.id
-            ?: engineTrackId
-            ?: playbackState.currentTrack?.id
-        engineState.lyrics?.takeIf {
-            it.isNotBlank() && (engineTrackId == null || engineTrackId == currentId)
-        }?.let { return it }
-        val previousTrackId = playbackState.currentTrack?.id
-        return playbackState.lyrics?.takeIf {
-            it.isNotBlank() && previousTrackId != null && previousTrackId == currentId
-        }
-    }
-
-    private fun maybeLoadLyrics(track: MusicTrack?) {
-        if (track == null) return
-        if (!playbackState.lyrics.isNullOrBlank()) {
-            lyricsLoadedForTrackId = track.id
-            return
-        }
-        track.lyrics?.takeIf { it.isNotBlank() }?.let {
-            playbackState = playbackState.copy(lyrics = it)
-            lyricsLoadedForTrackId = track.id
-            return
-        }
-        if (lyricsLoadedForTrackId == track.id) return
-        lyricsLoadedForTrackId = track.id
-        val requestSerial = playRequestSerial
-        lyricsLoadJob?.cancel()
-        lyricsLoadJob = scope.launch {
-            val lyrics = runCatching {
-                providerRepository.lyrics(lyricSourceTrackForPlayback(track))
-            }.getOrNull()?.takeIf { it.isNotBlank() }
-            if (requestSerial != playRequestSerial) return@launch
-            val currentId = currentQueueTrack()?.id ?: playbackState.currentTrack?.id
-            if (currentId != track.id) return@launch
-            if (!lyrics.isNullOrBlank()) {
-                playbackState = playbackState.copy(lyrics = lyrics)
-            }
-        }
-    }
-
-    private fun lyricSourceTrackForPlayback(track: MusicTrack): MusicTrack {
-        if (!track.isSmartReplacement) return track
-        val originalId = track.originalId?.takeIf { it.isNotBlank() } ?: return track
-        val originalSource = track.originalSource?.takeIf { it.isNotBlank() }
-            ?: originalId.substringBefore(':').takeIf { it.isNotBlank() }
-            ?: track.source
-        return track.copy(
-            id = originalId,
-            providerId = originalId,
-            source = originalSource,
-            providerName = track.originalProviderName ?: track.providerName,
-            title = track.originalTitle ?: track.title,
-            artists = track.originalArtists ?: track.artists,
-            album = track.originalAlbum ?: track.album,
-            coverUrl = track.originalCoverUrl ?: track.coverUrl,
-            isSmartReplacement = false,
-            lyrics = null,
-        )
-    }
-
     private fun play(
         track: MusicTrack,
         sourceQueue: List<MusicTrack>,
@@ -3188,13 +3080,7 @@ class FuoPlayerController(
         messageAfterStart: String? = null,
         suppressPlaybackRecovery: Boolean = false,
     ) {
-        clearEndOfTrackTimerIfTrackChanged(track.id)
-        if (
-            sleepTimerState.mode == SleepTimerMode.EndOfTrack &&
-            sleepTimerState.targetTrackId == track.id
-        ) {
-            playbackEngine.setStopAfterCurrentTrack(true)
-        }
+        sleepTimerController.prepareForTrack(track.id)
         val requestSerial = ++playRequestSerial
         suppressPlaybackRecoveryRequestSerial = requestSerial.takeIf { suppressPlaybackRecovery }
         val playbackTrack = if (manualSelection != null) {
@@ -3216,8 +3102,7 @@ class FuoPlayerController(
             currentPartIndex = -1
         }
         updateCurrentTrack(playbackTrack)
-        lyricsLoadJob?.cancel()
-        lyricsLoadedForTrackId = null
+        playbackLyricsController.resetForPlaybackRequest()
         playbackState = playbackState.copy(
             status = PlayerStatus.Loading,
             currentTrack = playbackTrack,
@@ -3237,7 +3122,7 @@ class FuoPlayerController(
             ?.let { index -> playbackParts.getOrNull(index) }
             ?.toTrack(playbackTrack)
             ?: playbackTrack
-        maybeLoadLyrics(playbackTrack)
+        playbackLyricsController.maybeLoad(playbackTrack)
         if (!playbackEngine.resolvesResourcesInternally) {
             scope.launch playRequest@{
                 runCatching {
@@ -3342,7 +3227,7 @@ class FuoPlayerController(
                         playbackParts = playbackParts,
                         currentPartIndex = currentPartIndex,
                     )
-                    maybeLoadLyrics(playableTrack)
+                    playbackLyricsController.maybeLoad(playableTrack)
                     persistPlaybackQueue()
                     message = messageAfterStart
                         ?: currentPlaybackPartLabel()?.let { "${playableTrack.title} · $it" }
