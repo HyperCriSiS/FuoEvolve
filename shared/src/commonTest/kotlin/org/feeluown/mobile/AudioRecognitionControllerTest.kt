@@ -12,26 +12,26 @@ class AudioRecognitionControllerTest {
     @Test
     fun startOwnsStateAndPausesActivePlayback() = runTest {
         val song = RecognizedSong(
-  neteaseSongId = "123",
-  title = "Song",
-  artists = listOf("Artist"),
-  album = "Album",
+            neteaseSongId = "123",
+            title = "Song",
+            artists = listOf("Artist"),
+            album = "Album",
         )
         val repository = object : AudioRecognitionRepository {
-  override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
-      onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 1_000))
-      onEvent(AudioRecognitionEvent.Matching(attempt = 1))
-      return listOf(song, song)
-  }
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
+                onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 1_000))
+                onEvent(AudioRecognitionEvent.Matching(attempt = 1))
+                return listOf(song, song)
+            }
 
-  override fun cancel() = Unit
+            override fun cancel() = Unit
         }
         var pauseCount = 0
         val controller = createRecognitionFeatureController(
-  repository = repository,
-  scope = this,
-  isPlaybackActive = { true },
-  pausePlayback = { pauseCount += 1 },
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { true },
+            pausePlayback = { pauseCount += 1 },
         )
 
         controller.dispatch(RecognitionAction.Start)
@@ -45,20 +45,20 @@ class AudioRecognitionControllerTest {
     fun cancelIfInProgressCancelsRepositoryAndPublishesCancelled() = runTest {
         var cancelCount = 0
         val repository = object : AudioRecognitionRepository {
-  override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
-      onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 500))
-      awaitCancellation()
-  }
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> {
+                onEvent(AudioRecognitionEvent.Capturing(attempt = 1, capturedMs = 500))
+                awaitCancellation()
+            }
 
-  override fun cancel() {
-      cancelCount += 1
-  }
+            override fun cancel() {
+                cancelCount += 1
+            }
         }
         val controller = createRecognitionFeatureController(
-  repository = repository,
-  scope = this,
-  isPlaybackActive = { false },
-  pausePlayback = {},
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { false },
+            pausePlayback = {},
         )
 
         controller.dispatch(RecognitionAction.Start)
@@ -75,15 +75,16 @@ class AudioRecognitionControllerTest {
     @Test
     fun closeReturnsFeatureToIdle() = runTest {
         val repository = object : AudioRecognitionRepository {
-  override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> = emptyList()
-  override fun cancel() = Unit
+            override suspend fun recognize(onEvent: (AudioRecognitionEvent) -> Unit): List<RecognizedSong> = emptyList()
+
+            override fun cancel() = Unit
         }
         val controller = createRecognitionFeatureController(
-  repository = repository,
-  scope = this,
-  isPlaybackActive = { false },
-  pausePlayback = {},
-  initialState = RecognitionUiState.Cancelled,
+            repository = repository,
+            scope = this,
+            isPlaybackActive = { false },
+            pausePlayback = {},
+            initialState = RecognitionUiState.Cancelled,
         )
 
         controller.dispatch(RecognitionAction.Close)
