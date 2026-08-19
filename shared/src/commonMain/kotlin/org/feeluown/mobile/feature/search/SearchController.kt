@@ -37,6 +37,30 @@ interface SearchFeatureController {
     fun searchText(text: String, providerId: String?)
 }
 
+/**
+ * Composition-root factory. The aggregate provider repository is adapted here so the feature
+ * implementation itself remains dependent on [ProviderSearchRepository].
+ */
+fun createSearchFeatureController(
+    providerRepository: ProviderMusicRepository,
+    localRepository: LocalMusicRepository,
+    scope: CoroutineScope,
+    providerIdsForSearch: () -> List<String>,
+    providerExists: (String) -> Boolean,
+    openSearch: () -> Unit,
+    onPreferencesChanged: (SearchScope, String?) -> Unit,
+    initialState: SearchUiState = SearchUiState(),
+): SearchFeatureController = SearchController(
+    providerRepository = ProviderSearchRepositoryView(providerRepository),
+    localRepository = localRepository,
+    scope = scope,
+    providerIdsForSearch = providerIdsForSearch,
+    providerExists = providerExists,
+    openSearch = openSearch,
+    onPreferencesChanged = onPreferencesChanged,
+    initialState = initialState,
+)
+
 /** Owns search state and search-specific operations. */
 internal class SearchController private constructor(
     private val providerRepository: ProviderSearchRepository,
