@@ -159,6 +159,9 @@ private class IosAppContainer(
     }
     private val playbackQueueStore = IosPlaybackQueueStore()
     private val resourceCacheRepository = IosResourceCacheRepository()
+    private val debugLogFeatureController: DebugLogFeatureController by lazy {
+        createDebugLogFeatureController(NoOpDebugLogRepository, scope)
+    }
     private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)
     private val recognitionController: RecognitionFeatureController by lazy {
         createRecognitionFeatureController(
@@ -242,6 +245,7 @@ private class IosAppContainer(
         providerTrackActionPort = controller.providerTrackActionPort,
         localMusicActionPort = controller.localMusicActionPort,
         replacementActionPort = controller.replacementActionPort,
+        debugLogFeatureController = debugLogFeatureController,
         searchController = searchController,
         recognitionController = recognitionController,
         searchAppPort = searchAppPort,

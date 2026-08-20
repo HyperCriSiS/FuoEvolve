@@ -1,6 +1,9 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Owns provider/local playlist mutations initiated from the now-playing surface. */
@@ -22,6 +25,9 @@ internal class PlaylistActionController(
     private val setMessage: (String) -> Unit,
     private val onError: (Throwable) -> Unit,
 ) : PlaylistActionPort {
+    private val mutableFeedback = MutableStateFlow<String?>(null)
+    override val feedback: StateFlow<String?> = mutableFeedback.asStateFlow()
+
     override fun canAddTrackToPlaylist(track: MusicTrack): Boolean =
         canAddTrackToProviderPlaylist(track) || canAddTrackToLocalPlaylist(track)
 
@@ -103,20 +109,20 @@ internal class PlaylistActionController(
                     if (result.success) {
                         val feedback = result.message.ifBlank { "已添加到：${playlist.title}" }
                         setMessage(feedback)
-                        state.playlistOperationFeedback = feedback
+                        updateFeedback(feedback)
                         closePlaylistTargetPicker()
                         refreshAfterProviderMutation(playlist.providerId)
                     } else {
                         state.playlistOperationError = result.message.ifBlank { "添加失败" }
                         setMessage(state.playlistOperationError.orEmpty())
-                        state.playlistOperationFeedback = state.playlistOperationError
+                        updateFeedback(state.playlistOperationError)
                     }
                 }
                 .onFailure {
                     val feedback = playlistMutationErrorMessage(it, playlist.providerId)
                     state.playlistOperationError = feedback
                     onError(it)
-                    state.playlistOperationFeedback = feedback
+                    updateFeedback(feedback)
                 }
             setLoading(false)
         }
@@ -146,22 +152,33 @@ internal class PlaylistActionController(
                         updateSelectedPlaylistTracks(selectedPlaylistTracks().filterNot { it.id == track.id })
                         val feedback = result.message.ifBlank { "已从歌单移除：${track.title}" }
                         setMessage(feedback)
-                        state.playlistOperationFeedback = feedback
+                        updateFeedback(feedback)
                         refreshAfterProviderMutation(playlist.providerId)
                     } else {
                         val error = result.message.ifBlank { "移除失败" }
                         updateSelectedPlaylistError(error)
                         setMessage(error)
-                        state.playlistOperationFeedback = error
+                        updateFeedback(error)
                     }
                 }
                 .onFailure {
                     val feedback = playlistMutationErrorMessage(it, playlist.providerId)
                     onError(it)
-                    state.playlistOperationFeedback = feedback
+                    updateFeedback(feedback)
                 }
             setLoading(false)
         }
+    }
+
+    override fun dismissFeedback(feedback: String) {
+        if (mutableFeedback.value == feedback) {
+            updateFeedback(null)
+        }
+    }
+
+    private fun updateFeedback(feedback: String?) {
+        state.playlistOperationFeedback = feedback
+        mutableFeedback.value = feedback
     }
 
     private fun trackProviderId(track: MusicTrack): String? =

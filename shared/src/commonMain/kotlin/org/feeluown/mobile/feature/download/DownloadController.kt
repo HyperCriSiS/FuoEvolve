@@ -1,7 +1,15 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+data class DownloadManagerUiState(
+    val tasks: List<DownloadTask> = emptyList(),
+    val queueFeedback: String? = null,
+)
 
 internal class DownloadController(
     private val providerRepository: ProviderMusicRepository,
@@ -18,12 +26,15 @@ internal class DownloadController(
     private val setMessage: (String) -> Unit,
     private val onError: (Throwable) -> Unit,
 ) : DownloadActionPort {
+    private val mutableManagerState = MutableStateFlow(DownloadManagerUiState())
+    override val managerState: StateFlow<DownloadManagerUiState> = mutableManagerState.asStateFlow()
+
     private val offlineLibraryCoordinator = OfflineLibraryControllerCoordinator(
         scope = scope,
         downloadRepository = downloadRepository,
         localRepository = localRepository,
-        onDownloadStates = { state.states = it },
-        onDownloadTasks = { state.tasks = it },
+        onDownloadStates = { states -> state.states = states },
+        onDownloadTasks = ::updateTasks,
         hasLocalMusicPermission = { localMusicController.hasPermission },
         shouldShowLocalMusicLoading = isLocalMusicSectionActive,
         refreshLocalMusic = localMusicController::refresh,
@@ -36,8 +47,10 @@ internal class DownloadController(
         offlineLibraryCoordinator.start()
     }
 
-    fun dismissQueueFeedback(feedback: String) {
-        if (state.queueFeedback == feedback) state.queueFeedback = null
+    override fun dismissQueueFeedback(feedback: String) {
+        if (state.queueFeedback == feedback) {
+            updateQueueFeedback(null)
+        }
     }
 
     fun onParallelismChange(value: Int) {
@@ -48,7 +61,7 @@ internal class DownloadController(
 
     override fun download(track: MusicTrack) {
         if (track.sourceType != TrackSourceType.Provider) return
-        state.queueFeedback = "已加入下载队列：${track.title}"
+        updateQueueFeedback("已加入下载队列：${track.title}")
         scope.launch {
             runCatching {
                 val payload = providerRepository.resolve(
@@ -64,13 +77,13 @@ internal class DownloadController(
         }
     }
 
-    fun pause(taskId: String) = runAction { downloadRepository.pause(taskId) }
+    override fun pause(taskId: String) = runAction { downloadRepository.pause(taskId) }
 
-    fun resume(taskId: String) = runAction { downloadRepository.resume(taskId) }
+    override fun resume(taskId: String) = runAction { downloadRepository.resume(taskId) }
 
-    fun retry(taskId: String) = runAction { downloadRepository.retry(taskId) }
+    override fun retry(taskId: String) = runAction { downloadRepository.retry(taskId) }
 
-    fun deleteTask(taskId: String, deleteFile: Boolean) = runAction {
+    override fun deleteTask(taskId: String, deleteFile: Boolean) = runAction {
         downloadRepository.deleteTask(taskId, deleteFile)
     }
 
@@ -91,6 +104,16 @@ internal class DownloadController(
     }
 
     fun deleteDownloaded(track: MusicTrack) = deleteDownload(track)
+
+    private fun updateTasks(tasks: List<DownloadTask>) {
+        state.tasks = tasks
+        mutableManagerState.value = mutableManagerState.value.copy(tasks = tasks)
+    }
+
+    private fun updateQueueFeedback(feedback: String?) {
+        state.queueFeedback = feedback
+        mutableManagerState.value = mutableManagerState.value.copy(queueFeedback = feedback)
+    }
 
     private fun runAction(action: suspend () -> Unit) {
         scope.launch {

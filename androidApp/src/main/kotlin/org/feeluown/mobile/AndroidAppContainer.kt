@@ -148,6 +148,10 @@ internal class AndroidAppContainer(
         )
     }
 
+    private val debugLogFeatureController: DebugLogFeatureController by lazy {
+        createDebugLogFeatureController(debugLogRepository, appScope)
+    }
+
     private val audioRecognitionRepository: AndroidAudioRecognitionRepository by lazy {
         AndroidAudioRecognitionRepository(context)
     }
@@ -228,6 +232,7 @@ internal class AndroidAppContainer(
             providerTrackActionPort = wiredController.providerTrackActionPort,
             localMusicActionPort = wiredController.localMusicActionPort,
             replacementActionPort = wiredController.replacementActionPort,
+            debugLogFeatureController = debugLogFeatureController,
             searchController = searchController,
             recognitionController = recognitionController,
             searchAppPort = searchAppPort,

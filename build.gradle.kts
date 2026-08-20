@@ -19,7 +19,10 @@ val migratedControllerBoundaryFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppFeaturePortAdapters.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRoute.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/debug/DebugLogFeatureController.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/debug/DebugLogFeatureScreen.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/download/DownloadController.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/download/DownloadManagerScreen.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/localmusic/LocalMusicController.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/localplaylist/PlaylistActionController.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/provider/ProviderTrackActionController.kt",
@@ -53,6 +56,7 @@ val platformCompositionRootFiles = listOf(
     "androidApp/src/main/kotlin/org/feeluown/mobile/AndroidAppContainer.kt",
     "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
 )
+val appRootFile = "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppRoot.kt"
 
 tasks.register("checkArchitectureBoundaries") {
     group = "verification"
@@ -82,6 +86,7 @@ tasks.register("checkArchitectureBoundaries") {
     inputs.files(commonMainSources)
     inputs.files(playbackRuntimeAdapterFiles.map(rootProject::file))
     inputs.files(platformCompositionRootFiles.map(rootProject::file))
+    inputs.file(rootProject.file(appRootFile))
 
     doLast {
         val retiredCompatViolations = retiredControllerCompatibilityFiles
@@ -119,6 +124,31 @@ tasks.register("checkArchitectureBoundaries") {
                     appendLine("FuoPlayerController leaked into migrated architecture boundaries:")
                     violations.forEach { appendLine(" - $it") }
                     append("Use feature-owned state/actions or a narrow app/playback/provider contract instead.")
+                },
+            )
+        }
+
+        val appRoot = rootProject.file(appRootFile)
+        val retiredAppShellReads = listOf(
+            "controller.isSettingsLoaded",
+            "controller.onboardingCompleted",
+            "controller.playlistOperationFeedback",
+            "controller.downloadQueueFeedback",
+            "controller.playbackFeedback",
+            "DebugLogScreen(controller",
+            "DownloadManagerScreen(controller",
+        )
+        val appRootViolations = appRoot.readLines().mapIndexedNotNull { index, line ->
+            retiredAppShellReads.firstOrNull(line::contains)?.let { legacyRead ->
+                "${appRoot.relativeTo(rootProject.projectDir).invariantSeparatorsPath}:${index + 1} ($legacyRead)"
+            }
+        }
+        if (appRootViolations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("AppRoot reintroduced retired app-shell controller reads:")
+                    appRootViolations.forEach { appendLine(" - $it") }
+                    append("Use AppUiState or the owning feature port for app-shell state and feedback.")
                 },
             )
         }
