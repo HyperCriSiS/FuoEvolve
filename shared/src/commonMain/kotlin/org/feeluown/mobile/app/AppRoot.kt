@@ -251,19 +251,19 @@ fun AppRoot(
         val snackbarHostState = remember { SnackbarHostState() }
         val downloadQueueFeedback = downloadManagerState.queueFeedback
         LaunchedEffect(playlistOperationFeedback) {
-            playlistOperationFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(playlistOperationFeedback)
-            appViewModel.playlistActionPort.dismissFeedback(playlistOperationFeedback)
+            val feedback = playlistOperationFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.playlistActionPort.dismissFeedback(feedback)
         }
         LaunchedEffect(downloadQueueFeedback) {
-            downloadQueueFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(downloadQueueFeedback)
-            appViewModel.downloadActionPort.dismissQueueFeedback(downloadQueueFeedback)
+            val feedback = downloadQueueFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.downloadActionPort.dismissQueueFeedback(feedback)
         }
         LaunchedEffect(sleepTimerFeedback) {
-            sleepTimerFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(sleepTimerFeedback)
-            appViewModel.playbackSleepTimerPort.dismissFeedback(sleepTimerFeedback)
+            val feedback = sleepTimerFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.playbackSleepTimerPort.dismissFeedback(feedback)
         }
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val layoutInfo = remember(maxWidth, maxHeight) {
