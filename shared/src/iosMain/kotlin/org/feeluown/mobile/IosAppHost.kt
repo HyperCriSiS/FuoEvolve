@@ -252,7 +252,7 @@ private class IosAppContainer(
                 settingsRepository = settingsRepository,
                 scope = scope,
             ),
-            queue = controller.playbackTransportCoordinator,
+            queuePort = controller.playbackTransportCoordinator,
             sleepTimer = ControllerPlaybackSleepTimerPort(controller),
             nowPlayingActions = ControllerNowPlayingActionPort(controller),
         )

@@ -63,7 +63,8 @@ internal class DefaultPlaybackNavigationPort(
 
 /**
  * Reads rich presentation directly from the playback engine and settings owner.
- * Transport remains in PlaybackSession and queue edits remain in PlaybackQueueCoordinator.
+ * Queue state remains owned by [PlaybackQueueUiPort] and is merged only at the transitional
+ * aggregate facade below.
  */
 class DefaultPlaybackPresentationPort(
     private val playbackEngine: PlaybackEngine,
@@ -109,16 +110,38 @@ class DefaultPlaybackPresentationPort(
     }
 }
 
+/**
+ * Resolve the rich track shown by player UI without letting stale engine metadata hide durable
+ * queue state. During a real track transition where the identities differ, the engine remains the
+ * runtime authority; for the same identity, the queue copy wins because it carries restored or
+ * locally edited metadata.
+ */
+internal fun resolvePlaybackPresentationTrack(
+    engineTrack: MusicTrack?,
+    queueTrack: MusicTrack?,
+): MusicTrack? = when {
+    engineTrack == null -> queueTrack
+    queueTrack == null -> engineTrack
+    engineTrack.id == queueTrack.id -> queueTrack
+    else -> engineTrack
+}
+
 /** Aggregate only for the current composable surface; ownership stays in the delegated ports. */
 class DefaultPlaybackUiPort(
     navigation: PlaybackNavigationPort,
-    presentation: PlaybackPresentationPort,
-    queue: PlaybackQueueUiPort,
+    private val presentation: PlaybackPresentationPort,
+    private val queuePort: PlaybackQueueUiPort,
     sleepTimer: PlaybackSleepTimerPort,
     nowPlayingActions: NowPlayingActionPort,
 ) : PlaybackUiPort,
     PlaybackNavigationPort by navigation,
     PlaybackPresentationPort by presentation,
-    PlaybackQueueUiPort by queue,
+    PlaybackQueueUiPort by queuePort,
     PlaybackSleepTimerPort by sleepTimer,
-    NowPlayingActionPort by nowPlayingActions
+    NowPlayingActionPort by nowPlayingActions {
+    override val currentTrack: MusicTrack?
+        get() = resolvePlaybackPresentationTrack(
+            engineTrack = presentation.currentTrack,
+            queueTrack = queuePort.currentQueueTrack,
+        )
+}

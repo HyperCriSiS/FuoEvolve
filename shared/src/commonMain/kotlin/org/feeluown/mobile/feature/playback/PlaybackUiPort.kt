@@ -27,6 +27,8 @@ interface PlaybackPresentationPort {
 
 /** Queue state and queue-edit actions owned by the playback feature. */
 interface PlaybackQueueUiPort {
+    /** Durable queue-owned track, including restored state and queue-side metadata updates. */
+    val currentQueueTrack: MusicTrack?
     val queue: List<MusicTrack>
     val displayUpNextCount: Int
     val isShuffleEnabled: Boolean

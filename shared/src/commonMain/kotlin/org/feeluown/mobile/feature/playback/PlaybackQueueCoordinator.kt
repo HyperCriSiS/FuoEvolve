@@ -41,6 +41,8 @@ internal class PlaybackQueueCoordinator(
     override var trackChangeDirection by mutableStateOf(TrackChangeDirection.Next)
         private set
 
+    override val currentQueueTrack: MusicTrack?
+        get() = queueState.currentTrack()
     override val queue: List<MusicTrack>
         get() = queueState.displayQueue()
     override val displayUpNextCount: Int

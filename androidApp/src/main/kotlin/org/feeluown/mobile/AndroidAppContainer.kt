@@ -240,7 +240,7 @@ internal class AndroidAppContainer(
                 settingsRepository = settingsRepository,
                 scope = appScope,
             ),
-            queue = wiredController.playbackTransportCoordinator,
+            queuePort = wiredController.playbackTransportCoordinator,
             sleepTimer = ControllerPlaybackSleepTimerPort(wiredController),
             nowPlayingActions = ControllerNowPlayingActionPort(wiredController),
         )

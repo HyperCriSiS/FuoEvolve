@@ -197,6 +197,34 @@ class PlaybackQueueCoordinatorTest {
         assertEquals(RepeatMode.OFF, coordinator.repeatMode)
     }
 
+    @Test
+    fun queueUiPortExposesRestoredAndUpdatedCurrentTrack() = runTest {
+        val first = track("main:1")
+        val restored = track("main:2").copy(title = "Restored title")
+        val queue = PlaybackQueueController().apply {
+            restore(
+                PlaybackQueueSnapshot(
+                    mainQueue = listOf(first, restored),
+                    originalMainQueue = emptyList(),
+                    upNextQueue = emptyList(),
+                    queueIndex = 1,
+                    shuffleEnabled = false,
+                    repeatMode = RepeatMode.QUEUE,
+                    isFmQueue = false,
+                    shuffleBeforeFm = null,
+                )
+            )
+        }
+        val coordinator = coordinator(queue = queue, onStart = { _, _, _ -> })
+
+        assertEquals(restored, coordinator.currentQueueTrack)
+
+        val edited = restored.copy(title = "Edited local title")
+        queue.updateCurrentTrack(edited)
+
+        assertEquals(edited, coordinator.currentQueueTrack)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.coordinator(
         queue: PlaybackQueueController,
         parts: List<PlaybackPart> = emptyList(),
