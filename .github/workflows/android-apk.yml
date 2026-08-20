@@ -66,15 +66,6 @@ jobs:
       - name: Run architecture checks, playback runtime tests, shared tests and coverage
         run: ./gradlew checkArchitectureBoundaries :playback:runtime:allTests :shared:allTests :shared:koverXmlReportDebug
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          disable_search: true
-          fail_ci_if_error: true
-          files: shared/build/reports/kover/reportDebug.xml
-          flags: unittests
-          use_oidc: true
-
   build-release-apks:
     name: Build signed multi-ABI release APK
     runs-on: ubuntu-latest
