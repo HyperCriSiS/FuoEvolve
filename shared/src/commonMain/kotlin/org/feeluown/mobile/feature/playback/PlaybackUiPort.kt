@@ -1,5 +1,12 @@
 package org.feeluown.mobile
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+private val EMPTY_FEEDBACK_FLOW: StateFlow<String?> = MutableStateFlow(null)
+private val EMPTY_DOWNLOAD_MANAGER_FLOW: StateFlow<DownloadManagerUiState> =
+    MutableStateFlow(DownloadManagerUiState())
+
 /** UI-only player navigation state. */
 interface PlaybackNavigationPort {
     val isFullPlayerOpen: Boolean
@@ -47,29 +54,43 @@ interface PlaybackQueueUiPort {
     fun addToUpNext(track: MusicTrack)
 }
 
-/** Sleep-timer state and commands owned by playback. */
+/** Sleep-timer state, commands and transient feedback owned by playback. */
 interface PlaybackSleepTimerPort {
     val sleepTimerState: SleepTimerState
+    val feedback: StateFlow<String?>
+        get() = EMPTY_FEEDBACK_FLOW
 
     fun setSleepTimerDurationMinutes(minutes: Int)
     fun clearSleepTimer()
     fun setSleepTimerToEndOfTrack()
+    fun dismissFeedback(feedback: String) = Unit
 }
 
-/** Download state/actions used by the now-playing surface. */
+/** Download state/actions used by player UI and the download-manager feature. */
 interface DownloadActionPort {
     val downloadStates: Map<String, DownloadState>
+    val managerState: StateFlow<DownloadManagerUiState>
+        get() = EMPTY_DOWNLOAD_MANAGER_FLOW
 
     fun download(track: MusicTrack)
     fun deleteDownload(track: MusicTrack)
+    fun pause(taskId: String) = Unit
+    fun resume(taskId: String) = Unit
+    fun retry(taskId: String) = Unit
+    fun deleteTask(taskId: String, deleteFile: Boolean) = Unit
+    fun dismissQueueFeedback(feedback: String) = Unit
 }
 
-/** Playlist mutations used by the now-playing surface. */
+/** Playlist mutations and their transient feedback used by the now-playing surface. */
 interface PlaylistActionPort {
+    val feedback: StateFlow<String?>
+        get() = EMPTY_FEEDBACK_FLOW
+
     fun canAddTrackToPlaylist(track: MusicTrack): Boolean
     fun openPlaylistTargetPicker(track: MusicTrack)
     fun canRemoveTrackFromSelectedPlaylist(track: MusicTrack): Boolean
     fun removeTrackFromSelectedPlaylist(track: MusicTrack)
+    fun dismissFeedback(feedback: String) = Unit
 }
 
 /** Provider-backed track navigation and dislike actions. */

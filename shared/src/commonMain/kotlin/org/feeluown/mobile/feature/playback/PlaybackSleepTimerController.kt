@@ -6,6 +6,9 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 internal class PlaybackSleepTimerController(
@@ -16,6 +19,9 @@ internal class PlaybackSleepTimerController(
     private val onFeedback: (String) -> Unit,
 ) : PlaybackSleepTimerPort, PlaybackEndSleepTimer {
     var state by mutableStateOf(SleepTimerState())
+
+    private val mutableFeedback = MutableStateFlow<String?>(null)
+    override val feedback: StateFlow<String?> = mutableFeedback.asStateFlow()
 
     override val sleepTimerState: SleepTimerState
         get() = state
@@ -33,13 +39,19 @@ internal class PlaybackSleepTimerController(
 
     override fun clearSleepTimer() = clear()
 
+    override fun dismissFeedback(feedback: String) {
+        if (mutableFeedback.value == feedback) {
+            mutableFeedback.value = null
+        }
+    }
+
     fun setDurationMinutes(minutes: Int, currentTrackId: String?) {
         if (currentTrackId == null) {
-            onFeedback("请先播放一首歌曲")
+            publishFeedback("请先播放一首歌曲")
             return
         }
         if (minutes !in SLEEP_TIMER_MIN_MINUTES..SLEEP_TIMER_MAX_MINUTES) {
-            onFeedback("请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟")
+            publishFeedback("请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟")
             return
         }
         val durationMs = minutes.toLong() * 60_000L
@@ -54,7 +66,7 @@ internal class PlaybackSleepTimerController(
 
     fun setToEndOfTrack(currentTrackId: String?) {
         if (currentTrackId == null) {
-            onFeedback("请先播放一首歌曲")
+            publishFeedback("请先播放一首歌曲")
             return
         }
         replace(
@@ -100,7 +112,7 @@ internal class PlaybackSleepTimerController(
 
     override fun completeEndOfTrack() {
         clear()
-        onFeedback("当前曲目已播放完，播放已暂停")
+        publishFeedback("当前曲目已播放完，播放已暂停")
     }
 
     private fun replace(nextState: SleepTimerState) {
@@ -116,12 +128,17 @@ internal class PlaybackSleepTimerController(
                 if (remainingMs <= 0L) {
                     clear()
                     playbackEngine.pause()
-                    onFeedback("睡眠定时已结束，播放已暂停")
+                    publishFeedback("睡眠定时已结束，播放已暂停")
                     break
                 }
                 state = state.copy(remainingMs = remainingMs)
                 delay(minOf(remainingMs, 1_000L))
             }
         }
+    }
+
+    private fun publishFeedback(message: String) {
+        mutableFeedback.value = message
+        onFeedback(message)
     }
 }

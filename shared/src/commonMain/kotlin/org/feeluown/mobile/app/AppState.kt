@@ -154,7 +154,13 @@ data class AppUiState(
     val settings: SettingsState = SettingsState(),
     val providerSessions: ProviderSessionState = ProviderSessionState(),
     val backStack: List<AppRoute> = listOf(AppRoute.Home),
-)
+) {
+    val isInitialized: Boolean
+        get() = settings.isLoaded
+
+    val onboardingCompleted: Boolean
+        get() = settings.settings.onboardingCompleted
+}
 
 sealed interface AppIntent {
     data object NavigateBack : AppIntent
@@ -176,6 +182,7 @@ class FuoAppViewModel(
     val providerTrackActionPort: ProviderTrackActionPort,
     val localMusicActionPort: LocalMusicActionPort,
     val replacementActionPort: ReplacementActionPort,
+    val debugLogFeatureController: DebugLogFeatureController,
     private val searchController: SearchFeatureController,
     private val recognitionController: RecognitionFeatureController,
     internal val searchAppPort: SearchAppPort,
@@ -236,6 +243,24 @@ class FuoAppViewModel(
     fun closeRecognition() {
         recognitionController.dispatch(RecognitionAction.Close)
         navigator.pop(AppRoute.AudioRecognition)
+    }
+
+    fun openDebugLogs() {
+        if (debugLogFeatureController.isAvailable) {
+            navigator.navigate(AppRoute.DebugLogs)
+        }
+    }
+
+    fun closeDebugLogs() {
+        navigator.pop(AppRoute.DebugLogs)
+    }
+
+    fun openDownloadManager() {
+        navigator.navigate(AppRoute.DownloadManager)
+    }
+
+    fun closeDownloadManager() {
+        navigator.pop(AppRoute.DownloadManager)
     }
 
     fun onMicrophonePermissionChange(hasPermission: Boolean) {

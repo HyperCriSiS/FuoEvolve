@@ -3,11 +3,9 @@ package org.feeluown.mobile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -37,16 +35,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DownloadManagerScreen(controller: FuoPlayerController) {
+fun DownloadManagerScreen(
+    port: DownloadActionPort,
+    onBack: () -> Unit,
+) {
+    val managerState by port.managerState.collectAsStateWithLifecycle()
     var completedLimit by remember { mutableStateOf(5) }
     var pendingDelete by remember { mutableStateOf<DownloadTask?>(null) }
     var deleteFile by remember { mutableStateOf(true) }
-    val tasks = controller.downloadTasks
-    val active = tasks.filter { it.status != DownloadTaskStatus.Completed }
-    val completed = tasks.filter { it.status == DownloadTaskStatus.Completed }
+    val active = managerState.tasks.filter { it.status != DownloadTaskStatus.Completed }
+    val completed = managerState.tasks.filter { it.status == DownloadTaskStatus.Completed }
         .sortedByDescending { it.createdAt }
 
     Scaffold(
@@ -54,7 +56,7 @@ fun DownloadManagerScreen(controller: FuoPlayerController) {
             CenterAlignedTopAppBar(
                 title = { Text("下载管理") },
                 navigationIcon = {
-                    IconButton(onClick = controller::closeDownloadManager) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -70,9 +72,9 @@ fun DownloadManagerScreen(controller: FuoPlayerController) {
                 items(active, key = { it.id }) { task ->
                     DownloadTaskCard(
                         task = task,
-                        onPause = { controller.pauseDownload(task.id) },
-                        onResume = { controller.resumeDownload(task.id) },
-                        onRetry = { controller.retryDownload(task.id) },
+                        onPause = { port.pause(task.id) },
+                        onResume = { port.resume(task.id) },
+                        onRetry = { port.retry(task.id) },
                         onDelete = { pendingDelete = task; deleteFile = true },
                     )
                 }
@@ -122,7 +124,7 @@ fun DownloadManagerScreen(controller: FuoPlayerController) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    controller.deleteDownloadTask(task.id, deleteFile || task.status != DownloadTaskStatus.Completed)
+                    port.deleteTask(task.id, deleteFile || task.status != DownloadTaskStatus.Completed)
                     pendingDelete = null
                 }) { Text("删除") }
             },

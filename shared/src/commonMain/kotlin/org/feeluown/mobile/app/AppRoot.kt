@@ -222,6 +222,9 @@ fun AppRoot(
     onRequestImagePermission: () -> Unit = {},
 ) {
     val appUiState by appViewModel.uiState.collectAsStateWithLifecycle()
+    val playlistOperationFeedback by appViewModel.playlistActionPort.feedback.collectAsStateWithLifecycle()
+    val downloadManagerState by appViewModel.downloadActionPort.managerState.collectAsStateWithLifecycle()
+    val sleepTimerFeedback by appViewModel.playbackSleepTimerPort.feedback.collectAsStateWithLifecycle()
     val controller = appViewModel.controller
     val playbackUiPort = appViewModel.playbackUiPort
     FuoTheme(
@@ -230,11 +233,11 @@ fun AppRoot(
         themePaletteStyle = appUiState.settings.settings.themePaletteStyle,
         themeColorSpec = appUiState.settings.settings.themeColorSpec,
     ) {
-        if (!controller.isSettingsLoaded) {
+        if (!appUiState.isInitialized) {
             AppInitializationLoadingScreen()
             return@FuoTheme
         }
-        if (!controller.onboardingCompleted) {
+        if (!appUiState.onboardingCompleted) {
             OnboardingScreen(
                 controller = controller,
                 onOpenProviderWebLogin = onOpenProviderWebLogin,
@@ -246,23 +249,21 @@ fun AppRoot(
             return@FuoTheme
         }
         val snackbarHostState = remember { SnackbarHostState() }
-        val playlistOperationFeedback = controller.playlistOperationFeedback
-        val downloadQueueFeedback = controller.downloadQueueFeedback
-        val playbackFeedback = controller.playbackFeedback
+        val downloadQueueFeedback = downloadManagerState.queueFeedback
         LaunchedEffect(playlistOperationFeedback) {
-            playlistOperationFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(playlistOperationFeedback)
-            controller.dismissPlaylistOperationFeedback(playlistOperationFeedback)
+            val feedback = playlistOperationFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.playlistActionPort.dismissFeedback(feedback)
         }
         LaunchedEffect(downloadQueueFeedback) {
-            downloadQueueFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(downloadQueueFeedback)
-            controller.dismissDownloadQueueFeedback(downloadQueueFeedback)
+            val feedback = downloadQueueFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.downloadActionPort.dismissQueueFeedback(feedback)
         }
-        LaunchedEffect(playbackFeedback) {
-            playbackFeedback ?: return@LaunchedEffect
-            snackbarHostState.showSnackbar(playbackFeedback)
-            controller.dismissPlaybackFeedback(playbackFeedback)
+        LaunchedEffect(sleepTimerFeedback) {
+            val feedback = sleepTimerFeedback ?: return@LaunchedEffect
+            snackbarHostState.showSnackbar(feedback)
+            appViewModel.playbackSleepTimerPort.dismissFeedback(feedback)
         }
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val layoutInfo = remember(maxWidth, maxHeight) {
@@ -355,8 +356,14 @@ fun AppRoot(
                                                 onRequestImagePermission = onRequestImagePermission,
                                                 onOpenRecognition = appViewModel::openRecognition,
                                             )
-                                            AppRoute.DebugLogs -> DebugLogScreen(controller)
-                                            AppRoute.DownloadManager -> DownloadManagerScreen(controller)
+                                            AppRoute.DebugLogs -> DebugLogFeatureScreen(
+                                                controller = appViewModel.debugLogFeatureController,
+                                                onBack = appViewModel::closeDebugLogs,
+                                            )
+                                            AppRoute.DownloadManager -> DownloadManagerScreen(
+                                                port = appViewModel.downloadActionPort,
+                                                onBack = appViewModel::closeDownloadManager,
+                                            )
                                             AppRoute.Settings -> SettingsScreenV2(
                                                 controller = controller,
                                                 themePaletteStyle = appUiState.settings.settings.themePaletteStyle,
