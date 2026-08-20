@@ -30,6 +30,22 @@ class LowRiskOwnershipTest {
     }
 
     @Test
+    fun playlistFeedbackBridgePublishesLegacyStateWritesToAppPortFlow() {
+        val state = PlaylistControllerState()
+
+        assertNull(state.playlistOperationFeedbackFlow.value)
+
+        state.playlistOperationFeedback = "歌单已新建"
+        assertEquals("歌单已新建", state.playlistOperationFeedbackFlow.value)
+
+        state.playlistOperationFeedback = "已从本地歌单移除"
+        assertEquals("已从本地歌单移除", state.playlistOperationFeedbackFlow.value)
+
+        state.playlistOperationFeedback = null
+        assertNull(state.playlistOperationFeedbackFlow.value)
+    }
+
+    @Test
     fun debugLogOwnerKeepsLoadingFilteringAndFeedbackFeatureLocal() = runTest {
         val repository = FakeDebugLogRepository(
             lines = listOf("info", "warning"),

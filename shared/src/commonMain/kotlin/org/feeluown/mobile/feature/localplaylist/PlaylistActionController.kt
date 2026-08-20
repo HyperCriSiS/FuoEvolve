@@ -1,9 +1,7 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Owns provider/local playlist mutations initiated from the now-playing surface. */
@@ -25,8 +23,7 @@ internal class PlaylistActionController(
     private val setMessage: (String) -> Unit,
     private val onError: (Throwable) -> Unit,
 ) : PlaylistActionPort {
-    private val mutableFeedback = MutableStateFlow<String?>(null)
-    override val feedback: StateFlow<String?> = mutableFeedback.asStateFlow()
+    override val feedback: StateFlow<String?> = state.playlistOperationFeedbackFlow
 
     override fun canAddTrackToPlaylist(track: MusicTrack): Boolean =
         canAddTrackToProviderPlaylist(track) || canAddTrackToLocalPlaylist(track)
@@ -171,14 +168,13 @@ internal class PlaylistActionController(
     }
 
     override fun dismissFeedback(feedback: String) {
-        if (mutableFeedback.value == feedback) {
+        if (state.playlistOperationFeedback == feedback) {
             updateFeedback(null)
         }
     }
 
     private fun updateFeedback(feedback: String?) {
         state.playlistOperationFeedback = feedback
-        mutableFeedback.value = feedback
     }
 
     private fun trackProviderId(track: MusicTrack): String? =
