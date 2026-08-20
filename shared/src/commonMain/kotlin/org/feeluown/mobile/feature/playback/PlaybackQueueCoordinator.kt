@@ -1,15 +1,18 @@
 package org.feeluown.mobile
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
  * Runtime-facing transport contract owned by the playback feature.
  *
- * Platform runtime adapters depend on this contract instead of calling the
- * legacy app-controller transport facade.
+ * The same owner also exposes queue UI state/actions so migrated player UI no longer needs the
+ * app-controller facade for queue operations.
  */
-interface PlaybackTransportCoordinator {
+interface PlaybackTransportCoordinator : PlaybackQueueUiPort {
     fun startCurrent()
     fun previous()
     fun next()
@@ -20,7 +23,7 @@ interface PlaybackTransportCoordinator {
  * durable queue state holder.
  */
 internal class PlaybackQueueCoordinator(
-    private val queue: PlaybackQueueController,
+    queue: PlaybackQueueController,
     private val scope: CoroutineScope,
     private val fallbackTrack: () -> MusicTrack?,
     private val playbackParts: () -> List<PlaybackPart>,
@@ -33,121 +36,206 @@ internal class PlaybackQueueCoordinator(
     private val setTrackChangeDirection: (TrackChangeDirection) -> Unit,
     private val setMessage: (String) -> Unit,
 ) : PlaybackTransportCoordinator {
+    private val queueState = queue
+
+    override var trackChangeDirection by mutableStateOf(TrackChangeDirection.Next)
+        private set
+
+    override val currentQueueTrack: MusicTrack?
+        get() = queueState.currentTrack()
+    override val queue: List<MusicTrack>
+        get() = queueState.displayQueue()
+    override val displayUpNextCount: Int
+        get() = queueState.upNextQueue.size
+    override val isShuffleEnabled: Boolean
+        get() = queueState.shuffleEnabled
+    override val repeatMode: RepeatMode
+        get() = queueState.repeatMode
+    override val isFmQueueActive: Boolean
+        get() = queueState.isFmQueue
 
     override fun startCurrent() {
-        (queue.currentTrack() ?: fallbackTrack())?.let { startPlayback(it, 0, null) }
+        (queueState.currentTrack() ?: fallbackTrack())?.let { startPlayback(it, 0, null) }
     }
 
     override fun next() {
-        setTrackChangeDirection(TrackChangeDirection.Next)
-        if (queue.repeatMode == RepeatMode.SINGLE) {
+        updateTrackChangeDirection(TrackChangeDirection.Next)
+        if (queueState.repeatMode == RepeatMode.SINGLE) {
             if (playPlaybackPartOffset(1, wrap = true)) return
             startCurrent()
             return
         }
         if (playPlaybackPartOffset(1)) return
-        if (queue.currentIsUpNext) {
-            queue.currentUpNextTrack = null
-            queue.currentIsUpNext = false
+        if (queueState.currentIsUpNext) {
+            queueState.currentUpNextTrack = null
+            queueState.currentIsUpNext = false
             persistQueue()
         }
-        if (queue.upNextQueue.isNotEmpty()) {
-            playUpNextIndex(0)
+        if (queueState.upNextQueue.isNotEmpty()) {
+            playUpNextIndexInternal(0, TrackChangeDirection.Next)
             return
         }
-        if (queue.mainQueue.isEmpty()) return
-        val feature = queue.queueFeature
-        if (feature != null && queue.mainQueueIndex >= queue.mainQueue.lastIndex) {
+        if (queueState.mainQueue.isEmpty()) return
+        val feature = queueState.queueFeature
+        if (feature != null && queueState.mainQueueIndex >= queueState.mainQueue.lastIndex) {
             scope.launch {
-                val nextIndex = queue.mainQueue.size
+                val nextIndex = queueState.mainQueue.size
                 val appendedCount = appendFeatureQueue(feature)
-                if (appendedCount > 0 && queue.queueFeature == feature) {
-                    playMainIndex(nextIndex)
-                } else if (queue.queueFeature == feature) {
+                if (appendedCount > 0 && queueState.queueFeature == feature) {
+                    playMainIndexInternal(nextIndex, 0, TrackChangeDirection.Next)
+                } else if (queueState.queueFeature == feature) {
                     setMessage("${feature.title} 暂无后续歌曲")
                 }
             }
             return
         }
-        val nextIndex = queue.mainQueueIndex + 1
-        if (nextIndex < queue.mainQueue.size) {
-            playMainIndex(nextIndex)
-        } else if (queue.repeatMode == RepeatMode.QUEUE) {
-            playMainIndex(0)
+        val nextIndex = queueState.mainQueueIndex + 1
+        if (nextIndex < queueState.mainQueue.size) {
+            playMainIndexInternal(nextIndex, 0, TrackChangeDirection.Next)
+        } else if (queueState.repeatMode == RepeatMode.QUEUE) {
+            playMainIndexInternal(0, 0, TrackChangeDirection.Next)
         }
     }
 
     override fun previous() {
-        setTrackChangeDirection(TrackChangeDirection.Previous)
-        if (queue.repeatMode == RepeatMode.SINGLE) {
+        updateTrackChangeDirection(TrackChangeDirection.Previous)
+        if (queueState.repeatMode == RepeatMode.SINGLE) {
             if (playPlaybackPartOffset(-1, wrap = true)) return
             startCurrent()
             return
         }
         if (playPlaybackPartOffset(-1)) return
-        if (queue.currentIsUpNext) {
-            queue.currentUpNextTrack = null
-            queue.currentIsUpNext = false
+        if (queueState.currentIsUpNext) {
+            queueState.currentUpNextTrack = null
+            queueState.currentIsUpNext = false
             persistQueue()
-            playMainIndex(queue.mainQueueIndex.coerceAtLeast(0))
+            playMainIndexInternal(
+                queueState.mainQueueIndex.coerceAtLeast(0),
+                0,
+                TrackChangeDirection.Previous,
+            )
             return
         }
-        if (queue.mainQueue.isEmpty()) return
-        val previousIndex = queue.mainQueueIndex - 1
+        if (queueState.mainQueue.isEmpty()) return
+        val previousIndex = queueState.mainQueueIndex - 1
         if (previousIndex >= 0) {
-            playMainIndex(previousIndex)
-        } else if (queue.repeatMode == RepeatMode.QUEUE) {
-            playMainIndex(queue.mainQueue.lastIndex)
+            playMainIndexInternal(previousIndex, 0, TrackChangeDirection.Previous)
+        } else if (queueState.repeatMode == RepeatMode.QUEUE) {
+            playMainIndexInternal(queueState.mainQueue.lastIndex, 0, TrackChangeDirection.Previous)
         }
     }
 
-    fun playQueueIndex(index: Int) {
-        setTrackChangeDirection(TrackChangeDirection.Next)
-        val currentOffset = if (queue.currentTrack() != null) 1 else 0
+    override fun playQueueIndex(index: Int) {
+        updateTrackChangeDirection(TrackChangeDirection.Next)
+        val currentOffset = if (queueState.currentTrack() != null) 1 else 0
         if (index == 0 && currentOffset == 1) {
             startCurrent()
             return
         }
         val pendingOffset = currentOffset
-        val pendingEnd = pendingOffset + queue.upNextQueue.size
+        val pendingEnd = pendingOffset + queueState.upNextQueue.size
         when {
             index in pendingOffset until pendingEnd -> {
-                playUpNextIndex(index - pendingOffset)
+                playUpNextIndexInternal(index - pendingOffset, TrackChangeDirection.Next)
             }
             else -> {
                 val mainStartIndex = when {
-                    queue.currentIsUpNext -> queue.mainQueueIndex + 1
-                    queue.mainQueueIndex >= 0 -> queue.mainQueueIndex + 1
+                    queueState.currentIsUpNext -> queueState.mainQueueIndex + 1
+                    queueState.mainQueueIndex >= 0 -> queueState.mainQueueIndex + 1
                     else -> 0
                 }
                 val mainIndex = mainStartIndex + (index - pendingEnd)
-                playMainIndex(mainIndex)
+                playMainIndexInternal(mainIndex, 0, TrackChangeDirection.Next)
             }
         }
     }
 
-    fun playPlaybackPart(index: Int) {
+    override fun playPlaybackPart(index: Int) {
         val parts = playbackParts()
         if (index !in parts.indices) return
-        queue.currentTrack()?.let { startPlayback(it, 0, index) }
+        queueState.currentTrack()?.let { startPlayback(it, 0, index) }
     }
 
+    override fun removeFromQueue(track: MusicTrack) {
+        if (queueState.currentUpNextTrack?.id == track.id) {
+            queueState.currentUpNextTrack = null
+            queueState.currentIsUpNext = false
+            publishQueueMutation()
+            return
+        }
+        val upNextIndex = queueState.upNextQueue.indexOfFirst { it.id == track.id }
+        if (upNextIndex >= 0) {
+            queueState.upNextQueue = queueState.upNextQueue.filterIndexed { index, _ -> index != upNextIndex }
+            publishQueueMutation()
+            return
+        }
+        val mainIndex = queueState.mainQueue.indexOfFirst { it.id == track.id }
+        if (mainIndex < 0) return
+        queueState.mainQueue = queueState.mainQueue.filterIndexed { index, _ -> index != mainIndex }
+        queueState.originalMainQueue = queueState.originalMainQueue.filterNot { it.id == track.id }
+        queueState.mainQueueIndex = when {
+            queueState.mainQueue.isEmpty() -> -1
+            mainIndex < queueState.mainQueueIndex -> queueState.mainQueueIndex - 1
+            mainIndex == queueState.mainQueueIndex -> queueState.mainQueueIndex.coerceAtMost(queueState.mainQueue.lastIndex)
+            else -> queueState.mainQueueIndex
+        }
+        publishQueueMutation()
+    }
+
+    override fun clearQueue() {
+        val currentTrack = queueState.currentTrack()
+        queueState.mainQueue = emptyList()
+        queueState.originalMainQueue = emptyList()
+        queueState.upNextQueue = emptyList()
+        queueState.currentUpNextTrack = null
+        queueState.currentIsUpNext = false
+        queueState.mainQueueIndex = -1
+        queueState.queueFeature = null
+        queueState.queuePlaylistId = null
+        queueState.isFmQueue = false
+        queueState.shuffleBeforeFm = null
+        if (currentTrack != null) {
+            queueState.mainQueue = listOf(currentTrack)
+            queueState.mainQueueIndex = 0
+        }
+        publishQueueMutation()
+        setMessage(if (currentTrack != null) "已清空播放队列" else "播放队列已清空")
+    }
+
+    override fun addToUpNext(track: MusicTrack) {
+        queueState.upNextQueue = queueState.upNextQueue + track
+        publishQueueMutation()
+        setMessage("已加入接下来播放：${track.title}")
+    }
+
+    override fun toggleShuffle() {
+        if (queueState.isFmQueue) return
+        if (queueState.shuffleEnabled) {
+            disableShuffle()
+        } else {
+            enableShuffle()
+        }
+        publishQueueMutation()
+    }
+
+    override fun toggleRepeat() {
+        if (queueState.isFmQueue) return
+        queueState.repeatMode = when (queueState.repeatMode) {
+            RepeatMode.OFF -> RepeatMode.QUEUE
+            RepeatMode.QUEUE -> RepeatMode.SINGLE
+            RepeatMode.SINGLE -> RepeatMode.OFF
+        }
+        publishQueueMutation()
+    }
+
+    /** Compatibility entry point used by legacy feature callers; explicit selection moves forward. */
     fun playMainIndex(index: Int, skippedUnavailableCount: Int = 0) {
-        val track = queue.mainQueue.getOrNull(index) ?: return
-        queue.currentUpNextTrack = null
-        queue.currentIsUpNext = false
-        queue.mainQueueIndex = index
-        startPlayback(track, skippedUnavailableCount, null)
+        playMainIndexInternal(index, skippedUnavailableCount, TrackChangeDirection.Next)
     }
 
+    /** Compatibility entry point used by unavailable/recovery flows; up-next is a forward move. */
     fun playUpNextIndex(index: Int) {
-        val track = queue.upNextQueue.getOrNull(index) ?: return
-        queue.upNextQueue = queue.upNextQueue.filterIndexed { itemIndex, _ -> itemIndex != index }
-        queue.currentUpNextTrack = track
-        queue.currentIsUpNext = true
-        updateQueueState()
-        persistQueue()
-        startPlayback(track, 0, null)
+        playUpNextIndexInternal(index, TrackChangeDirection.Next)
     }
 
     fun playPlaybackPartOffset(offset: Int, wrap: Boolean = false): Boolean {
@@ -160,8 +248,75 @@ internal class PlaybackQueueCoordinator(
         } else {
             nextPartIndex.takeIf { it in parts.indices } ?: return false
         }
-        queue.currentTrack()?.let { startPlayback(it, 0, targetPartIndex) } ?: return false
+        queueState.currentTrack()?.let { startPlayback(it, 0, targetPartIndex) } ?: return false
         return true
+    }
+
+    private fun playMainIndexInternal(
+        index: Int,
+        skippedUnavailableCount: Int,
+        direction: TrackChangeDirection,
+    ) {
+        val track = queueState.mainQueue.getOrNull(index) ?: return
+        updateTrackChangeDirection(direction)
+        queueState.currentUpNextTrack = null
+        queueState.currentIsUpNext = false
+        queueState.mainQueueIndex = index
+        startPlayback(track, skippedUnavailableCount, null)
+    }
+
+    private fun playUpNextIndexInternal(index: Int, direction: TrackChangeDirection) {
+        val track = queueState.upNextQueue.getOrNull(index) ?: return
+        updateTrackChangeDirection(direction)
+        queueState.upNextQueue = queueState.upNextQueue.filterIndexed { itemIndex, _ -> itemIndex != index }
+        queueState.currentUpNextTrack = track
+        queueState.currentIsUpNext = true
+        publishQueueMutation()
+        startPlayback(track, 0, null)
+    }
+
+    private fun updateTrackChangeDirection(direction: TrackChangeDirection) {
+        trackChangeDirection = direction
+        setTrackChangeDirection(direction)
+    }
+
+    private fun publishQueueMutation() {
+        updateQueueState()
+        persistQueue()
+    }
+
+    private fun enableShuffle() {
+        if (queueState.isFmQueue || queueState.mainQueue.size <= 1) {
+            queueState.shuffleEnabled = !queueState.isFmQueue
+            return
+        }
+        val current = queueState.currentTrack()
+        queueState.originalMainQueue = if (queueState.originalMainQueue.isEmpty()) {
+            queueState.mainQueue
+        } else {
+            queueState.originalMainQueue
+        }
+        val currentInMain = current?.let { track ->
+            queueState.mainQueue.firstOrNull { it.id == track.id }
+        }
+        val shuffledRest = queueState.mainQueue.filterNot { it.id == currentInMain?.id }.shuffled()
+        queueState.mainQueue = listOfNotNull(currentInMain) + shuffledRest
+        queueState.mainQueueIndex = currentInMain?.let { 0 }
+            ?: queueState.mainQueueIndex.coerceIn(0, queueState.mainQueue.lastIndex)
+        queueState.shuffleEnabled = true
+    }
+
+    private fun disableShuffle() {
+        val current = queueState.currentTrack()
+        if (queueState.originalMainQueue.isNotEmpty()) {
+            queueState.mainQueue = queueState.originalMainQueue
+            queueState.mainQueueIndex = current?.let { track ->
+                queueState.mainQueue.indexOfFirst { it.id == track.id }
+            }?.takeIf { it >= 0 }
+                ?: queueState.mainQueueIndex.coerceIn(-1, queueState.mainQueue.lastIndex)
+        }
+        queueState.originalMainQueue = emptyList()
+        queueState.shuffleEnabled = false
     }
 
     private fun Int.floorMod(divisor: Int): Int = ((this % divisor) + divisor) % divisor

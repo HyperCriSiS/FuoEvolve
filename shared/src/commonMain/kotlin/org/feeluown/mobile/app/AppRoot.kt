@@ -223,7 +223,7 @@ fun AppRoot(
 ) {
     val appUiState by appViewModel.uiState.collectAsStateWithLifecycle()
     val controller = appViewModel.controller
-    val playbackUiPort = remember(controller) { ControllerPlaybackUiPort(controller) }
+    val playbackUiPort = appViewModel.playbackUiPort
     FuoTheme(
         themeMode = appUiState.settings.settings.themeMode,
         themeColorScheme = appUiState.settings.settings.themeColorScheme,
