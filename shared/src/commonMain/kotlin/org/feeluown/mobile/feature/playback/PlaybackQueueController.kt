@@ -1,5 +1,9 @@
 package org.feeluown.mobile
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
 /**
  * Owns the durable playback-queue state independently from the app controller.
  *
@@ -7,18 +11,18 @@ package org.feeluown.mobile
  * type remains the single source of truth for queue state and persistence.
  */
 internal class PlaybackQueueController {
-    var mainQueue: List<MusicTrack> = emptyList()
-    var originalMainQueue: List<MusicTrack> = emptyList()
-    var upNextQueue: List<MusicTrack> = emptyList()
-    var mainQueueIndex: Int = -1
-    var currentUpNextTrack: MusicTrack? = null
-    var currentIsUpNext: Boolean = false
-    var queueFeature: ProviderFeature? = null
-    var queuePlaylistId: String? = null
-    var shuffleEnabled: Boolean = false
-    var repeatMode: RepeatMode = RepeatMode.QUEUE
-    var isFmQueue: Boolean = false
-    var shuffleBeforeFm: Boolean? = null
+    var mainQueue by mutableStateOf<List<MusicTrack>>(emptyList())
+    var originalMainQueue by mutableStateOf<List<MusicTrack>>(emptyList())
+    var upNextQueue by mutableStateOf<List<MusicTrack>>(emptyList())
+    var mainQueueIndex by mutableStateOf(-1)
+    var currentUpNextTrack by mutableStateOf<MusicTrack?>(null)
+    var currentIsUpNext by mutableStateOf(false)
+    var queueFeature by mutableStateOf<ProviderFeature?>(null)
+    var queuePlaylistId by mutableStateOf<String?>(null)
+    var shuffleEnabled by mutableStateOf(false)
+    var repeatMode by mutableStateOf(RepeatMode.QUEUE)
+    var isFmQueue by mutableStateOf(false)
+    var shuffleBeforeFm by mutableStateOf<Boolean?>(null)
 
     fun currentTrack(): MusicTrack? =
         if (currentIsUpNext) currentUpNextTrack else mainQueue.getOrNull(mainQueueIndex)

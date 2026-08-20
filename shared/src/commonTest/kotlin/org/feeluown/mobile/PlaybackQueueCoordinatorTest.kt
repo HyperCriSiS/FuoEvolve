@@ -107,11 +107,104 @@ class PlaybackQueueCoordinatorTest {
         assertEquals(0, queue.mainQueueIndex)
     }
 
+    @Test
+    fun explicitMainSelectionResetsDirectionAfterPrevious() = runTest {
+        val first = track("main:1")
+        val second = track("main:2")
+        val queue = PlaybackQueueController().apply {
+            mainQueue = listOf(first, second)
+            mainQueueIndex = 1
+            repeatMode = RepeatMode.OFF
+        }
+        val coordinator = coordinator(queue = queue, onStart = { _, _, _ -> })
+
+        coordinator.previous()
+        assertEquals(TrackChangeDirection.Previous, coordinator.trackChangeDirection)
+
+        coordinator.playMainIndex(1)
+        assertEquals(TrackChangeDirection.Next, coordinator.trackChangeDirection)
+    }
+
+    @Test
+    fun queueUiPortAddsUpNextAndPublishesQueueMutation() = runTest {
+        val current = track("main:1")
+        val queued = track("upnext:1")
+        val queue = PlaybackQueueController().apply {
+            mainQueue = listOf(current)
+            mainQueueIndex = 0
+        }
+        var updateCount = 0
+        var persistCount = 0
+        var message = ""
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { _, _, _ -> },
+            updateQueueState = { updateCount += 1 },
+            persistQueue = { persistCount += 1 },
+            setMessage = { message = it },
+        )
+
+        coordinator.addToUpNext(queued)
+
+        assertEquals(listOf(current, queued), coordinator.queue)
+        assertEquals(1, coordinator.displayUpNextCount)
+        assertEquals(1, updateCount)
+        assertEquals(1, persistCount)
+        assertEquals("已加入接下来播放：${queued.title}", message)
+    }
+
+    @Test
+    fun queueUiPortClearKeepsCurrentTrackAndResetsModes() = runTest {
+        val current = track("main:1")
+        val next = track("main:2")
+        val queued = track("upnext:1")
+        val queue = PlaybackQueueController().apply {
+            mainQueue = listOf(current, next)
+            originalMainQueue = mainQueue
+            mainQueueIndex = 0
+            upNextQueue = listOf(queued)
+            shuffleEnabled = true
+            isFmQueue = true
+            shuffleBeforeFm = true
+        }
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { _, _, _ -> },
+        )
+
+        coordinator.clearQueue()
+
+        assertEquals(listOf(current), queue.mainQueue)
+        assertEquals(0, queue.mainQueueIndex)
+        assertTrue(queue.upNextQueue.isEmpty())
+        assertFalse(queue.isFmQueue)
+        assertEquals(null, queue.shuffleBeforeFm)
+        assertEquals(listOf(current), coordinator.queue)
+    }
+
+    @Test
+    fun queueUiPortRepeatCyclesWithoutController() = runTest {
+        val queue = PlaybackQueueController().apply {
+            repeatMode = RepeatMode.OFF
+        }
+        val coordinator = coordinator(queue = queue, onStart = { _, _, _ -> })
+
+        coordinator.toggleRepeat()
+        assertEquals(RepeatMode.QUEUE, coordinator.repeatMode)
+        coordinator.toggleRepeat()
+        assertEquals(RepeatMode.SINGLE, coordinator.repeatMode)
+        coordinator.toggleRepeat()
+        assertEquals(RepeatMode.OFF, coordinator.repeatMode)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.coordinator(
         queue: PlaybackQueueController,
         parts: List<PlaybackPart> = emptyList(),
         currentPartIndex: Int = -1,
         onStart: (MusicTrack, Int, Int?) -> Unit,
+        persistQueue: () -> Unit = {},
+        updateQueueState: () -> Unit = {},
+        setMessage: (String) -> Unit = {},
     ): PlaybackQueueCoordinator = PlaybackQueueCoordinator(
         queue = queue,
         scope = this,
@@ -120,11 +213,11 @@ class PlaybackQueueCoordinatorTest {
         currentPartIndex = { currentPartIndex },
         startPlayback = onStart,
         stopPlayback = {},
-        persistQueue = {},
-        updateQueueState = {},
+        persistQueue = persistQueue,
+        updateQueueState = updateQueueState,
         appendFeatureQueue = { 0 },
         setTrackChangeDirection = {},
-        setMessage = {},
+        setMessage = setMessage,
     )
 
     private fun track(id: String): MusicTrack = MusicTrack(

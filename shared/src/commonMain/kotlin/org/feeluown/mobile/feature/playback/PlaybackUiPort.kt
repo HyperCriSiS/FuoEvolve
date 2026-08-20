@@ -1,51 +1,68 @@
 package org.feeluown.mobile
 
-/**
- * UI-specific playback presentation/actions that intentionally stay outside [PlaybackSession].
- *
- * [PlaybackSession] remains the authoritative transport/timing/status contract. This port carries
- * richer app models and presentation operations needed by FullPlayer/queue/replacement UI while
- * those owners are still being extracted from the legacy coordinator.
- */
-interface PlaybackUiPort {
+/** UI-only player navigation state. */
+interface PlaybackNavigationPort {
     val isFullPlayerOpen: Boolean
     val isQueueOpen: Boolean
-    val trackChangeDirection: TrackChangeDirection
+
+    fun openFullPlayer()
+    fun closeFullPlayer()
+    fun toggleQueue()
+}
+
+/** Rich playback presentation that intentionally stays outside the narrow PlaybackSession API. */
+interface PlaybackPresentationPort {
     val currentTrack: MusicTrack?
-    val queue: List<MusicTrack>
     val playbackParts: List<PlaybackPart>
     val currentPartIndex: Int
-    val displayUpNextCount: Int
-    val isShuffleEnabled: Boolean
-    val repeatMode: RepeatMode
-    val isFmQueueActive: Boolean
-    val sleepTimerState: SleepTimerState
     val lyricFontSize: LyricFontSize
     val themeMode: ThemeMode
     val dynamicCoverColorEnabled: Boolean
     val audioQuality: String?
     val audioFormatInfo: AudioFormatInfo?
     val audioDecoderInfo: AudioDecoderInfo?
-    val replacementCandidateState: ReplacementCandidateState
-    val downloadStates: Map<String, DownloadState>
 
-    fun openFullPlayer()
-    fun closeFullPlayer()
-    fun toggleQueue()
     fun seekTo(positionMs: Long)
+}
+
+/** Queue state and queue-edit actions owned by the playback feature. */
+interface PlaybackQueueUiPort {
+    val queue: List<MusicTrack>
+    val displayUpNextCount: Int
+    val isShuffleEnabled: Boolean
+    val repeatMode: RepeatMode
+    val isFmQueueActive: Boolean
+    val trackChangeDirection: TrackChangeDirection
+
     fun toggleShuffle()
     fun toggleRepeat()
-
     fun clearQueue()
     fun playQueueIndex(index: Int)
     fun removeFromQueue(track: MusicTrack)
     fun playPlaybackPart(index: Int)
+    fun addToUpNext(track: MusicTrack)
+}
+
+/**
+ * Temporary narrow bridge for sleep-timer state.
+ *
+ * End-of-track completion is still coupled to the legacy engine-ended compatibility loop. The
+ * bridge is kept separate so that dependency does not pull the rest of player UI back through the
+ * app controller.
+ */
+interface PlaybackSleepTimerPort {
+    val sleepTimerState: SleepTimerState
 
     fun setSleepTimerDurationMinutes(minutes: Int)
     fun clearSleepTimer()
     fun setSleepTimerToEndOfTrack()
+}
 
-    fun addToUpNext(track: MusicTrack)
+/** Cross-feature actions surfaced from the now-playing UI. */
+interface NowPlayingActionPort {
+    val replacementCandidateState: ReplacementCandidateState
+    val downloadStates: Map<String, DownloadState>
+
     fun download(track: MusicTrack)
     fun deleteDownload(track: MusicTrack)
     fun openTrackArtist(track: MusicTrack)
@@ -63,3 +80,17 @@ interface PlaybackUiPort {
     fun selectReplacementCandidate(track: MusicTrack, candidate: ReplacementCandidate)
     fun openReplacementTrackDetail(track: MusicTrack)
 }
+
+/**
+ * Transitional composition facade for the existing player composables.
+ *
+ * Ownership is deliberately split across the narrow ports above; no controller should implement
+ * this interface directly. Once the player composables accept their narrow dependencies directly,
+ * this aggregate can be removed without changing the owners underneath it.
+ */
+interface PlaybackUiPort :
+    PlaybackNavigationPort,
+    PlaybackPresentationPort,
+    PlaybackQueueUiPort,
+    PlaybackSleepTimerPort,
+    NowPlayingActionPort

@@ -231,11 +231,27 @@ internal class AndroidAppContainer(
         }
     }
 
+    private val playbackUiPort: PlaybackUiPort by lazy {
+        val wiredController = controller
+        DefaultPlaybackUiPort(
+            navigation = controllerMirroredPlaybackNavigationPort(wiredController, appScope),
+            presentation = DefaultPlaybackPresentationPort(
+                playbackEngine = playbackEngine,
+                settingsRepository = settingsRepository,
+                scope = appScope,
+            ),
+            queue = wiredController.playbackTransportCoordinator,
+            sleepTimer = ControllerPlaybackSleepTimerPort(wiredController),
+            nowPlayingActions = ControllerNowPlayingActionPort(wiredController),
+        )
+    }
+
     val appViewModel: FuoAppViewModel by lazy {
         val wiredController = controller
         FuoAppViewModel(
             controller = wiredController,
             playbackSession = playbackSession,
+            playbackUiPort = playbackUiPort,
             searchController = searchController,
             recognitionController = recognitionController,
             searchAppPort = searchAppPort,

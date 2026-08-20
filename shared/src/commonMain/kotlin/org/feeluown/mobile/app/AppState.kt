@@ -167,6 +167,7 @@ sealed interface AppIntent {
 class FuoAppViewModel(
     val controller: FuoPlayerController,
     val playbackSession: PlaybackSession,
+    val playbackUiPort: PlaybackUiPort,
     private val searchController: SearchFeatureController,
     private val recognitionController: RecognitionFeatureController,
     internal val searchAppPort: SearchAppPort,
@@ -232,7 +233,11 @@ class FuoAppViewModel(
 
     fun dispatch(intent: AppIntent) {
         when (intent) {
-            AppIntent.NavigateBack -> controller.navigateBack()
+            AppIntent.NavigateBack -> when {
+                playbackUiPort.isQueueOpen -> playbackUiPort.toggleQueue()
+                playbackUiPort.isFullPlayerOpen -> playbackUiPort.closeFullPlayer()
+                else -> controller.navigateBack()
+            }
             is AppIntent.UpdateSettings -> viewModelScope.launch {
                 settingsRepository.update(intent.transform)
             }

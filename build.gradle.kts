@@ -19,9 +19,11 @@ val migratedControllerBoundaryFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRoute.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackComposition.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackQueueController.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackQueueCoordinator.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackStartCoordinator.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackUiPort.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackUiOwners.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/PlaybackUiComposition.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/RuntimeMiniPlayer.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/playback/RuntimeFullPlayer.kt",
@@ -31,6 +33,7 @@ val migratedControllerBoundaryFiles = listOf(
 val retiredControllerCompatibilityFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRouteCompat.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRouteCompat.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/app/ControllerPlaybackUiPort.kt",
     "androidApp/src/main/kotlin/org/feeluown/mobile/ControllerPlaybackSession.kt",
 )
 val playbackRuntimeAdapterFiles = listOf(

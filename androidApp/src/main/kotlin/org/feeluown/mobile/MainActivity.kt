@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
                 pendingLocalPlaylistExport = null
             }
 
-            val controllerHandlesBack = controller.isFullPlayerOpen ||
+            val controllerHandlesBack = appViewModel.playbackUiPort.isFullPlayerOpen ||
                 controller.isVideoFullscreen ||
                 controller.settingsLoginProviderId != null ||
                 controller.selectedLocalMusicCollection != null ||
@@ -204,11 +204,7 @@ class MainActivity : ComponentActivity() {
             BackHandler(
                 enabled = controllerHandlesBack || useLegacyPageBack,
             ) {
-                if (controllerHandlesBack) {
-                    controller.navigateBack()
-                } else {
-                    appViewModel.dispatch(AppIntent.NavigateBack)
-                }
+                appViewModel.dispatch(AppIntent.NavigateBack)
             }
 
             LaunchedEffect(Unit) {

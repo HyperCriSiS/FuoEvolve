@@ -29,7 +29,7 @@ The first migration stage groups existing source files physically while keeping 
 - `core/model/`: legacy shared models during migration; stable new architecture models belong in `:core:model`.
 - `core/ui/`: design system and cross-feature UI/platform abstractions.
 - `feature/<name>/`: feature-local controller, state and UI.
-- `feature/playback/`: playback composition, queue/start coordinators, and the remaining presentation compatibility adapters during migration.
+- `feature/playback/`: playback composition, queue/start coordinators, playback UI owners and the remaining narrow compatibility ports during migration.
 
 Provider protocol implementations remain under `provider/<provider>` because they already have a useful adapter boundary.
 
@@ -43,9 +43,17 @@ Queue and start orchestration now have explicit playback owners. `PlaybackQueueC
 
 Pre-engine start failures are published through `PlaybackStartFailureSource`. Android and iOS runtime adapters combine that playback-owned failure with engine state, so the old iOS compatibility path that read coordinator/controller `Error` state has been retired.
 
-MiniPlayer and FullPlayer read authoritative playback state/transport from `PlaybackSession`. FullPlayer-specific rich presentation and feature operations that do not belong in the narrow session contract—queue editing, seek/shuffle/repeat, sleep timer, rich `MusicTrack` metadata, downloads and replacement actions—flow through `PlaybackUiPort`. `ControllerPlaybackUiPort` is an app-shell compatibility adapter only; migrated playback UI does not depend on `FuoPlayerController` directly.
+MiniPlayer and FullPlayer read authoritative playback state/transport from `PlaybackSession`. Rich player UI concerns are now split into narrow contracts instead of being owned by one controller-backed UI adapter:
 
-Legacy feature screens that still call the old `MiniPlayer(controller)` signature are outside the playback UI boundary. That signature remains only as a feature-shell compatibility call site while those screens are migrated; playback state and transport themselves remain session-owned.
+- `PlaybackNavigationPort` owns FullPlayer / queue-overlay visibility.
+- `PlaybackPresentationPort` reads rich engine presentation plus lyric/theme settings and owns seek normalization.
+- `PlaybackQueueUiPort` is implemented by `PlaybackQueueCoordinator` and owns queue display/edit, shuffle/repeat and transition direction for player UI.
+- `PlaybackSleepTimerPort` isolates the remaining sleep-timer compatibility until end-of-track completion leaves the legacy engine-ended loop.
+- `NowPlayingActionPort` isolates cross-feature download, playlist, provider-detail, local-metadata and replacement actions until those feature owners are extracted.
+
+`ControllerPlaybackUiPort` has been retired. `PlaybackUiPort` remains only as a transitional composition facade that delegates to the narrow owners above so the existing FullPlayer implementation can migrate incrementally without putting those responsibilities back into one owner. Android and iOS construct the same owner graph in their composition roots.
+
+Legacy feature screens that still call the old `MiniPlayer(controller)` signature are temporarily supported by a two-flag navigation mirror at the composition edge. The actual player overlay source remains `PlaybackNavigationPort`; the mirror exists only so old MiniPlayer entry points and controller-owned detail actions can open/close the same overlay during feature migration.
 
 ## Repository dependencies
 
@@ -57,11 +65,11 @@ Platform dependency construction is isolated in platform containers. Android use
 
 Search and Recognition are composed through explicit `SearchAppPort` / `RecognitionAppPort` contracts. Their routes and feature UI no longer accept `FuoPlayerController`. During the remaining migration, platform composition roots may adapt still-centralized controller operations to those ports; the dependency must not leak back into the feature or app route contract.
 
-Android playback uses `AndroidPlaybackRuntime.kt` and iOS uses `IosPlaybackRuntime.kt` as composition-edge adapters. Both receive `PlaybackTransportCoordinator` and `PlaybackStartFailureSource` explicitly; they no longer dispatch runtime transport through controller methods or inspect controller error state. `FuoAppViewModel` exposes the resulting app-scoped `PlaybackSession`, and `AppRoot` supplies it to playback UI through `LocalPlaybackSession`. `AppRoot` also supplies the temporary `PlaybackUiPort` adapter separately so the stable runtime API does not expand into app-specific UI operations.
+Android playback uses `AndroidPlaybackRuntime.kt` and iOS uses `IosPlaybackRuntime.kt` as composition-edge adapters. Both receive `PlaybackTransportCoordinator` and `PlaybackStartFailureSource` explicitly; they no longer dispatch runtime transport through controller methods or inspect controller error state. `FuoAppViewModel` exposes the resulting app-scoped `PlaybackSession` plus the composed playback UI facade, and `AppRoot` supplies them directly. `AppRoot` no longer constructs a controller-backed playback UI adapter.
 
 ## Architecture fitness check
 
-`checkArchitectureBoundaries` rejects new `FuoPlayerController` code dependencies inside migrated Search/Recognition boundaries, the entire `:playback:runtime` common source tree, `PlaybackQueueCoordinator`, `PlaybackStartCoordinator`, `PlaybackUiPort`, playback composition contracts, controller-free MiniPlayer/FullPlayer implementations, app-port contracts/routes, and Android playback service/Lyricon integration. It also rejects reintroduction of the retired Search/Recognition route shims and `ControllerPlaybackSession` adapter, plus direct `controller.toggle()/previous()/next()` calls in platform playback runtime adapters.
+`checkArchitectureBoundaries` rejects new `FuoPlayerController` code dependencies inside migrated Search/Recognition boundaries, the entire `:playback:runtime` common source tree, `PlaybackQueueController`, `PlaybackQueueCoordinator`, `PlaybackStartCoordinator`, `PlaybackUiPort`, `PlaybackUiOwners`, playback composition contracts, controller-free MiniPlayer/FullPlayer implementations, app-port contracts/routes, and Android playback service/Lyricon integration. It also rejects reintroduction of the retired Search/Recognition route shims, `ControllerPlaybackSession`, and `ControllerPlaybackUiPort`, plus direct `controller.toggle()/previous()/next()` calls in platform playback runtime adapters.
 
 ## Migration rule
 
