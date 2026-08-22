@@ -18,6 +18,7 @@ rootProject.name = "FuoEvolve"
 
 include(":core:model")
 include(":feature:recognition")
+include(":feature:search")
 include(":playback:api")
 include(":playback:runtime")
 include(":provider:api")

@@ -1,6 +1,6 @@
 # FuoEvolve architecture boundaries
 
-This document records the compile-time and ownership boundaries after the P2 migration.
+This document records the compile-time and ownership boundaries after the P2 ownership migration and the P3-A Search module extraction.
 
 ## Dependency direction
 
@@ -16,11 +16,14 @@ The current compile-time modules are:
 - `:provider:api`: provider-neutral capability contracts.
 - `:playback:api`: app-scoped playback session contracts.
 - `:playback:runtime`: controller-free playback session state/transport implementation.
-- `:feature:recognition`: the first physical feature implementation module; it owns recognition contracts, state and controller tests and depends only on coroutines/Kotlin.
+- `:feature:recognition`: physical Recognition feature module containing recognition contracts, state, controller and tests.
+- `:feature:search`: physical Search feature module containing search actions, state ownership, repository/result ports, orchestration and tests.
 - `:shared`: app shell, shared UI/design primitives, platform-neutral adapters and feature implementations whose lower-level contracts still live in the shared graph.
 - `:androidApp`: Android composition root and platform adapters.
 
-Recognition is intentionally the first physical feature module because its dependency graph is already one-way. Search, Download, Local Music and other feature implementations remain logically owned inside `:shared` until their aggregate repository dependencies can be moved to lower-level API contracts. Creating modules that depend back on `:shared` is forbidden because that would only distribute the monolith instead of establishing a real boundary.
+Recognition and Search are physical modules with one-way dependency graphs. Search deliberately keeps application domain models out of the module by parameterizing the feature owner over track/provider-result types and accepting narrow local/provider search ports plus result operations. `:shared` binds `MusicTrack`, `ProviderSearchResults`, `ProviderMusicRepository` and `LocalMusicRepository` at the composition boundary; `:feature:search` does not depend on those shared types.
+
+Download, Local Music and other feature implementations remain logically owned inside `:shared` until their aggregate repository dependencies can be moved behind similarly narrow lower-level boundaries. Creating modules that depend back on `:shared` is forbidden because that would only distribute the monolith instead of establishing a real boundary.
 
 ## P2 ownership result
 
@@ -39,6 +42,23 @@ Major migrated ownership boundaries include:
 - playback queue/start/lifecycle/replacement/sleep-timer owners.
 
 Legacy Home, Settings, Onboarding, provider-detail and controller-backed player screens were deleted after their owner-based replacements became active.
+
+## P3-A Search physical boundary
+
+Search is now implemented by `:feature:search` rather than by mutable controller/state implementations under `:shared`.
+
+The physical module owns:
+
+- `SearchScope`, `ProviderSearchTab` and `SearchAction`;
+- `SearchFeatureState` and `SearchFeatureOwner`;
+- `SearchProviderRepository` and `SearchLocalRepository` feature ports;
+- `SearchResultOperations`, which supplies the minimal result semantics needed for merge/count/error handling;
+- query/scope/provider selection, recognized-song query construction, loading/feedback state and search orchestration;
+- Search owner tests.
+
+The module is generic over the application's track and provider-result types. This keeps it independent from `MusicTrack`, `ProviderSearchResults`, `ProviderMusicRepository`, `LocalMusicRepository` and `RecognizedSong`, while preserving the existing app-facing `SearchUiState` / `SearchFeatureController` names through compile-time type aliases in `SearchFeatureBindings.kt`.
+
+`SearchFeatureBindings.kt` is an integration boundary, not a second state owner: it adapts application repositories into Search ports, supplies result operations and maps Recognition into primitive title/artist inputs. Search UI remains in `:shared` because it uses shared Compose/design-system and cross-feature actions.
 
 ## Playback
 
@@ -60,9 +80,9 @@ The retired broad `PlaybackUiPort` aggregate and all controller-backed playback 
 
 ## Provider and feature dependencies
 
-New features should depend on narrow provider capability interfaces such as `ProviderSearchRepository`, `ProviderPlaybackRepository`, `ProviderAuthRepository` and provider-neutral API contracts instead of the aggregate `ProviderMusicRepository` wherever the boundary has already been extracted.
+New features should depend on narrow provider capability interfaces or feature-owned ports instead of the aggregate `ProviderMusicRepository` wherever a lower-level boundary has been extracted.
 
-A feature may move to its own Gradle module only when all of its dependencies point to `core/api` or other lower-level modules. If moving it would require `feature -> shared`, leave it logically isolated in `:shared` and extract the missing contract first.
+A feature may move to its own Gradle module only when all of its dependencies point to core/api contracts, other lower-level modules, or generic feature-owned ports that are bound by the app composition layer. If moving it would require `feature -> shared`, leave it logically isolated in `:shared` and extract the missing contract first.
 
 ## Composition roots
 
@@ -72,18 +92,20 @@ Android uses `AndroidAppContainer`; iOS uses `IosAppContainer`. They compose fea
 
 ## Architecture fitness checks
 
-`checkArchitectureBoundaries` is a P2 regression gate. It now:
+`checkArchitectureBoundaries` is the regression gate for the completed ownership/module boundaries. It now:
 
 - scans all production Kotlin roots in `core`, `feature`, `playback`, `provider`, `shared` and `androidApp` and rejects any executable `FuoPlayerController` reference;
-- rejects reintroduction of the retired controller facade, monolithic controller test and legacy controller-backed screens/bridges;
+- rejects reintroduction of retired controller facades, monolithic controller tests and legacy controller-backed screens/bridges;
 - rejects retired playback aggregate/compatibility adapters and controller transport calls;
 - rejects platform-local Search/Recognition forwarding bridges;
-- requires the physical `:feature:recognition` boundary to remain present.
+- requires the physical `:feature:recognition` and `:feature:search` boundaries to remain present;
+- rejects `:feature:search -> :shared`;
+- rejects direct Search-module references to `ProviderMusicRepository`, `LocalMusicRepository`, `ProviderSearchResults`, `MusicTrack` or `RecognizedSong`.
 
-Android and iOS CI both run `:feature:recognition:allTests` in addition to playback/shared tests and the architecture gate.
+Android and iOS CI run both feature module test suites in addition to playback/shared tests and the architecture gate.
 
 ## Migration rule
 
 Architecture changes remain behavior-preserving and independently reviewable: move ownership first, introduce narrow ports at cross-feature boundaries, then remove compatibility surfaces only after the last production caller has migrated. Physical module extraction is the final step for a feature, not a substitute for ownership isolation.
 
-The P2 sequencing and closeout criteria are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md).
+P2 sequencing and closeout criteria are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md). P3 continues physical module extraction in the order documented there, with Search completed first and Download next.
