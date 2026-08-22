@@ -48,7 +48,7 @@ class SettingsFeatureTest {
         assertTrue(fixture.owner.state.value.statusBarLyricsAvailable)
         assertEquals(1, fixture.localMusic.refreshCount)
         assertEquals("music" to false, fixture.localMusic.directoryChange)
-        assertEquals(30, fixture.localMusic.minDurationSeconds)
+        assertEquals(30, fixture.localMusic.recordedMinDurationSeconds)
         assertEquals("缓存已清理", fixture.owner.state.value.feedback)
         assertFalse(fixture.owner.state.value.isBusy)
 
@@ -165,7 +165,7 @@ class SettingsFeatureTest {
         override val state = MutableStateFlow("local")
         var refreshCount = 0
         var directoryChange: Pair<String, Boolean>? = null
-        var minDurationSeconds = 0
+        var recordedMinDurationSeconds = 0
         override fun refreshDirectories() {
             refreshCount += 1
         }
@@ -173,7 +173,7 @@ class SettingsFeatureTest {
             directoryChange = directoryId to enabled
         }
         override fun setMinDurationSeconds(value: Int) {
-            minDurationSeconds = value
+            recordedMinDurationSeconds = value
         }
     }
 
