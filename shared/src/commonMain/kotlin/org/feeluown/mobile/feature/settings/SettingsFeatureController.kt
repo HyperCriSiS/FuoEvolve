@@ -14,26 +14,8 @@ import org.feeluown.mobile.feature.settings.SettingsNavigationPort as CoreNaviga
 import org.feeluown.mobile.feature.settings.SettingsPreferencesPort as CorePreferencesPort
 import org.feeluown.mobile.feature.settings.createSettingsFeatureOwner
 
-data class SettingsUiPreferences(
-    val themeMode: ThemeMode = ThemeMode.System,
-    val themeColorScheme: ThemeColorScheme = ThemeColorScheme.Dynamic,
-    val themePaletteStyle: ThemePaletteStyle = ThemePaletteStyle.Expressive,
-    val themeColorSpec: ThemeColorSpec = ThemeColorSpec.Expressive_2025,
-    val wifiAudioQualityPolicy: AudioQualityPolicy = DEFAULT_WIFI_AUDIO_QUALITY_POLICY,
-    val cellularAudioQualityPolicy: AudioQualityPolicy = DEFAULT_CELLULAR_AUDIO_QUALITY_POLICY,
-    val unavailablePlaybackPolicy: UnavailablePlaybackPolicy = DEFAULT_UNAVAILABLE_PLAYBACK_POLICY,
-    val smartReplacementMinScore: Double = DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
-    val pauseOnOtherAppPlayback: Boolean = DEFAULT_PAUSE_ON_OTHER_APP_PLAYBACK,
-    val lyricFontSize: LyricFontSize = LyricFontSize.Small,
-    val statusBarLyricsEnabled: Boolean = false,
-    val dynamicCoverColorEnabled: Boolean = false,
-    val downloadParallelism: Int = DEFAULT_DOWNLOAD_PARALLELISM,
-    val audioCacheLimitMb: Int = DEFAULT_AUDIO_CACHE_LIMIT_MB,
-    val imageCacheLimitMb: Int = DEFAULT_IMAGE_CACHE_LIMIT_MB,
-)
-
 data class SettingsFeatureUiState(
-    val settings: SettingsUiPreferences = SettingsUiPreferences(),
+    val settingsState: SettingsState = SettingsState(),
     val cacheUsage: CacheUsage = CacheUsage(),
     val downloadTasks: List<DownloadTask> = emptyList(),
     val localMusic: LocalMusicUiState = LocalMusicUiState(viewMode = LocalMusicViewMode.All),
@@ -41,11 +23,17 @@ data class SettingsFeatureUiState(
     val debugLogViewerAvailable: Boolean = false,
     val isBusy: Boolean = false,
     val feedback: String? = null,
-)
+) {
+    val settings: AppSettings get() = settingsState.settings
+}
 
 interface SettingsFeatureController {
     val uiState: StateFlow<SettingsFeatureUiState>
     fun close()
+
+    /** Compatibility entry point while Settings Compose callers migrate to explicit actions. */
+    fun update(transform: (AppSettings) -> AppSettings)
+
     fun setThemeMode(value: ThemeMode)
     fun setThemeColorScheme(value: ThemeColorScheme)
     fun setThemePaletteStyle(value: ThemePaletteStyle)
@@ -117,14 +105,37 @@ fun createSettingsFeatureController(
         debugLogViewerAvailable = debugLogViewerAvailable,
         scope = scope,
     )
-    return BoundSettingsFeatureController(owner)
+    return BoundSettingsFeatureController(owner, settingsRepository)
 }
 
 private class BoundSettingsFeatureController(
     private val owner: BoundCoreOwner,
+    private val settingsRepository: AppSettingsRepository,
 ) : SettingsFeatureController {
-    override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapState(BoundCoreState::toUiState)
+    override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapState(::toUiState)
+
     override fun close() = owner.close()
+
+    override fun update(transform: (AppSettings) -> AppSettings) {
+        val current = settingsRepository.state.value.settings
+        val next = transform(current)
+        if (next.themeMode != current.themeMode) owner.setThemeMode(next.themeMode)
+        if (next.themeColorScheme != current.themeColorScheme) owner.setThemeColorScheme(next.themeColorScheme)
+        if (next.themePaletteStyle != current.themePaletteStyle) owner.setThemePaletteStyle(next.themePaletteStyle)
+        if (next.themeColorSpec != current.themeColorSpec) owner.setThemeColorSpec(next.themeColorSpec)
+        if (next.wifiAudioQualityPolicy != current.wifiAudioQualityPolicy) owner.setWifiAudioQualityPolicy(next.wifiAudioQualityPolicy)
+        if (next.cellularAudioQualityPolicy != current.cellularAudioQualityPolicy) owner.setCellularAudioQualityPolicy(next.cellularAudioQualityPolicy)
+        if (next.unavailablePlaybackPolicy != current.unavailablePlaybackPolicy) owner.setUnavailablePlaybackPolicy(next.unavailablePlaybackPolicy)
+        if (next.smartReplacementMinScore != current.smartReplacementMinScore) owner.setSmartReplacementMinScore(next.smartReplacementMinScore)
+        if (next.pauseOnOtherAppPlayback != current.pauseOnOtherAppPlayback) owner.setPauseOnOtherAppPlayback(next.pauseOnOtherAppPlayback)
+        if (next.lyricFontSize != current.lyricFontSize) owner.setLyricFontSize(next.lyricFontSize)
+        if (next.statusBarLyricsEnabled != current.statusBarLyricsEnabled) owner.setStatusBarLyricsEnabled(next.statusBarLyricsEnabled)
+        if (next.dynamicCoverColorEnabled != current.dynamicCoverColorEnabled) owner.setDynamicCoverColorEnabled(next.dynamicCoverColorEnabled)
+        if (next.downloadParallelism != current.downloadParallelism) owner.setDownloadParallelism(next.downloadParallelism)
+        if (next.audioCacheLimitMb != current.audioCacheLimitMb) owner.setAudioCacheLimitMb(next.audioCacheLimitMb)
+        if (next.imageCacheLimitMb != current.imageCacheLimitMb) owner.setImageCacheLimitMb(next.imageCacheLimitMb)
+    }
+
     override fun setThemeMode(value: ThemeMode) = owner.setThemeMode(value)
     override fun setThemeColorScheme(value: ThemeColorScheme) = owner.setThemeColorScheme(value)
     override fun setThemePaletteStyle(value: ThemePaletteStyle) = owner.setThemePaletteStyle(value)
@@ -149,6 +160,17 @@ private class BoundSettingsFeatureController(
     override fun setStatusBarLyricsAvailability(available: Boolean) = owner.setStatusBarLyricsAvailability(available)
     override fun setStatusBarLyricsEnabled(enabled: Boolean) = owner.setStatusBarLyricsEnabled(enabled)
     override fun dismissFeedback(feedback: String) = owner.dismissFeedback(feedback)
+
+    private fun toUiState(state: BoundCoreState): SettingsFeatureUiState = SettingsFeatureUiState(
+        settingsState = settingsRepository.state.value,
+        cacheUsage = state.cacheUsage,
+        downloadTasks = state.downloadTasks,
+        localMusic = state.localMusic,
+        statusBarLyricsAvailable = state.statusBarLyricsAvailable,
+        debugLogViewerAvailable = state.debugLogViewerAvailable,
+        isBusy = state.isBusy,
+        feedback = state.feedback,
+    )
 }
 
 private class BoundSettingsPreferencesPort(
@@ -240,35 +262,6 @@ private fun AppSettings.toCorePreferences(): BoundCorePreferences = CorePreferen
     downloadParallelism = downloadParallelism,
     audioCacheLimitMb = audioCacheLimitMb,
     imageCacheLimitMb = imageCacheLimitMb,
-)
-
-private fun BoundCorePreferences.toUiPreferences(): SettingsUiPreferences = SettingsUiPreferences(
-    themeMode = themeMode,
-    themeColorScheme = themeColorScheme,
-    themePaletteStyle = themePaletteStyle,
-    themeColorSpec = themeColorSpec,
-    wifiAudioQualityPolicy = wifiAudioQualityPolicy,
-    cellularAudioQualityPolicy = cellularAudioQualityPolicy,
-    unavailablePlaybackPolicy = unavailablePlaybackPolicy,
-    smartReplacementMinScore = smartReplacementMinScore,
-    pauseOnOtherAppPlayback = pauseOnOtherAppPlayback,
-    lyricFontSize = lyricFontSize,
-    statusBarLyricsEnabled = statusBarLyricsEnabled,
-    dynamicCoverColorEnabled = dynamicCoverColorEnabled,
-    downloadParallelism = downloadParallelism,
-    audioCacheLimitMb = audioCacheLimitMb,
-    imageCacheLimitMb = imageCacheLimitMb,
-)
-
-private fun BoundCoreState.toUiState(): SettingsFeatureUiState = SettingsFeatureUiState(
-    settings = preferences.toUiPreferences(),
-    cacheUsage = cacheUsage,
-    downloadTasks = downloadTasks,
-    localMusic = localMusic,
-    statusBarLyricsAvailable = statusBarLyricsAvailable,
-    debugLogViewerAvailable = debugLogViewerAvailable,
-    isBusy = isBusy,
-    feedback = feedback,
 )
 
 private class MappedStateFlow<Source, Target>(
