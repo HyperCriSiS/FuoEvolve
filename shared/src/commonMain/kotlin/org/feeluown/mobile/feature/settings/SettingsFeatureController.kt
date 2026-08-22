@@ -25,7 +25,7 @@ typealias SettingsFeaturePreferencesUiState = CorePreferences<
 >
 
 data class SettingsFeatureUiState(
-    val settings: SettingsFeaturePreferencesUiState,
+    val settings: AppSettings = AppSettings(),
     val cacheUsage: CacheUsage = CacheUsage(),
     val downloadTasks: List<DownloadTask> = emptyList(),
     val localMusic: LocalMusicUiState = LocalMusicUiState(viewMode = LocalMusicViewMode.All),
@@ -39,7 +39,7 @@ interface SettingsFeatureController {
     val uiState: StateFlow<SettingsFeatureUiState>
     fun close()
 
-    /** Narrow compatibility transform; the aggregate AppSettings contract no longer crosses this boundary. */
+    /** Narrow compatibility transform; AppSettings is not accepted as a write contract. */
     fun update(transform: (SettingsFeaturePreferencesUiState) -> SettingsFeaturePreferencesUiState)
 
     fun setThemeMode(value: ThemeMode)
@@ -105,11 +105,12 @@ fun createSettingsFeatureController(
         debugLogViewerAvailable = debugLogViewerAvailable,
         scope = scope,
     )
-    return BoundSettingsFeatureController(owner)
+    return BoundSettingsFeatureController(owner, settingsRepository)
 }
 
 private class BoundSettingsFeatureController(
     private val owner: BoundCoreOwner,
+    private val settingsRepository: AppSettingsRepository,
 ) : SettingsFeatureController {
     override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapSettingsState(::toUiState)
 
@@ -161,7 +162,7 @@ private class BoundSettingsFeatureController(
     override fun dismissFeedback(feedback: String) = owner.dismissFeedback(feedback)
 
     private fun toUiState(state: BoundCoreState): SettingsFeatureUiState = SettingsFeatureUiState(
-        settings = state.preferences,
+        settings = settingsRepository.state.value.settings,
         cacheUsage = state.cacheUsage,
         downloadTasks = state.downloadTasks,
         localMusic = state.localMusic,
