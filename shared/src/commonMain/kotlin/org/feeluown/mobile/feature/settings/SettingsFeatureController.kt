@@ -112,7 +112,7 @@ private class BoundSettingsFeatureController(
     private val owner: BoundCoreOwner,
     private val settingsRepository: AppSettingsRepository,
 ) : SettingsFeatureController {
-    override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapState(::toUiState)
+    override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapSettingsState(::toUiState)
 
     override fun close() = owner.close()
 
@@ -184,7 +184,7 @@ private class BoundSettingsPreferencesPort(
     UnavailablePlaybackPolicy,
     LyricFontSize,
 > {
-    override val state: StateFlow<BoundCorePreferences> = repository.state.mapState { it.settings.toCorePreferences() }
+    override val state: StateFlow<BoundCorePreferences> = repository.state.mapSettingsState { it.settings.toCorePreferences() }
 
     override suspend fun awaitPreferences(): BoundCorePreferences = repository.awaitSettings().toCorePreferences()
     override suspend fun setThemeMode(value: ThemeMode) = repository.update { it.copy(themeMode = value) }
@@ -264,7 +264,7 @@ private fun AppSettings.toCorePreferences(): BoundCorePreferences = CorePreferen
     imageCacheLimitMb = imageCacheLimitMb,
 )
 
-private class MappedStateFlow<Source, Target>(
+private class SettingsMappedStateFlow<Source, Target>(
     private val source: StateFlow<Source>,
     private val transform: (Source) -> Target,
 ) : StateFlow<Target> {
@@ -282,8 +282,8 @@ private class MappedStateFlow<Source, Target>(
     )
 }
 
-private fun <Source, Target> StateFlow<Source>.mapState(transform: (Source) -> Target): StateFlow<Target> =
-    MappedStateFlow(this, transform)
+private fun <Source, Target> StateFlow<Source>.mapSettingsState(transform: (Source) -> Target): StateFlow<Target> =
+    SettingsMappedStateFlow(this, transform)
 
 internal suspend fun applySavedAudioQualityPolicies(
     loadSettings: suspend () -> AppSettings,
