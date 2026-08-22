@@ -149,3 +149,27 @@ private fun ProviderDisplaySection.toCore(): CoreProviderCatalogDisplaySection =
     ProviderDisplaySection.Mine -> CoreProviderCatalogDisplaySection.Mine
     ProviderDisplaySection.Replace -> CoreProviderCatalogDisplaySection.Replace
 }
+
+/** Compatibility forwarding while shared characterization tests migrate to the physical feature boundary. */
+internal fun normalizedEnabledProviderIds(
+    configuredProviderIds: Set<String>,
+    availableProviderIds: Collection<String>,
+): Set<String> = org.feeluown.mobile.feature.providercatalog.normalizedEnabledProviderIds(
+    configuredProviderIds = configuredProviderIds,
+    availableProviderIds = availableProviderIds,
+    defaultEnabledProviderIds = DEFAULT_ENABLED_PROVIDER_IDS,
+)
+
+/** Compatibility forwarding while shared characterization tests migrate to the physical feature boundary. */
+internal fun updatedEnabledProviderIds(
+    current: Set<String>,
+    providerId: String,
+    enabled: Boolean,
+    availableProviderIds: Collection<String>,
+): Set<String> = org.feeluown.mobile.feature.providercatalog.updatedEnabledProviderIds(
+    current = current,
+    providerId = providerId,
+    enabled = enabled,
+    availableProviderIds = availableProviderIds,
+    defaultEnabledProviderIds = DEFAULT_ENABLED_PROVIDER_IDS,
+)
