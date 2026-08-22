@@ -32,6 +32,8 @@ kotlin {
             api(project(":feature:localplaylist"))
             api(project(":feature:localmusic"))
             api(project(":feature:download"))
+            api(project(":feature:providercatalog"))
+            api(project(":feature:providerauth"))
             implementation(project(":provider:api"))
             implementation(compose.runtime)
             implementation(compose.foundation)

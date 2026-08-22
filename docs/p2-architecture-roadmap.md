@@ -90,13 +90,25 @@ The previous direct `DownloadController -> LocalMusicFeatureController` coordina
 
 Shared Compose screens remain in `:shared`; the physical modules own business state and orchestration rather than UI styling/navigation composition. Android and iOS CI run all three feature suites, and the offline feature fitness check rejects reintroducing the retired shared owners or leaking concrete shared dependencies into the modules.
 
+### P3-C: Provider catalog and authentication
+
+Completed as two independent physical feature boundaries delivered together:
+
+- `:feature:providercatalog` owns provider discovery, enabled-provider normalization, ordering, section visibility, capability/feature catalog state and session rehydration orchestration;
+- `:feature:providerauth` owns authentication input state, cookie/header login orchestration, device-code OAuth polling/cancellation/timeout state, OAuth import decisions, logout/refresh feedback and feature tests.
+
+Both modules use feature-owned ports and generic provider/auth/session types. Concrete `ProviderMusicRepository`, `ProviderSessionRepository`, `AppSettingsRepository`, provider models, YTMusic JSON parsing and platform notification/clipboard helpers are adapted only in `:shared`.
+
+Provider catalog and authentication remain separate owners/modules even though they ship in one change set, preventing the provider area from becoming another aggregate controller. The provider boundary fitness check rejects `feature -> shared` back-dependencies, reintroduction of retired shared Catalog/Auth owners, and concrete application/provider types leaking into either module.
+
+Android and iOS CI run both provider feature suites alongside shared tests.
+
 ### Follow-up module candidates
 
-Recommended order after the offline-library cluster:
+Recommended order after Provider Catalog/Auth:
 
-1. provider catalog and provider authentication, which are narrower than provider detail;
-2. provider detail ownership once catalog/auth contracts are stable;
-3. Settings/onboarding after cross-feature settings contracts have narrowed;
-4. Home last, because it is the application-level feature aggregation surface.
+1. provider detail as one physical feature module containing destination-specific owners;
+2. Settings/onboarding after cross-feature settings contracts have narrowed;
+3. Home last, because it is the application-level feature aggregation surface.
 
 Every extraction must preserve the one-way dependency rule. A feature that still requires `:shared` remains logically isolated there until the missing contract is extracted; creating a Gradle module that depends back on `:shared` is explicitly not considered successful modularization.

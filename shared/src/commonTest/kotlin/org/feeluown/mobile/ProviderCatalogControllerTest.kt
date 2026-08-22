@@ -4,9 +4,31 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProviderCatalogControllerTest {
+    @Test
+    fun catalogUiStateKeepsStableDefaultConstructor() {
+        val state = ProviderCatalogUiState()
+
+        assertTrue(state.availableProviders.isEmpty())
+        assertTrue(state.providers.isEmpty())
+        assertTrue(state.features.isEmpty())
+        assertTrue(state.capabilities.isEmpty())
+        assertEquals(ProviderSessionState(), state.sessions)
+        assertEquals(DEFAULT_ENABLED_PROVIDER_IDS, state.enabledProviderIds)
+        assertEquals(DEFAULT_PROVIDER_ORDER_IDS, state.providerOrderIds)
+        assertTrue(state.searchProviderIds.isEmpty())
+        assertTrue(state.recommendProviderIds.isEmpty())
+        assertTrue(state.exploreProviderIds.isEmpty())
+        assertTrue(state.mineProviderIds.isEmpty())
+        assertTrue(state.replacementProviderIds.isEmpty())
+        assertFalse(state.isLoading)
+        assertNull(state.errorMessage)
+    }
+
     @Test
     fun refreshRehydratesPersistedProviderLoginState() = runTest {
         val providerRepository = PersistedLoginProviderRepository()
