@@ -35,6 +35,8 @@ kotlin {
             api(project(":feature:providercatalog"))
             api(project(":feature:providerauth"))
             api(project(":feature:providerdetail"))
+            api(project(":feature:settings"))
+            api(project(":feature:onboarding"))
             implementation(project(":provider:api"))
             implementation(compose.runtime)
             implementation(compose.foundation)

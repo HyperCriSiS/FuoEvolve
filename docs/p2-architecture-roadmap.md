@@ -121,11 +121,24 @@ Each destination consumes its own feature-owned capability port. The module is g
 
 The Provider Detail fitness check rejects `feature -> shared` dependencies, concrete app/provider types leaking into the physical module, reintroduction of the previous shared `DefaultProvider*DetailController` owners, and accidental conversion of the five stable UiState classes to typealiases. Android and iOS CI run `:feature:providerdetail:allTests` alongside shared characterization coverage.
 
+### P3-E: Settings and Onboarding
+
+Completed as two independent physical feature boundaries delivered in the same change set.
+
+`:feature:settings` owns the Settings state machine and runtime coordination for playback/audio-quality preferences, appearance preferences, download parallelism, cache limits/cleanup, local-music settings actions, navigation requests and transient feedback. Its preference input is a feature-owned snapshot containing only fields used by Settings rather than the aggregate `AppSettings` object.
+
+Cross-feature collaborators are expressed through narrow ports for preferences, audio-quality application, downloads, cache, local music and navigation. The physical module therefore has no dependency on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `DownloadRepository`, `ResourceCacheRepository`, `LocalMusicFeatureController`, `AppNavigator` or `:shared`.
+
+`:shared` maps application repositories and models to those ports. The old `SettingsController` / `SettingsControllerState` owners and their unused debug/cache helpers are retired. The former `SettingsFeatureController.update(AppSettings -> AppSettings)` write surface is also retired: the temporary Compose transform accepts only the Settings-owned preference snapshot, so unrelated application settings cannot cross the Settings write boundary.
+
+`:feature:onboarding` separately owns startup provider selection, Bilibili replacement-only policy, validation, provider enablement/persistence transaction handling, rollback, completion and transient feedback. It consumes only a narrow provider-preference snapshot plus provider-runtime operations; concrete `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `ProviderInfo` and `UnavailablePlaybackPolicy` remain in the shared binding layer.
+
+Onboarding continues to reuse the Settings owner for theme and audio-quality pages instead of duplicating those settings into its own module. Provider authentication remains owned by `:feature:providerauth`. This keeps Onboarding as a startup coordinator rather than a new Settings/provider mega-controller.
+
+Settings and Onboarding each have an architecture fitness gate rejecting `feature -> shared` dependencies and concrete application types in their physical modules. Android and iOS CI run both `:feature:settings:allTests` and `:feature:onboarding:allTests`.
+
 ### Follow-up module candidates
 
-Recommended order after Provider Detail:
-
-1. Settings/onboarding after cross-feature settings contracts have narrowed;
-2. Home last, because it is the application-level feature aggregation surface.
+P3-F Home remains the final planned physical extraction because it is the application-level aggregation surface. It should move only after its remaining inputs can be expressed as narrow read/action ports rather than by recreating another aggregate controller in a new Gradle module.
 
 Every extraction must preserve the one-way dependency rule. A feature that still requires `:shared` remains logically isolated there until the missing contract is extracted; creating a Gradle module that depends back on `:shared` is explicitly not considered successful modularization.

@@ -1,14 +1,31 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
+import org.feeluown.mobile.feature.settings.SettingsAudioQualityPort as CoreAudioQualityPort
+import org.feeluown.mobile.feature.settings.SettingsCachePort as CoreCachePort
+import org.feeluown.mobile.feature.settings.SettingsDownloadPort as CoreDownloadPort
+import org.feeluown.mobile.feature.settings.SettingsFeatureOwner as CoreOwner
+import org.feeluown.mobile.feature.settings.SettingsFeaturePreferences as CorePreferences
+import org.feeluown.mobile.feature.settings.SettingsFeatureState as CoreState
+import org.feeluown.mobile.feature.settings.SettingsLocalMusicPort as CoreLocalMusicPort
+import org.feeluown.mobile.feature.settings.SettingsNavigationPort as CoreNavigationPort
+import org.feeluown.mobile.feature.settings.SettingsPreferencesPort as CorePreferencesPort
+import org.feeluown.mobile.feature.settings.createSettingsFeatureOwner
+
+typealias SettingsFeaturePreferencesUiState = CorePreferences<
+    ThemeMode,
+    ThemeColorScheme,
+    ThemePaletteStyle,
+    ThemeColorSpec,
+    AudioQualityPolicy,
+    UnavailablePlaybackPolicy,
+    LyricFontSize,
+>
 
 data class SettingsFeatureUiState(
-    val settingsState: SettingsState = SettingsState(),
+    val settings: AppSettings = AppSettings(),
     val cacheUsage: CacheUsage = CacheUsage(),
     val downloadTasks: List<DownloadTask> = emptyList(),
     val localMusic: LocalMusicUiState = LocalMusicUiState(viewMode = LocalMusicViewMode.All),
@@ -16,18 +33,26 @@ data class SettingsFeatureUiState(
     val debugLogViewerAvailable: Boolean = false,
     val isBusy: Boolean = false,
     val feedback: String? = null,
-) {
-    val settings: AppSettings get() = settingsState.settings
-}
+)
 
 interface SettingsFeatureController {
     val uiState: StateFlow<SettingsFeatureUiState>
     fun close()
-    fun update(transform: (AppSettings) -> AppSettings)
+
+    /** Narrow compatibility transform; AppSettings is not accepted as a write contract. */
+    fun update(transform: (SettingsFeaturePreferencesUiState) -> SettingsFeaturePreferencesUiState)
+
+    fun setThemeMode(value: ThemeMode)
+    fun setThemeColorScheme(value: ThemeColorScheme)
     fun setThemePaletteStyle(value: ThemePaletteStyle)
     fun setThemeColorSpec(value: ThemeColorSpec)
     fun setWifiAudioQualityPolicy(value: AudioQualityPolicy)
     fun setCellularAudioQualityPolicy(value: AudioQualityPolicy)
+    fun setUnavailablePlaybackPolicy(value: UnavailablePlaybackPolicy)
+    fun setSmartReplacementMinScore(value: Double)
+    fun setPauseOnOtherAppPlayback(value: Boolean)
+    fun setLyricFontSize(value: LyricFontSize)
+    fun setDynamicCoverColorEnabled(value: Boolean)
     fun setDownloadParallelism(value: Int)
     fun setAudioCacheLimitMb(value: Int)
     fun setImageCacheLimitMb(value: Int)
@@ -43,6 +68,23 @@ interface SettingsFeatureController {
     fun dismissFeedback(feedback: String)
 }
 
+private typealias BoundCorePreferences = SettingsFeaturePreferencesUiState
+
+private typealias BoundCoreState = CoreState<BoundCorePreferences, CacheUsage, DownloadTask, LocalMusicUiState>
+
+private typealias BoundCoreOwner = CoreOwner<
+    ThemeMode,
+    ThemeColorScheme,
+    ThemePaletteStyle,
+    ThemeColorSpec,
+    AudioQualityPolicy,
+    UnavailablePlaybackPolicy,
+    LyricFontSize,
+    CacheUsage,
+    DownloadTask,
+    LocalMusicUiState,
+>
+
 fun createSettingsFeatureController(
     settingsRepository: AppSettingsRepository,
     providerRepository: ProviderMusicRepository,
@@ -52,199 +94,196 @@ fun createSettingsFeatureController(
     debugLogViewerAvailable: Boolean,
     navigator: AppNavigator,
     scope: CoroutineScope,
-): SettingsFeatureController = DefaultSettingsFeatureController(
-    settingsRepository,
-    providerRepository,
-    downloadRepository,
-    resourceCacheRepository,
-    localMusicController,
-    debugLogViewerAvailable,
-    navigator,
-    scope,
-)
-
-private class DefaultSettingsFeatureController(
-    private val settingsRepository: AppSettingsRepository,
-    private val providerRepository: ProviderMusicRepository,
-    private val downloadRepository: DownloadRepository,
-    private val resourceCacheRepository: ResourceCacheRepository,
-    private val localMusicController: LocalMusicFeatureController,
-    debugLogViewerAvailable: Boolean,
-    private val navigator: AppNavigator,
-    private val scope: CoroutineScope,
-) : SettingsFeatureController {
-    private val mutableUiState = MutableStateFlow(
-        SettingsFeatureUiState(
-            settingsState = settingsRepository.state.value,
-            cacheUsage = resourceCacheRepository.usage.value,
-            downloadTasks = downloadRepository.tasks.value,
-            localMusic = localMusicController.uiState.value,
-            debugLogViewerAvailable = debugLogViewerAvailable,
-        )
+): SettingsFeatureController {
+    val owner = createSettingsFeatureOwner(
+        preferences = BoundSettingsPreferencesPort(settingsRepository),
+        audioQuality = CoreAudioQualityPort(providerRepository::updateAudioQualityPolicies),
+        downloads = BoundSettingsDownloadPort(downloadRepository),
+        cache = BoundSettingsCachePort(resourceCacheRepository),
+        localMusic = BoundSettingsLocalMusicPort(localMusicController),
+        navigation = BoundSettingsNavigationPort(navigator),
+        debugLogViewerAvailable = debugLogViewerAvailable,
+        scope = scope,
     )
-    override val uiState: StateFlow<SettingsFeatureUiState> = mutableUiState.asStateFlow()
+    return BoundSettingsFeatureController(owner, settingsRepository)
+}
 
-    init {
-        scope.launch {
-            combine(
-                settingsRepository.state,
-                resourceCacheRepository.usage,
-                downloadRepository.tasks,
-                localMusicController.uiState,
-            ) { settings, cache, downloads, localMusic ->
-                mutableUiState.value.copy(
-                    settingsState = settings,
-                    cacheUsage = cache,
-                    downloadTasks = downloads,
-                    localMusic = localMusic,
-                )
-            }.collect { mutableUiState.value = it }
-        }
-        scope.launch {
-            runCatching {
-                applySavedAudioQualityPolicies(
-                    loadSettings = settingsRepository::awaitSettings,
-                    applyPolicies = providerRepository::updateAudioQualityPolicies,
-                )
-            }.onFailure(::failed)
-        }
-        scope.launch {
-            runCatching {
-                applySavedCacheLimits(
-                    loadSettings = settingsRepository::awaitSettings,
-                    applyLimit = resourceCacheRepository::updateLimit,
-                )
-                resourceCacheRepository.refreshUsage()
-            }.onFailure(::failed)
-        }
+private class BoundSettingsFeatureController(
+    private val owner: BoundCoreOwner,
+    private val settingsRepository: AppSettingsRepository,
+) : SettingsFeatureController {
+    override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapSettingsState(::toUiState)
+
+    override fun close() = owner.close()
+
+    override fun update(transform: (SettingsFeaturePreferencesUiState) -> SettingsFeaturePreferencesUiState) {
+        val current = owner.state.value.preferences
+        val next = transform(current)
+        if (next.themeMode != current.themeMode) owner.setThemeMode(next.themeMode)
+        if (next.themeColorScheme != current.themeColorScheme) owner.setThemeColorScheme(next.themeColorScheme)
+        if (next.themePaletteStyle != current.themePaletteStyle) owner.setThemePaletteStyle(next.themePaletteStyle)
+        if (next.themeColorSpec != current.themeColorSpec) owner.setThemeColorSpec(next.themeColorSpec)
+        if (next.wifiAudioQualityPolicy != current.wifiAudioQualityPolicy) owner.setWifiAudioQualityPolicy(next.wifiAudioQualityPolicy)
+        if (next.cellularAudioQualityPolicy != current.cellularAudioQualityPolicy) owner.setCellularAudioQualityPolicy(next.cellularAudioQualityPolicy)
+        if (next.unavailablePlaybackPolicy != current.unavailablePlaybackPolicy) owner.setUnavailablePlaybackPolicy(next.unavailablePlaybackPolicy)
+        if (next.smartReplacementMinScore != current.smartReplacementMinScore) owner.setSmartReplacementMinScore(next.smartReplacementMinScore)
+        if (next.pauseOnOtherAppPlayback != current.pauseOnOtherAppPlayback) owner.setPauseOnOtherAppPlayback(next.pauseOnOtherAppPlayback)
+        if (next.lyricFontSize != current.lyricFontSize) owner.setLyricFontSize(next.lyricFontSize)
+        if (next.statusBarLyricsEnabled != current.statusBarLyricsEnabled) owner.setStatusBarLyricsEnabled(next.statusBarLyricsEnabled)
+        if (next.dynamicCoverColorEnabled != current.dynamicCoverColorEnabled) owner.setDynamicCoverColorEnabled(next.dynamicCoverColorEnabled)
+        if (next.downloadParallelism != current.downloadParallelism) owner.setDownloadParallelism(next.downloadParallelism)
+        if (next.audioCacheLimitMb != current.audioCacheLimitMb) owner.setAudioCacheLimitMb(next.audioCacheLimitMb)
+        if (next.imageCacheLimitMb != current.imageCacheLimitMb) owner.setImageCacheLimitMb(next.imageCacheLimitMb)
     }
 
+    override fun setThemeMode(value: ThemeMode) = owner.setThemeMode(value)
+    override fun setThemeColorScheme(value: ThemeColorScheme) = owner.setThemeColorScheme(value)
+    override fun setThemePaletteStyle(value: ThemePaletteStyle) = owner.setThemePaletteStyle(value)
+    override fun setThemeColorSpec(value: ThemeColorSpec) = owner.setThemeColorSpec(value)
+    override fun setWifiAudioQualityPolicy(value: AudioQualityPolicy) = owner.setWifiAudioQualityPolicy(value)
+    override fun setCellularAudioQualityPolicy(value: AudioQualityPolicy) = owner.setCellularAudioQualityPolicy(value)
+    override fun setUnavailablePlaybackPolicy(value: UnavailablePlaybackPolicy) = owner.setUnavailablePlaybackPolicy(value)
+    override fun setSmartReplacementMinScore(value: Double) = owner.setSmartReplacementMinScore(value)
+    override fun setPauseOnOtherAppPlayback(value: Boolean) = owner.setPauseOnOtherAppPlayback(value)
+    override fun setLyricFontSize(value: LyricFontSize) = owner.setLyricFontSize(value)
+    override fun setDynamicCoverColorEnabled(value: Boolean) = owner.setDynamicCoverColorEnabled(value)
+    override fun setDownloadParallelism(value: Int) = owner.setDownloadParallelism(value)
+    override fun setAudioCacheLimitMb(value: Int) = owner.setAudioCacheLimitMb(value)
+    override fun setImageCacheLimitMb(value: Int) = owner.setImageCacheLimitMb(value)
+    override fun refreshLocalMusicDirectories() = owner.refreshLocalMusicDirectories()
+    override fun setLocalMusicDirectoryEnabled(directoryId: String, enabled: Boolean) = owner.setLocalMusicDirectoryEnabled(directoryId, enabled)
+    override fun setLocalMusicMinDurationSeconds(value: Int) = owner.setLocalMusicMinDurationSeconds(value)
+    override fun clearCache() = owner.clearCache()
+    override fun refreshCacheUsage() = owner.refreshCacheUsage()
+    override fun openDownloadManager() = owner.openDownloadManager()
+    override fun openDebugLogs() = owner.openDebugLogs()
+    override fun setStatusBarLyricsAvailability(available: Boolean) = owner.setStatusBarLyricsAvailability(available)
+    override fun setStatusBarLyricsEnabled(enabled: Boolean) = owner.setStatusBarLyricsEnabled(enabled)
+    override fun dismissFeedback(feedback: String) = owner.dismissFeedback(feedback)
+
+    private fun toUiState(state: BoundCoreState): SettingsFeatureUiState = SettingsFeatureUiState(
+        settings = settingsRepository.state.value.settings,
+        cacheUsage = state.cacheUsage,
+        downloadTasks = state.downloadTasks,
+        localMusic = state.localMusic,
+        statusBarLyricsAvailable = state.statusBarLyricsAvailable,
+        debugLogViewerAvailable = state.debugLogViewerAvailable,
+        isBusy = state.isBusy,
+        feedback = state.feedback,
+    )
+}
+
+private class BoundSettingsPreferencesPort(
+    private val repository: AppSettingsRepository,
+) : CorePreferencesPort<
+    ThemeMode,
+    ThemeColorScheme,
+    ThemePaletteStyle,
+    ThemeColorSpec,
+    AudioQualityPolicy,
+    UnavailablePlaybackPolicy,
+    LyricFontSize,
+> {
+    override val state: StateFlow<BoundCorePreferences> = repository.state.mapSettingsState { it.settings.toCorePreferences() }
+
+    override suspend fun awaitPreferences(): BoundCorePreferences = repository.awaitSettings().toCorePreferences()
+    override suspend fun setThemeMode(value: ThemeMode) = repository.update { it.copy(themeMode = value) }
+    override suspend fun setThemeColorScheme(value: ThemeColorScheme) = repository.update { it.copy(themeColorScheme = value) }
+    override suspend fun setThemePaletteStyle(value: ThemePaletteStyle) = repository.updateThemePaletteStyle(value)
+    override suspend fun setThemeColorSpec(value: ThemeColorSpec) = repository.updateThemeColorSpec(value)
+    override suspend fun setWifiAudioQualityPolicy(value: AudioQualityPolicy) = repository.update { it.copy(wifiAudioQualityPolicy = value) }
+    override suspend fun setCellularAudioQualityPolicy(value: AudioQualityPolicy) = repository.update { it.copy(cellularAudioQualityPolicy = value) }
+    override suspend fun setUnavailablePlaybackPolicy(value: UnavailablePlaybackPolicy) = repository.update { it.copy(unavailablePlaybackPolicy = value) }
+    override suspend fun setSmartReplacementMinScore(value: Double) = repository.update { it.copy(smartReplacementMinScore = value) }
+    override suspend fun setPauseOnOtherAppPlayback(value: Boolean) = repository.update { it.copy(pauseOnOtherAppPlayback = value) }
+    override suspend fun setLyricFontSize(value: LyricFontSize) = repository.update { it.copy(lyricFontSize = value) }
+    override suspend fun setStatusBarLyricsEnabled(value: Boolean) = repository.update { it.copy(statusBarLyricsEnabled = value) }
+    override suspend fun setDynamicCoverColorEnabled(value: Boolean) = repository.update { it.copy(dynamicCoverColorEnabled = value) }
+    override suspend fun setDownloadParallelism(value: Int) = repository.update { it.copy(downloadParallelism = value) }
+    override suspend fun setCacheLimits(audioMb: Int, imageMb: Int) = repository.update {
+        it.copy(audioCacheLimitMb = audioMb, imageCacheLimitMb = imageMb)
+    }
+}
+
+private class BoundSettingsDownloadPort(
+    private val repository: DownloadRepository,
+) : CoreDownloadPort<DownloadTask> {
+    override val tasks: StateFlow<List<DownloadTask>> = repository.tasks
+    override suspend fun updateParallelism(value: Int) = repository.updateParallelism(value)
+}
+
+private class BoundSettingsCachePort(
+    private val repository: ResourceCacheRepository,
+) : CoreCachePort<CacheUsage> {
+    override val usage: StateFlow<CacheUsage> = repository.usage
+    override suspend fun updateLimit(audioMaxBytes: Long, imageMaxBytes: Long) {
+        repository.updateLimit(CacheLimit(audioMaxBytes = audioMaxBytes, imageMaxBytes = imageMaxBytes))
+    }
+    override suspend fun clearAll() = repository.clearAll()
+    override suspend fun refreshUsage() = repository.refreshUsage()
+}
+
+private class BoundSettingsLocalMusicPort(
+    private val controller: LocalMusicFeatureController,
+) : CoreLocalMusicPort<LocalMusicUiState> {
+    override val state: StateFlow<LocalMusicUiState> = controller.uiState
+    override fun refreshDirectories() = controller.refreshDirectories()
+    override fun setDirectoryEnabled(directoryId: String, enabled: Boolean) = controller.onDirectoryEnabledChange(directoryId, enabled)
+    override fun setMinDurationSeconds(value: Int) = controller.onMinDurationChange(value)
+}
+
+private class BoundSettingsNavigationPort(
+    private val navigator: AppNavigator,
+) : CoreNavigationPort {
     override fun close() {
         navigator.pop(AppRoute.Settings)
     }
-
-    override fun update(transform: (AppSettings) -> AppSettings) {
-        scope.launch { settingsRepository.update(transform) }
-    }
-
-    override fun setThemePaletteStyle(value: ThemePaletteStyle) {
-        scope.launch { settingsRepository.updateThemePaletteStyle(value) }
-    }
-
-    override fun setThemeColorSpec(value: ThemeColorSpec) {
-        scope.launch { settingsRepository.updateThemeColorSpec(value) }
-    }
-
-    override fun setWifiAudioQualityPolicy(value: AudioQualityPolicy) {
-        scope.launch {
-            settingsRepository.update { it.copy(wifiAudioQualityPolicy = value) }
-            val settings = settingsRepository.state.value.settings
-            providerRepository.updateAudioQualityPolicies(value, settings.cellularAudioQualityPolicy)
-        }
-    }
-
-    override fun setCellularAudioQualityPolicy(value: AudioQualityPolicy) {
-        scope.launch {
-            settingsRepository.update { it.copy(cellularAudioQualityPolicy = value) }
-            val settings = settingsRepository.state.value.settings
-            providerRepository.updateAudioQualityPolicies(settings.wifiAudioQualityPolicy, value)
-        }
-    }
-
-    override fun setDownloadParallelism(value: Int) {
-        val normalized = value.coerceIn(1, 5)
-        scope.launch {
-            settingsRepository.update { it.copy(downloadParallelism = normalized) }
-            downloadRepository.updateParallelism(normalized)
-        }
-    }
-
-    override fun setAudioCacheLimitMb(value: Int) {
-        updateCacheLimits(audioMb = value.coerceAtLeast(0), imageMb = null)
-    }
-
-    override fun setImageCacheLimitMb(value: Int) {
-        updateCacheLimits(audioMb = null, imageMb = value.coerceAtLeast(0))
-    }
-
-    override fun refreshLocalMusicDirectories() {
-        localMusicController.refreshDirectories()
-    }
-
-    override fun setLocalMusicDirectoryEnabled(directoryId: String, enabled: Boolean) {
-        localMusicController.onDirectoryEnabledChange(directoryId, enabled)
-    }
-
-    override fun setLocalMusicMinDurationSeconds(value: Int) {
-        localMusicController.onMinDurationChange(value)
-    }
-
-    override fun clearCache() {
-        scope.launch {
-            busy("正在清理缓存")
-            runCatching { resourceCacheRepository.clearAll() }
-                .onSuccess {
-                    resourceCacheRepository.refreshUsage()
-                    done("缓存已清理")
-                }
-                .onFailure(::failed)
-        }
-    }
-
-    override fun refreshCacheUsage() {
-        scope.launch { runCatching { resourceCacheRepository.refreshUsage() }.onFailure(::failed) }
-    }
-
     override fun openDownloadManager() {
         navigator.navigate(AppRoute.DownloadManager)
     }
-
     override fun openDebugLogs() {
-        if (uiState.value.debugLogViewerAvailable) navigator.navigate(AppRoute.DebugLogs)
-    }
-
-    override fun setStatusBarLyricsAvailability(available: Boolean) {
-        mutableUiState.value = mutableUiState.value.copy(statusBarLyricsAvailable = available)
-    }
-
-    override fun setStatusBarLyricsEnabled(enabled: Boolean) {
-        update { it.copy(statusBarLyricsEnabled = enabled) }
-    }
-
-    override fun dismissFeedback(feedback: String) {
-        if (uiState.value.feedback == feedback) {
-            mutableUiState.value = mutableUiState.value.copy(feedback = null)
-        }
-    }
-
-    private fun updateCacheLimits(audioMb: Int?, imageMb: Int?) {
-        scope.launch {
-            val current = settingsRepository.state.value.settings
-            val nextAudio = audioMb ?: current.audioCacheLimitMb
-            val nextImage = imageMb ?: current.imageCacheLimitMb
-            settingsRepository.update {
-                it.copy(audioCacheLimitMb = nextAudio, imageCacheLimitMb = nextImage)
-            }
-            resourceCacheRepository.updateLimit(cacheLimitFor(nextAudio, nextImage))
-            resourceCacheRepository.refreshUsage()
-        }
-    }
-
-    private fun busy(message: String) {
-        mutableUiState.value = mutableUiState.value.copy(isBusy = true, feedback = message)
-    }
-
-    private fun done(message: String) {
-        mutableUiState.value = mutableUiState.value.copy(isBusy = false, feedback = message)
-    }
-
-    private fun failed(throwable: Throwable) {
-        mutableUiState.value = mutableUiState.value.copy(
-            isBusy = false,
-            feedback = throwable.message ?: throwable::class.simpleName.orEmpty().ifBlank { "操作失败" },
-        )
+        navigator.navigate(AppRoute.DebugLogs)
     }
 }
+
+private fun AppSettings.toCorePreferences(): BoundCorePreferences = CorePreferences(
+    themeMode = themeMode,
+    themeColorScheme = themeColorScheme,
+    themePaletteStyle = themePaletteStyle,
+    themeColorSpec = themeColorSpec,
+    wifiAudioQualityPolicy = wifiAudioQualityPolicy,
+    cellularAudioQualityPolicy = cellularAudioQualityPolicy,
+    unavailablePlaybackPolicy = unavailablePlaybackPolicy,
+    smartReplacementMinScore = smartReplacementMinScore,
+    pauseOnOtherAppPlayback = pauseOnOtherAppPlayback,
+    lyricFontSize = lyricFontSize,
+    statusBarLyricsEnabled = statusBarLyricsEnabled,
+    dynamicCoverColorEnabled = dynamicCoverColorEnabled,
+    downloadParallelism = downloadParallelism,
+    audioCacheLimitMb = audioCacheLimitMb,
+    imageCacheLimitMb = imageCacheLimitMb,
+)
+
+private class SettingsMappedStateFlow<Source, Target>(
+    private val source: StateFlow<Source>,
+    private val transform: (Source) -> Target,
+) : StateFlow<Target> {
+    override val value: Target
+        get() = transform(source.value)
+    override val replayCache: List<Target>
+        get() = listOf(value)
+
+    override suspend fun collect(collector: FlowCollector<Target>): Nothing = source.collect(
+        object : FlowCollector<Source> {
+            override suspend fun emit(value: Source) {
+                collector.emit(transform(value))
+            }
+        },
+    )
+}
+
+private fun <Source, Target> StateFlow<Source>.mapSettingsState(transform: (Source) -> Target): StateFlow<Target> =
+    SettingsMappedStateFlow(this, transform)
 
 internal suspend fun applySavedAudioQualityPolicies(
     loadSettings: suspend () -> AppSettings,
