@@ -121,11 +121,23 @@ Each destination consumes its own feature-owned capability port. The module is g
 
 The Provider Detail fitness check rejects `feature -> shared` dependencies, concrete app/provider types leaking into the physical module, reintroduction of the previous shared `DefaultProvider*DetailController` owners, and accidental conversion of the five stable UiState classes to typealiases. Android and iOS CI run `:feature:providerdetail:allTests` alongside shared characterization coverage.
 
+### P3-E1: Settings
+
+Completed as a dedicated physical Settings ownership boundary while deliberately leaving Onboarding for a follow-up change.
+
+`:feature:settings` owns the Settings state machine and runtime coordination for playback/audio-quality preferences, appearance preferences, download parallelism, cache limits/cleanup, local-music settings actions, navigation requests and transient feedback. Its preference input is a feature-owned snapshot containing only fields used by Settings rather than the aggregate `AppSettings` object.
+
+Cross-feature collaborators are expressed through narrow ports for preferences, audio-quality application, downloads, cache, local music and navigation. The physical module therefore has no dependency on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `DownloadRepository`, `ResourceCacheRepository`, `LocalMusicFeatureController`, `AppNavigator` or `:shared`.
+
+`:shared` maps the application repositories and models to those ports. The old `SettingsController` / `SettingsControllerState` owners are retired. The existing `SettingsFeatureUiState.settings` and `SettingsFeatureController.update(AppSettings -> AppSettings)` surface remains temporarily as an application-layer compatibility bridge for the large Settings/Onboarding Compose callers; it only translates Settings-owned field changes into explicit physical-owner actions and is not part of `:feature:settings`.
+
+The Settings fitness check rejects `feature -> shared`, aggregate application settings/repository types leaking into the physical module and reintroduction of the retired shared owners. Android and iOS CI run `:feature:settings:allTests`.
+
 ### Follow-up module candidates
 
-Recommended order after Provider Detail:
+Recommended order after Settings:
 
-1. Settings/onboarding after cross-feature settings contracts have narrowed;
-2. Home last, because it is the application-level feature aggregation surface.
+1. P3-E2 Onboarding: extract its provider-selection/rollback/completion state and remove the remaining shared `AppSettings` compatibility bridge from Settings-facing Compose callers;
+2. P3-F Home last, because it is the application-level feature aggregation surface.
 
 Every extraction must preserve the one-way dependency rule. A feature that still requires `:shared` remains logically isolated there until the missing contract is extracted; creating a Gradle module that depends back on `:shared` is explicitly not considered successful modularization.
