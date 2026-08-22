@@ -73,7 +73,7 @@ class SearchFeatureTest {
     }
 
     @Test
-    fun recognizedSongResetsScopeAndBuildsSearchQuery() = runTest {
+    fun recognitionResultResetsScopeAndBuildsSearchQuery() = runTest {
         var opened = 0
         val owner = createOwner(
             scope = this,
@@ -82,7 +82,7 @@ class SearchFeatureTest {
         owner.applyPreferences(SearchScope.Provider, "netease")
         owner.dispatch(SearchAction.ProviderTabChanged(ProviderSearchTab.Playlists))
 
-        owner.searchRecognizedSong("Song", listOf("Artist A", "Artist B"))
+        owner.searchRecognitionResult("Song", listOf("Artist A", "Artist B"))
         advanceUntilIdle()
 
         assertEquals("Song Artist A / Artist B", owner.uiState.value.query)

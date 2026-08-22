@@ -159,7 +159,7 @@ class AppFeaturePortAdaptersTest {
         override fun dispatch(action: SearchAction) = Unit
         override fun applyPreferences(searchScope: SearchScope, selectedSearchProviderId: String?) = Unit
         override fun normalizeProviderSelection(providerIds: Set<String>) = Unit
-        override fun searchRecognizedSong(title: String, artists: List<String>) = Unit
+        override fun searchRecognitionResult(title: String, artists: List<String>) = Unit
         override fun searchText(text: String, providerId: String?) = Unit
     }
 

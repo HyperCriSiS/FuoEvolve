@@ -58,9 +58,7 @@ fun interface SearchLocalRepository<Track> {
     suspend fun search(keyword: String): List<Track>
 }
 
-/**
- * Operations Search needs to inspect provider results without knowing application domain models.
- */
+/** Operations Search needs to inspect provider results without knowing application domain models. */
 interface SearchResultOperations<Track, ProviderResults> {
     fun empty(errorMessage: String? = null): ProviderResults
     fun tracks(results: ProviderResults): List<Track>
@@ -83,7 +81,7 @@ interface SearchFeatureOwner<Track, ProviderResults> {
 
     fun normalizeProviderSelection(providerIds: Set<String>)
 
-    fun searchRecognizedSong(title: String, artists: List<String>)
+    fun searchRecognitionResult(title: String, artists: List<String>)
 
     fun searchText(text: String, providerId: String?)
 }
@@ -211,7 +209,7 @@ private class SearchController<Track, ProviderResults>(
         state.update { it.copy(providerSearchTab = value) }
     }
 
-    override fun searchRecognizedSong(title: String, artists: List<String>) {
+    override fun searchRecognitionResult(title: String, artists: List<String>) {
         state.update {
             it.copy(
                 query = buildList {

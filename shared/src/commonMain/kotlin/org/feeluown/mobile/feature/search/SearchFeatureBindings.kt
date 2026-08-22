@@ -58,7 +58,7 @@ fun createSearchFeatureController(
 
 /** Keeps Recognition -> Search integration primitive at the physical feature boundary. */
 fun SearchFeatureController.searchRecognizedSong(song: RecognizedSong) {
-    searchRecognizedSong(song.title, song.artists)
+    searchRecognitionResult(song.title, song.artists)
 }
 
 private object AppSearchResultOperations : SearchResultOperations<MusicTrack, ProviderSearchResults> {
