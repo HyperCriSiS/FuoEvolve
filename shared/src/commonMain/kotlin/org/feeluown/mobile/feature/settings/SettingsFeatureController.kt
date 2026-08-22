@@ -38,6 +38,10 @@ data class SettingsFeatureUiState(
 interface SettingsFeatureController {
     val uiState: StateFlow<SettingsFeatureUiState>
     fun close()
+
+    /** Narrow compatibility transform; the aggregate AppSettings contract no longer crosses this boundary. */
+    fun update(transform: (SettingsFeaturePreferencesUiState) -> SettingsFeaturePreferencesUiState)
+
     fun setThemeMode(value: ThemeMode)
     fun setThemeColorScheme(value: ThemeColorScheme)
     fun setThemePaletteStyle(value: ThemePaletteStyle)
@@ -110,6 +114,27 @@ private class BoundSettingsFeatureController(
     override val uiState: StateFlow<SettingsFeatureUiState> = owner.state.mapSettingsState(::toUiState)
 
     override fun close() = owner.close()
+
+    override fun update(transform: (SettingsFeaturePreferencesUiState) -> SettingsFeaturePreferencesUiState) {
+        val current = owner.state.value.preferences
+        val next = transform(current)
+        if (next.themeMode != current.themeMode) owner.setThemeMode(next.themeMode)
+        if (next.themeColorScheme != current.themeColorScheme) owner.setThemeColorScheme(next.themeColorScheme)
+        if (next.themePaletteStyle != current.themePaletteStyle) owner.setThemePaletteStyle(next.themePaletteStyle)
+        if (next.themeColorSpec != current.themeColorSpec) owner.setThemeColorSpec(next.themeColorSpec)
+        if (next.wifiAudioQualityPolicy != current.wifiAudioQualityPolicy) owner.setWifiAudioQualityPolicy(next.wifiAudioQualityPolicy)
+        if (next.cellularAudioQualityPolicy != current.cellularAudioQualityPolicy) owner.setCellularAudioQualityPolicy(next.cellularAudioQualityPolicy)
+        if (next.unavailablePlaybackPolicy != current.unavailablePlaybackPolicy) owner.setUnavailablePlaybackPolicy(next.unavailablePlaybackPolicy)
+        if (next.smartReplacementMinScore != current.smartReplacementMinScore) owner.setSmartReplacementMinScore(next.smartReplacementMinScore)
+        if (next.pauseOnOtherAppPlayback != current.pauseOnOtherAppPlayback) owner.setPauseOnOtherAppPlayback(next.pauseOnOtherAppPlayback)
+        if (next.lyricFontSize != current.lyricFontSize) owner.setLyricFontSize(next.lyricFontSize)
+        if (next.statusBarLyricsEnabled != current.statusBarLyricsEnabled) owner.setStatusBarLyricsEnabled(next.statusBarLyricsEnabled)
+        if (next.dynamicCoverColorEnabled != current.dynamicCoverColorEnabled) owner.setDynamicCoverColorEnabled(next.dynamicCoverColorEnabled)
+        if (next.downloadParallelism != current.downloadParallelism) owner.setDownloadParallelism(next.downloadParallelism)
+        if (next.audioCacheLimitMb != current.audioCacheLimitMb) owner.setAudioCacheLimitMb(next.audioCacheLimitMb)
+        if (next.imageCacheLimitMb != current.imageCacheLimitMb) owner.setImageCacheLimitMb(next.imageCacheLimitMb)
+    }
+
     override fun setThemeMode(value: ThemeMode) = owner.setThemeMode(value)
     override fun setThemeColorScheme(value: ThemeColorScheme) = owner.setThemeColorScheme(value)
     override fun setThemePaletteStyle(value: ThemePaletteStyle) = owner.setThemePaletteStyle(value)
