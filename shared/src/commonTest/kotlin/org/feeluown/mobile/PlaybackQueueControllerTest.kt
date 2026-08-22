@@ -22,9 +22,8 @@ class PlaybackQueueControllerTest {
             shuffleBeforeFm = false
         }
 
-        val restored = PlaybackQueueController().apply {
-            restore(source.snapshot())
-        }
+        val restored = PlaybackQueueController()
+        assertTrue(restored.restore(source.snapshot()))
 
         assertEquals(listOf(first, second), restored.mainQueue)
         assertEquals(listOf(second, first), restored.originalMainQueue)
@@ -35,6 +34,100 @@ class PlaybackQueueControllerTest {
         assertTrue(restored.isFmQueue)
         assertFalse(restored.shuffleBeforeFm ?: true)
         assertEquals(second, restored.currentTrack())
+    }
+
+    @Test
+    fun delayedStartupRestoreDoesNotOverwriteNewPlaylistSelection() {
+        val restoredTrack = track("netease:old", "Restored")
+        val oldSnapshot = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }.snapshot()
+        val firstNew = track("qqmusic:new-1", "New 1")
+        val secondNew = track("qqmusic:new-2", "New 2")
+        val controller = PlaybackQueueController().apply {
+            mainQueue = listOf(firstNew, secondNew)
+            mainQueueIndex = 0
+            queuePlaylistId = "playlist:new"
+            markNextPlaybackStart(PlaybackStartReason.PLAYLIST_REPLACE)
+        }
+
+        assertFalse(controller.restore(oldSnapshot))
+
+        assertEquals(listOf(firstNew, secondNew), controller.mainQueue)
+        assertEquals(firstNew, controller.currentTrack())
+        assertEquals("playlist:new", controller.queuePlaylistId)
+        assertEquals(PlaybackStartReason.PLAYLIST_REPLACE, controller.consumePlaybackStartReason())
+    }
+
+    @Test
+    fun delayedStartupRestoreDoesNotOverwriteQueuePolicyMutation() {
+        val restoredTrack = track("netease:old", "Restored")
+        val oldSnapshot = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }.snapshot()
+        val controller = PlaybackQueueController().apply {
+            repeatMode = RepeatMode.OFF
+        }
+
+        assertFalse(controller.restore(oldSnapshot))
+
+        assertTrue(controller.mainQueue.isEmpty())
+        assertEquals(-1, controller.mainQueueIndex)
+        assertEquals(RepeatMode.OFF, controller.repeatMode)
+    }
+
+    @Test
+    fun mutationReturnedToDefaultStillRejectsDelayedStartupRestore() {
+        val restoredTrack = track("netease:old", "Restored")
+        val oldSnapshot = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }.snapshot()
+        val controller = PlaybackQueueController().apply {
+            shuffleEnabled = true
+            shuffleEnabled = false
+        }
+
+        assertFalse(controller.restore(oldSnapshot))
+        assertTrue(controller.mainQueue.isEmpty())
+        assertFalse(controller.shuffleEnabled)
+    }
+
+    @Test
+    fun noOpQueueClearMutationStillRejectsDelayedStartupRestore() {
+        val restoredTrack = track("netease:old", "Restored")
+        val oldSnapshot = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }.snapshot()
+        val controller = PlaybackQueueController().apply {
+            mainQueue = emptyList()
+            mainQueueIndex = -1
+        }
+
+        assertFalse(controller.restore(oldSnapshot))
+        assertTrue(controller.mainQueue.isEmpty())
+        assertEquals(-1, controller.mainQueueIndex)
+    }
+
+    @Test
+    fun resumeIntentStillAllowsStartupQueueRestore() {
+        val restoredTrack = track("netease:old", "Restored")
+        val oldSnapshot = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }.snapshot()
+        val controller = PlaybackQueueController().apply {
+            markNextPlaybackStart(PlaybackStartReason.RESUME)
+        }
+
+        assertTrue(controller.restore(oldSnapshot))
+
+        assertEquals(listOf(restoredTrack), controller.mainQueue)
+        assertEquals(restoredTrack, controller.currentTrack())
+        assertEquals(PlaybackStartReason.AUTO_NEXT, controller.consumePlaybackStartReason())
     }
 
     @Test
