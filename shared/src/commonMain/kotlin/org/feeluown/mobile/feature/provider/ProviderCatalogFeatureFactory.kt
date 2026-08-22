@@ -15,12 +15,22 @@ import org.feeluown.mobile.feature.providercatalog.ProviderCatalogRepositoryPort
 import org.feeluown.mobile.feature.providercatalog.ProviderCatalogSessionPort
 import org.feeluown.mobile.feature.providercatalog.createProviderCatalogFeatureOwner
 
-typealias ProviderCatalogUiState = CoreProviderCatalogFeatureState<
-    ProviderInfo,
-    ProviderFeature,
-    ProviderCapabilities,
-    ProviderSessionState,
->
+data class ProviderCatalogUiState(
+    val availableProviders: List<ProviderInfo> = emptyList(),
+    val providers: List<ProviderInfo> = emptyList(),
+    val features: List<ProviderFeature> = emptyList(),
+    val capabilities: Map<String, ProviderCapabilities> = emptyMap(),
+    val sessions: ProviderSessionState = ProviderSessionState(),
+    val enabledProviderIds: Set<String> = DEFAULT_ENABLED_PROVIDER_IDS,
+    val providerOrderIds: List<String> = DEFAULT_PROVIDER_ORDER_IDS,
+    val searchProviderIds: Set<String> = emptySet(),
+    val recommendProviderIds: Set<String> = emptySet(),
+    val exploreProviderIds: Set<String> = emptySet(),
+    val mineProviderIds: Set<String> = emptySet(),
+    val replacementProviderIds: Set<String> = emptySet(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+)
 
 interface ProviderCatalogFeatureController {
     val uiState: StateFlow<ProviderCatalogUiState>
@@ -44,7 +54,7 @@ fun createProviderCatalogFeatureController(
         defaultEnabledProviderIds = DEFAULT_ENABLED_PROVIDER_IDS,
         defaultProviderOrderIds = DEFAULT_PROVIDER_ORDER_IDS,
     )
-    return BoundProviderCatalogFeatureController(owner)
+    return BoundProviderCatalogFeatureController(owner, scope)
 }
 
 private class BoundProviderCatalogFeatureController(
@@ -54,8 +64,15 @@ private class BoundProviderCatalogFeatureController(
         ProviderCapabilities,
         ProviderSessionState,
     >,
+    scope: CoroutineScope,
 ) : ProviderCatalogFeatureController {
     override val uiState: StateFlow<ProviderCatalogUiState> = owner.state
+        .map(CoreProviderCatalogFeatureState<ProviderInfo, ProviderFeature, ProviderCapabilities, ProviderSessionState>::toUiState)
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = owner.state.value.toUiState(),
+        )
 
     override fun refresh() = owner.refresh()
 
@@ -124,6 +141,28 @@ private class ProviderCatalogSessionBinding(
         delegate.refresh(providerId)
     }
 }
+
+private fun CoreProviderCatalogFeatureState<
+    ProviderInfo,
+    ProviderFeature,
+    ProviderCapabilities,
+    ProviderSessionState,
+>.toUiState(): ProviderCatalogUiState = ProviderCatalogUiState(
+    availableProviders = availableProviders,
+    providers = providers,
+    features = features,
+    capabilities = capabilities,
+    sessions = sessions,
+    enabledProviderIds = enabledProviderIds,
+    providerOrderIds = providerOrderIds,
+    searchProviderIds = searchProviderIds,
+    recommendProviderIds = recommendProviderIds,
+    exploreProviderIds = exploreProviderIds,
+    mineProviderIds = mineProviderIds,
+    replacementProviderIds = replacementProviderIds,
+    isLoading = isLoading,
+    errorMessage = errorMessage,
+)
 
 private fun SettingsState.toProviderCatalogPreferencesState(): ProviderCatalogPreferencesState =
     ProviderCatalogPreferencesState(
