@@ -1,0 +1,98 @@
+package org.feeluown.mobile.feature.providercatalog
+
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProviderCatalogFeatureTest {
+    @Test
+    fun refreshNormalizesEnabledProvidersAndRehydratesSessions() = runTest {
+        val repository = FakeRepository()
+        val preferences = FakePreferences(
+            ProviderCatalogPreferences(enabledProviderIds = setOf("missing")),
+        )
+        val sessions = FakeSessions()
+
+        val owner = createProviderCatalogFeatureOwner(
+            repository = repository,
+            preferences = preferences,
+            sessions = sessions,
+            scope = backgroundScope,
+            defaultEnabledProviderIds = setOf("netease"),
+            defaultProviderOrderIds = listOf("netease", "qqmusic"),
+        )
+        runCurrent()
+
+        assertEquals(setOf("netease"), owner.state.value.enabledProviderIds)
+        assertEquals(setOf("netease"), repository.enabled)
+        assertEquals(listOf("netease", "qqmusic"), owner.state.value.providers.map { it.id })
+        assertEquals(listOf("netease", "qqmusic"), sessions.refreshed)
+        assertTrue(preferences.state.value.settings.enabledProviderIds == setOf("netease"))
+    }
+
+    @Test
+    fun disablingFinalAvailableProviderIsRejected() {
+        assertEquals(
+            setOf("netease"),
+            updatedEnabledProviderIds(
+                current = setOf("netease"),
+                providerId = "netease",
+                enabled = false,
+                availableProviderIds = listOf("netease", "qqmusic"),
+                defaultEnabledProviderIds = setOf("netease"),
+            ),
+        )
+    }
+
+    private data class Provider(val id: String, val name: String)
+    private data class Capability(val providerId: String)
+
+    private class FakeRepository : ProviderCatalogRepositoryPort<Provider, String, Capability> {
+        var enabled: Set<String> = emptySet()
+
+        override suspend fun initialize() = Unit
+        override suspend fun availableProviders(): List<Provider> = listOf(
+            Provider("netease", "NetEase"),
+            Provider("qqmusic", "QQ Music"),
+        )
+        override suspend fun providers(): List<Provider> = availableProviders()
+        override suspend fun features(): List<String> = listOf("recommend")
+        override suspend fun capabilities(): List<Capability> = listOf(Capability("netease"))
+        override suspend fun updateEnabledProviders(providerIds: Set<String>) {
+            enabled = providerIds
+        }
+        override fun providerId(provider: Provider): String = provider.id
+        override fun providerName(provider: Provider): String = provider.name
+        override fun capabilityProviderId(capability: Capability): String = capability.providerId
+    }
+
+    private class FakePreferences(initial: ProviderCatalogPreferences) : ProviderCatalogPreferencesPort {
+        private val mutableState = MutableStateFlow(
+            ProviderCatalogPreferencesState(isLoaded = true, settings = initial),
+        )
+        override val state: StateFlow<ProviderCatalogPreferencesState> = mutableState
+
+        override suspend fun awaitPreferences(): ProviderCatalogPreferences = mutableState.value.settings
+
+        override suspend fun update(transform: (ProviderCatalogPreferences) -> ProviderCatalogPreferences) {
+            mutableState.value = mutableState.value.copy(settings = transform(mutableState.value.settings))
+        }
+    }
+
+    private class FakeSessions : ProviderCatalogSessionPort<Provider, String> {
+        override val state: StateFlow<String> = MutableStateFlow("ready")
+        val refreshed = mutableListOf<String>()
+
+        override suspend fun updateProviders(providers: List<Provider>) = Unit
+
+        override suspend fun refresh(providerId: String) {
+            refreshed += providerId
+        }
+    }
+}
