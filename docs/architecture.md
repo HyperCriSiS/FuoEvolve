@@ -25,10 +25,11 @@ The current compile-time modules are:
 - `:feature:providerauth`: physical provider authentication and device-OAuth orchestration boundary.
 - `:feature:providerdetail`: physical provider feature/playlist/track/media/video detail orchestration boundary.
 - `:feature:settings`: physical Settings state/orchestration boundary using feature-owned preference and collaborator ports.
+- `:feature:onboarding`: physical startup provider-selection/rollback/completion boundary.
 - `:shared`: app shell, shared Compose/design primitives and application bindings for physical feature modules plus feature implementations not yet physically extracted.
 - `:androidApp`: Android composition root and platform adapters.
 
-Recognition, Search, Offline Library, Provider Catalog/Auth, Provider Detail and Settings have one-way dependency graphs. Application-domain types remain at the `:shared` binding layer when moving them lower would unnecessarily widen a feature contract.
+Recognition, Search, Offline Library, Provider Catalog/Auth, Provider Detail, Settings and Onboarding have one-way dependency graphs. Application-domain types remain at the `:shared` binding layer when moving them lower would unnecessarily widen a feature contract.
 
 ## P2 ownership result
 
@@ -129,15 +130,25 @@ Each destination consumes a separate feature-owned capability port. The module i
 
 The existing concrete `ProviderFeatureDetailUiState`, `ProviderPlaylistDetailUiState`, `ProviderTrackDetailUiState`, `ProviderMediaItemDetailUiState` and `ProviderVideoDetailUiState` classes remain in `org.feeluown.mobile` with their existing default constructors. The controller interfaces, `ProviderDetailOwners` aggregate and `createProviderDetailOwners(...)` composition API also remain stable while their business ownership is delegated to the physical module.
 
-## P3-E1 Settings physical boundary
+## P3-E Settings and Onboarding physical boundaries
 
-Settings business ownership is implemented by `:feature:settings` while Onboarding remains a separate follow-up boundary.
+Settings and Onboarding are delivered together but remain separate physical owners and Gradle modules.
 
-The module owns observation/composition of Settings preference, cache, download and local-music state; startup application of persisted audio-quality/cache policy; explicit theme/playback/display/download/cache/local-music actions; cache cleanup feedback; and Settings navigation requests.
+### Settings
+
+`:feature:settings` owns observation/composition of Settings preference, cache, download and local-music state; startup application of persisted audio-quality/cache policy; explicit theme/playback/display/download/cache/local-music actions; cache cleanup feedback; and Settings navigation requests.
 
 `SettingsFeaturePreferences` is deliberately narrower than `AppSettings`: it contains only fields used by Settings. Persistence and cross-feature coordination are split across `SettingsPreferencesPort`, `SettingsAudioQualityPort`, `SettingsDownloadPort`, `SettingsCachePort`, `SettingsLocalMusicPort` and `SettingsNavigationPort`. Consequently `:feature:settings` does not depend on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `DownloadRepository`, `ResourceCacheRepository`, `LocalMusicFeatureController`, `AppNavigator` or `:shared`.
 
-`:shared` adapts those concrete application collaborators. The old shared `SettingsController` and `SettingsControllerState` are retired. For migration safety, the app-facing `SettingsFeatureUiState.settings` and `SettingsFeatureController.update(AppSettings -> AppSettings)` remain temporarily in `:shared` for the large Settings/Onboarding Compose callers. That compatibility method only translates Settings-owned field changes into explicit physical-owner actions; `AppSettings` never crosses into the physical module. P3-E2 Onboarding removes this remaining application-layer bridge.
+`:shared` adapts those concrete application collaborators. The old shared `SettingsController`, `SettingsControllerState` and unused debug/cache helper surfaces are retired. The former `SettingsFeatureController.update(AppSettings -> AppSettings)` write bridge is retired as well; the remaining Compose transform accepts only the Settings-owned preference snapshot and cannot modify unrelated application settings.
+
+### Onboarding
+
+`:feature:onboarding` owns startup provider-selection state, initialization from persisted provider preferences, Bilibili replacement-only policy, selection validation, provider enablement and preference persistence orchestration, failure rollback, completion and transient feedback.
+
+Its contracts are deliberately small: `OnboardingPreferencesPort` exposes only provider-related preferences plus the completion mutation, while `OnboardingProviderRuntimePort` exposes provider enablement and catalog refresh. The module is generic over the unavailable-playback policy type and therefore does not depend on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `ProviderCatalogUiState`, `ProviderInfo`, `UnavailablePlaybackPolicy` or `:shared`.
+
+`:shared` adapts the concrete settings/provider/catalog implementations. Onboarding continues to reuse Settings for theme/audio-quality pages and Provider Auth for login pages, so it does not duplicate those owners or create a startup mega-controller.
 
 ## Playback
 
@@ -161,7 +172,7 @@ New features should depend on narrow provider capability interfaces or feature-o
 
 A feature may move to its own Gradle module only when all of its dependencies point to core/api contracts, other lower-level modules, or generic feature-owned ports bound by the application integration layer. `feature -> shared` is forbidden because it distributes the monolith rather than establishing a real boundary.
 
-Cross-feature behavior should use the smallest stable contract. The Download/Local Music boundary is the reference example: Download asks for local-library readiness/refresh rather than depending on the Local Music controller. Provider Catalog/Auth similarly keep session synchronization and authentication transport behind feature-owned ports instead of depending on concrete provider owners. Provider Detail uses five destination-specific ports rather than exposing `ProviderMusicRepository` or a replacement mega-repository to its physical module. Settings similarly separates preferences, audio quality, downloads, cache, local music and navigation rather than receiving the aggregate app settings/repository graph.
+Cross-feature behavior should use the smallest stable contract. The Download/Local Music boundary is the reference example: Download asks for local-library readiness/refresh rather than depending on the Local Music controller. Provider Catalog/Auth similarly keep session synchronization and authentication transport behind feature-owned ports instead of depending on concrete provider owners. Provider Detail uses five destination-specific ports rather than exposing `ProviderMusicRepository` or a replacement mega-repository to its physical module. Settings separates preferences, audio quality, downloads, cache, local music and navigation; Onboarding separately coordinates only startup provider selection and completion.
 
 ## Composition roots
 
@@ -201,12 +212,20 @@ Settings adds `checkSettingsFeatureBoundaries`, wired to its feature test lifecy
 - requires the Settings physical source/test and shared integration binding;
 - rejects `:feature:settings -> :shared`;
 - rejects `AppSettings`, aggregate repositories/controllers and concrete app navigation/model types from the physical module;
-- rejects the retired shared `SettingsController` and `SettingsControllerState` owners from returning.
+- rejects the retired shared Settings/debug/cache surfaces from returning;
+- rejects restoration of an `update(AppSettings -> AppSettings)` Settings write bridge.
 
-Android and iOS CI run Recognition, Search, Local Playlist, Local Music, Download, Provider Catalog, Provider Auth, Provider Detail, Settings, playback runtime and shared tests in addition to the architecture gates.
+Onboarding adds `checkOnboardingFeatureBoundaries`, wired to its feature test lifecycle. It:
+
+- requires the Onboarding physical source/test and shared integration binding;
+- rejects `:feature:onboarding -> :shared`;
+- rejects aggregate app/provider/catalog types and the concrete unavailable-playback policy from the physical module;
+- rejects moving `DefaultOnboardingFeatureController` business ownership back into `:shared`.
+
+Android and iOS CI run Recognition, Search, Local Playlist, Local Music, Download, Provider Catalog, Provider Auth, Provider Detail, Settings, Onboarding, playback runtime and shared tests in addition to the architecture gates.
 
 ## Migration rule
 
 Architecture changes remain behavior-preserving and independently reviewable: move ownership first, introduce narrow ports at cross-feature boundaries, then remove compatibility surfaces only after the last production caller has migrated. Physical module extraction is the final step for a feature, not a substitute for ownership isolation.
 
-P2 sequencing and P3 progress are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md). P3-E2 Onboarding is next; Home remains last because it is the application-level feature aggregation surface.
+P2 sequencing and P3 progress are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md). Home is the final planned P3 physical boundary because it is the application-level feature aggregation surface.
