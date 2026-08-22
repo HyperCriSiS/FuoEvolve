@@ -69,7 +69,7 @@ val retiredSharedSettingsSurfaces = listOf(
 
 tasks.register("checkSettingsFeatureBoundaries") {
     group = "verification"
-    description = "Reject shared back-dependencies, aggregate settings contracts, or retired Settings surfaces."
+    description = "Reject shared back-dependencies, aggregate settings write contracts, or retired Settings surfaces."
 
     inputs.files(settingsRequiredFiles.map(rootProject::file))
     inputs.files(retiredSharedSettingsSurfaces.map(rootProject::file))
@@ -122,6 +122,15 @@ tasks.register("checkSettingsFeatureBoundaries") {
                     violations.forEach { appendLine(" - $it") }
                 },
             )
+        }
+
+        val sharedBinding = rootProject.file(
+            "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/settings/SettingsFeatureController.kt",
+        ).readText()
+        if (Regex("""fun\s+update\s*\(\s*transform\s*:\s*\(AppSettings\)\s*->\s*AppSettings""")
+                .containsMatchIn(sharedBinding)
+        ) {
+            throw GradleException("Settings must not restore the aggregate AppSettings write compatibility bridge.")
         }
     }
 }
