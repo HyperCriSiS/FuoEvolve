@@ -55,6 +55,119 @@ class PlaybackQueueCoordinatorTest {
     }
 
     @Test
+    fun staticFeatureQueueWrapsWithoutDynamicAppend() = runTest {
+        val first = track("main:1")
+        val second = track("main:2")
+        val queue = PlaybackQueueController().apply {
+            repeatMode = RepeatMode.QUEUE
+        }
+        var started: MusicTrack? = null
+        var appendCount = 0
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { track, _, _ -> started = track },
+            appendFeatureQueue = {
+                appendCount += 1
+                0
+            },
+        )
+        val feature = ProviderFeature(
+            id = "netease_recommended_new_songs",
+            providerId = "netease",
+            providerName = "网易云音乐",
+            title = "新歌推荐",
+            category = ProviderFeatureCategory.Recommend,
+            contentType = ProviderContentType.Songs,
+            requiresLogin = false,
+        )
+
+        coordinator.playFeatureTracks(listOf(first, second), index = 1, sourceFeature = feature)
+        started = null
+        coordinator.next()
+
+        assertEquals(first, started)
+        assertEquals(0, appendCount)
+        assertEquals(null, queue.queueFeature)
+        assertFalse(queue.isFmQueue)
+    }
+
+    @Test
+    fun appendedPlaylistTracksAreMixedIntoPendingShuffleSuffix() = runTest {
+        val first = track("main:1")
+        val second = track("main:2")
+        val third = track("main:3")
+        val fourth = track("main:4")
+        val fifth = track("main:5")
+        val queue = PlaybackQueueController().apply {
+            mainQueue = listOf(first, second, third)
+            originalMainQueue = listOf(first, second, third)
+            mainQueueIndex = 0
+            queuePlaylistId = "playlist:1"
+            shuffleEnabled = true
+        }
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { _, _, _ -> },
+            shuffleTracks = { it.reversed() },
+        )
+
+        coordinator.appendPlaylistTracks("playlist:1", listOf(fourth, fifth))
+
+        assertEquals(listOf(first, fifth, fourth, third, second), queue.mainQueue)
+        assertEquals(listOf(first, second, third, fourth, fifth), queue.originalMainQueue)
+        assertEquals(0, queue.mainQueueIndex)
+    }
+
+    @Test
+    fun playAllPlaylistShufflesTheWholeQueueInsteadOfPinningTheFirstTrack() = runTest {
+        val first = track("main:1")
+        val second = track("main:2")
+        val third = track("main:3")
+        val tracks = listOf(first, second, third)
+        val queue = PlaybackQueueController().apply {
+            shuffleEnabled = true
+        }
+        var started: MusicTrack? = null
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { track, _, _ -> started = track },
+            shuffleTracks = { it },
+        )
+
+        coordinator.playAllPlaylistTracks(tracks, "playlist:1")
+
+        assertEquals(second, started)
+        assertEquals(listOf(second, third, first), queue.mainQueue)
+        assertEquals(tracks, queue.originalMainQueue)
+        assertEquals(0, queue.mainQueueIndex)
+        assertEquals("playlist:1", queue.queuePlaylistId)
+    }
+
+    @Test
+    fun selectingPlaylistTrackStillPinsTheSelectedTrackWhenShuffleIsEnabled() = runTest {
+        val first = track("main:1")
+        val second = track("main:2")
+        val third = track("main:3")
+        val tracks = listOf(first, second, third)
+        val queue = PlaybackQueueController().apply {
+            shuffleEnabled = true
+        }
+        var started: MusicTrack? = null
+        val coordinator = coordinator(
+            queue = queue,
+            onStart = { track, _, _ -> started = track },
+            shuffleTracks = { it },
+        )
+
+        coordinator.playPlaylistTracks(tracks, index = 1, sourcePlaylistId = "playlist:1")
+
+        assertEquals(second, started)
+        assertEquals(second, queue.mainQueue.first())
+        assertEquals(tracks, queue.originalMainQueue)
+        assertEquals(0, queue.mainQueueIndex)
+    }
+
+    @Test
     fun nextAdvancesPlaybackPartBeforeQueueTrack() = runTest {
         val current = track("main:1")
         val next = track("main:2")
@@ -233,6 +346,8 @@ class PlaybackQueueCoordinatorTest {
         persistQueue: () -> Unit = {},
         updateQueueState: () -> Unit = {},
         setMessage: (String) -> Unit = {},
+        appendFeatureQueue: suspend (ProviderFeature) -> Int = { 0 },
+        shuffleTracks: (List<MusicTrack>) -> List<MusicTrack> = { it.shuffled() },
     ): PlaybackQueueCoordinator = PlaybackQueueCoordinator(
         queue = queue,
         scope = this,
@@ -243,9 +358,10 @@ class PlaybackQueueCoordinatorTest {
         stopPlayback = {},
         persistQueue = persistQueue,
         updateQueueState = updateQueueState,
-        appendFeatureQueue = { 0 },
+        appendFeatureQueue = appendFeatureQueue,
         setTrackChangeDirection = {},
         setMessage = setMessage,
+        shuffleTracks = shuffleTracks,
     )
 
     private fun track(id: String): MusicTrack = MusicTrack(

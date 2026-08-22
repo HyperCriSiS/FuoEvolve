@@ -21,11 +21,16 @@ internal fun handleIosLocalPlaylistImportResult(
     if (fileName == null && content == null) return
     val validFileName = fileName?.takeIf { it.isNotBlank() }
     val validContent = content?.takeIf { it.isNotBlank() }
-    if (validFileName != null && validContent != null) {
-        onImport(validFileName, validContent)
-    } else {
-        onReadFailure()
-    }
+    if (validFileName != null && validContent != null) onImport(validFileName, validContent) else onReadFailure()
+}
+
+internal fun handleIosJsonImportResult(
+    content: String?,
+    onImport: (String) -> Unit,
+    onReadFailure: () -> Unit,
+) {
+    val validContent = content?.takeIf { it.isNotBlank() }
+    if (validContent != null) onImport(validContent) else onReadFailure()
 }
 
 fun MainViewController(
@@ -41,16 +46,8 @@ fun MainViewController(
     oauthDeviceCodeOutput: IosOAuthDeviceCodeOutput,
 ): UIViewController = ComposeUIViewController {
     IosApp(
-        audioOutput,
-        videoOutput,
-        mediaLibraryOutput,
-        downloadOutput,
-        webLoginOutput,
-        shareOutput,
-        localPlaylistFileOutput,
-        networkStatusOutput,
-        audioRecognitionOutput,
-        oauthDeviceCodeOutput,
+        audioOutput, videoOutput, mediaLibraryOutput, downloadOutput, webLoginOutput,
+        shareOutput, localPlaylistFileOutput, networkStatusOutput, audioRecognitionOutput, oauthDeviceCodeOutput,
     )
 }
 
@@ -70,16 +67,11 @@ private fun IosApp(
     IosVideoOutputHolder.output = videoOutput
     val container = remember {
         IosAppContainer(
-            audioOutput,
-            mediaLibraryOutput,
-            downloadOutput,
-            webLoginOutput,
-            networkStatusOutput,
-            audioRecognitionOutput,
-            oauthDeviceCodeOutput,
+            audioOutput, mediaLibraryOutput, downloadOutput, webLoginOutput,
+            networkStatusOutput, audioRecognitionOutput, oauthDeviceCodeOutput,
         )
     }
-    AppRoot(
+    P2AppRoot(
         appViewModel = container.appViewModel,
         hasAudioPermission = container.hasAudioPermission,
         onRequestAudioPermission = container::requestAudioPermission,
@@ -87,13 +79,32 @@ private fun IosApp(
         onRequestMicrophonePermission = container::requestMicrophonePermission,
         onOpenProviderWebLogin = container::openProviderWebLogin,
         onLogoutProvider = container::logoutProvider,
+        onImportYtmusicHeaderFile = {
+            localPlaylistFileOutput.importFile { _, content ->
+                handleIosJsonImportResult(
+                    content = content,
+                    onImport = container.appViewModel.providerAuthFeatureController::loginYtmusicWithHeaderFile,
+                    onReadFailure = { container.appViewModel.showFeedback("无法读取 ytmusic_header.json") },
+                )
+            }
+        },
+        onImportYtmusicOAuthFile = {
+            localPlaylistFileOutput.importFile { _, content ->
+                handleIosJsonImportResult(
+                    content = content,
+                    onImport = container.appViewModel.providerAuthFeatureController::importYtmusicOAuthRelatedJson,
+                    onReadFailure = { container.appViewModel.showFeedback("无法读取 OAuth JSON") },
+                )
+            }
+        },
+        onStartYtmusicOAuth = container.appViewModel.providerAuthFeatureController::startYtmusicTvOAuthLogin,
         onImportLocalPlaylistFile = {
             localPlaylistFileOutput.importFile { fileName, content ->
                 handleIosLocalPlaylistImportResult(
                     fileName = fileName,
                     content = content,
-                    onImport = container.controller::prepareLocalPlaylistImport,
-                    onReadFailure = { container.controller.showMessage("无法读取本地歌单文件") },
+                    onImport = container.appViewModel.localPlaylistFeatureController::prepareImport,
+                    onReadFailure = { container.appViewModel.showFeedback("无法读取本地歌单文件") },
                 )
             }
         },
@@ -125,6 +136,12 @@ private class IosAppContainer(
     private val playbackEngine = IosNativeAudioEngine(scope, audioOutput, settingsRepository)
     private val providerSessionRepository = DefaultProviderSessionRepository(providerRepository)
     private val navigator = AppNavigator()
+    private val oauthDeviceCodeAssistant: OAuthDeviceCodeAssistant = IosOAuthDeviceCodeAssistant(oauthDeviceCodeOutput)
+    private val playbackQueueStore = IosPlaybackQueueStore()
+    private val resourceCacheRepository = IosResourceCacheRepository()
+    private val debugLogFeatureController by lazy { createDebugLogFeatureController(NoOpDebugLogRepository, scope) }
+    private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)
+
     private val searchController: SearchFeatureController by lazy {
         val initialSettings = settingsRepository.state.value.settings
         createSearchFeatureController(
@@ -132,23 +149,14 @@ private class IosAppContainer(
             localRepository = localRepository,
             scope = scope,
             providerIdsForSearch = {
-                val activeProviderIds = providerSessionRepository.state.value.authStates.keys
-                settingsRepository.state.value.settings
-                    .searchProviderIdsForFeature()
-                    .filter(activeProviderIds::contains)
+                val active = providerSessionRepository.state.value.authStates.keys
+                settingsRepository.state.value.settings.searchProviderIdsForFeature().filter(active::contains)
             },
-            providerExists = { providerId ->
-                providerId in providerSessionRepository.state.value.authStates
-            },
+            providerExists = { it in providerSessionRepository.state.value.authStates },
             openSearch = { navigator.navigate(AppRoute.Search) },
             onPreferencesChanged = { searchScope, selectedProviderId ->
                 scope.launch {
-                    settingsRepository.update { settings ->
-                        settings.copy(
-                            searchScope = searchScope,
-                            selectedSearchProviderId = selectedProviderId,
-                        )
-                    }
+                    settingsRepository.update { it.copy(searchScope = searchScope, selectedSearchProviderId = selectedProviderId) }
                 }
             },
             initialState = SearchUiState(
@@ -157,13 +165,8 @@ private class IosAppContainer(
             ),
         )
     }
-    private val playbackQueueStore = IosPlaybackQueueStore()
-    private val resourceCacheRepository = IosResourceCacheRepository()
-    private val debugLogFeatureController: DebugLogFeatureController by lazy {
-        createDebugLogFeatureController(NoOpDebugLogRepository, scope)
-    }
-    private val audioRecognitionRepository = IosAudioRecognitionRepository(audioRecognitionOutput)
-    private val recognitionController: RecognitionFeatureController by lazy {
+
+    private val recognitionController by lazy {
         createRecognitionFeatureController(
             repository = audioRecognitionRepository,
             scope = scope,
@@ -171,81 +174,219 @@ private class IosAppContainer(
             pausePlayback = playbackEngine::pause,
         )
     }
-    var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())
-        private set
 
-    val controller = FuoPlayerController(
-        providerRepository = providerRepository,
-        localRepository = localRepository,
-        localPlaylistRepository = localPlaylistRepository,
-        downloadRepository = downloadRepository,
-        playbackEngine = playbackEngine,
-        settingsRepository = settingsRepository,
-        providerSessionRepository = providerSessionRepository,
-        navigator = navigator,
-        playbackQueueStore = playbackQueueStore,
-        resourceCacheRepository = resourceCacheRepository,
-        audioRecognitionRepository = audioRecognitionRepository,
-        oauthDeviceCodeAssistant = IosOAuthDeviceCodeAssistant(oauthDeviceCodeOutput),
-        scope = scope,
-        searchFeatureController = searchController,
-        recognitionFeatureController = recognitionController,
-    )
+    private val providerCatalogFeatureController by lazy {
+        createProviderCatalogFeatureController(providerRepository, providerSessionRepository, settingsRepository, scope)
+    }
 
-    private val playbackSession by lazy {
-        createIosPlaybackRuntimeSession(
-            controller = controller,
+    private val localPlaylistFeatureController: LocalPlaylistFeatureOwner by lazy {
+        createLocalPlaylistFeatureController(
+            repository = localPlaylistRepository,
+            navigator = navigator,
+            scope = scope,
+            providers = { providerCatalogFeatureController.uiState.value.providers },
+        )
+    }
+
+    private val localMusicFeatureController: LocalMusicFeatureController by lazy {
+        createLocalMusicFeatureController(
+            repository = localRepository,
+            providerRepository = providerRepository,
+            navigator = navigator,
+            settingsRepository = settingsRepository,
+            providers = { providerCatalogFeatureController.uiState.value.providers },
+            isLocalMusicSectionActive = {
+                val state = homeFeatureController.uiState.value
+                state.homeSection == HomeSection.Mine && state.mineSection == MineSection.LocalMusic
+            },
+            scope = scope,
+            onTrackUpdated = { trackId, track -> playbackFeatureOwner.updateTrackCopies(trackId, track) },
+        )
+    }
+
+    private val downloadActionPort: DownloadActionPort by lazy {
+        createDownloadActionPort(
+            providerRepository = providerRepository,
+            downloadRepository = downloadRepository,
+            localRepository = localRepository,
+            localMusicController = localMusicFeatureController,
+            settingsRepository = settingsRepository,
+            scope = scope,
+            isLocalMusicSectionActive = {
+                val state = homeFeatureController.uiState.value
+                state.homeSection == HomeSection.Mine && state.mineSection == MineSection.LocalMusic
+            },
+        )
+    }
+
+    private val playbackFeatureOwner: PlaybackFeatureOwner by lazy {
+        createPlaybackFeatureOwner(
+            providerRepository = providerRepository,
             playbackEngine = playbackEngine,
-            transportCoordinator = controller.playbackTransportCoordinator,
-            startFailureSource = controller.playbackStartFailureSource,
+            playbackQueueStore = playbackQueueStore,
+            settingsRepository = settingsRepository,
+            downloadActions = downloadActionPort,
+            scope = scope,
+            openTrackDetail = { track -> providerDetailOwners.track.open(track) },
+        )
+    }
+
+    private val providerDetailOwners: ProviderDetailOwners by lazy {
+        createProviderDetailOwners(
+            providerRepository = providerRepository,
+            playbackQueue = playbackFeatureOwner.transport,
+            settingsRepository = settingsRepository,
+            providerCatalog = providerCatalogFeatureController,
+            navigator = navigator,
+            scope = scope,
+            onProviderMutation = { homeFeatureController.refreshMine() },
+        )
+    }
+
+    private val homeFeatureController: HomeFeatureController by lazy {
+        createHomeFeatureController(
+            providerRepository = providerRepository,
+            providerCatalog = providerCatalogFeatureController,
+            providerDetails = providerDetailOwners,
+            playbackQueue = playbackFeatureOwner.transport,
+            localPlaylist = localPlaylistFeatureController,
+            localMusic = localMusicFeatureController,
+            settingsRepository = settingsRepository,
+            navigator = navigator,
             scope = scope,
         )
     }
 
-    private val searchAppPort: SearchAppPort by lazy {
-        DefaultSearchAppPort(
+    private val playlistActionPort: PlaylistActionPort by lazy {
+        createPlaylistActionPort(
+            providerRepository = providerRepository,
+            providerCatalog = providerCatalogFeatureController,
+            providerDetails = providerDetailOwners,
+            localPlaylist = localPlaylistFeatureController,
+            scope = scope,
+            onProviderMutation = { homeFeatureController.refreshMine() },
+        )
+    }
+
+    private val providerTrackActionPort: ProviderTrackActionPort by lazy {
+        createProviderTrackActionPort(
+            providerRepository = providerRepository,
+            providerCatalog = providerCatalogFeatureController,
+            providerDetails = providerDetailOwners,
             searchController = searchController,
-            providerSessions = { providerSessionRepository.state.value },
-            playbackQueue = controller.playbackQueueUiPort,
-            downloads = controller.downloadActionPort,
-            playlists = controller.playlistActionPort,
-            providerTrackActions = controller.providerTrackActionPort,
-            navigator = navigator,
+            playbackNavigation = playbackFeatureOwner.navigation,
+            playbackQueue = playbackFeatureOwner.transport,
+            scope = scope,
+            refreshMineContent = homeFeatureController::refreshMine,
         )
     }
 
-    private val recognitionAppPort: RecognitionAppPort by lazy {
-        DefaultRecognitionAppPort(
-            isProviderEnabled = { providerId ->
-                providerSessionRepository.state.value.providers.any { it.providerId == providerId }
+    private val providerAuthFeatureController by lazy {
+        createProviderAuthFeatureController(
+            providerRepository = providerRepository,
+            sessionRepository = providerSessionRepository,
+            oauthDeviceCodeAssistant = oauthDeviceCodeAssistant,
+            scope = scope,
+            providerName = { providerId ->
+                providerCatalogFeatureController.uiState.value.availableProviders.firstOrNull { it.providerId == providerId }?.providerName
+                    ?: providerId
             },
-            loadTrackDetail = providerRepository::trackDetail,
-            navigator = navigator,
+            onSessionChanged = {
+                homeFeatureController.refreshHome(HomeSection.Recommend)
+                homeFeatureController.refreshHome(HomeSection.Music)
+                homeFeatureController.refreshMine()
+            },
         )
     }
 
-    private val playbackPresentationPort: PlaybackPresentationPort by lazy {
-        DefaultPlaybackPresentationPort(
-            playbackEngine = playbackEngine,
-            queuePort = controller.playbackQueueUiPort,
+    private val settingsFeatureController by lazy {
+        createSettingsFeatureController(
+            settingsRepository = settingsRepository,
+            providerRepository = providerRepository,
+            downloadRepository = downloadRepository,
+            resourceCacheRepository = resourceCacheRepository,
+            localMusicController = localMusicFeatureController,
+            debugLogViewerAvailable = debugLogFeatureController.isAvailable,
+            navigator = navigator,
+            scope = scope,
+        )
+    }
+
+    private val onboardingFeatureController: OnboardingFeatureController by lazy {
+        createOnboardingFeatureController(
+            providerRepository = providerRepository,
+            settingsRepository = settingsRepository,
+            providerCatalog = providerCatalogFeatureController,
+            scope = scope,
+        )
+    }
+
+    private val sharedResourceActionPort: SharedResourceActionPort by lazy {
+        createSharedResourceActionPort(
+            providerRepository = providerRepository,
+            providerCatalog = providerCatalogFeatureController,
+            providerDetails = providerDetailOwners,
+            searchController = searchController,
             settingsRepository = settingsRepository,
             scope = scope,
         )
     }
 
+    private val playbackSession by lazy {
+        createIosPlaybackRuntimeSession(
+            playbackState = playbackFeatureOwner.playbackState,
+            playbackEngine = playbackEngine,
+            transportCoordinator = playbackFeatureOwner.transport,
+            startFailureSource = playbackFeatureOwner.startFailureSource,
+            scope = scope,
+        )
+    }
+
+    private val searchAppPort by lazy {
+        DefaultSearchAppPort(
+            searchController = searchController,
+            providerSessions = { providerSessionRepository.state.value },
+            playbackQueue = playbackFeatureOwner.transport,
+            downloads = downloadActionPort,
+            playlists = playlistActionPort,
+            providerTrackActions = providerTrackActionPort,
+            navigator = navigator,
+        )
+    }
+
+    private val recognitionAppPort by lazy {
+        DefaultRecognitionAppPort(
+            isProviderEnabled = { id -> providerSessionRepository.state.value.providers.any { it.providerId == id } },
+            loadTrackDetail = providerRepository::trackDetail,
+            navigator = navigator,
+        )
+    }
+
+    private val playbackPresentationPort by lazy {
+        DefaultPlaybackPresentationPort(playbackEngine, playbackFeatureOwner.transport, settingsRepository, scope)
+    }
+
     val appViewModel = FuoAppViewModel(
-        controller = controller,
         playbackSession = playbackSession,
-        playbackNavigationPort = controller.playbackNavigationPort,
+        playbackNavigationPort = playbackFeatureOwner.navigation,
         playbackPresentationPort = playbackPresentationPort,
-        playbackQueueUiPort = controller.playbackQueueUiPort,
-        playbackSleepTimerPort = controller.playbackSleepTimerPort,
-        downloadActionPort = controller.downloadActionPort,
-        playlistActionPort = controller.playlistActionPort,
-        providerTrackActionPort = controller.providerTrackActionPort,
-        localMusicActionPort = controller.localMusicActionPort,
-        replacementActionPort = controller.replacementActionPort,
+        playbackQueueUiPort = playbackFeatureOwner.transport,
+        playbackSleepTimerPort = playbackFeatureOwner.sleepTimer,
+        downloadActionPort = downloadActionPort,
+        playlistActionPort = playlistActionPort,
+        providerTrackActionPort = providerTrackActionPort,
+        localMusicActionPort = localMusicFeatureController,
+        replacementActionPort = playbackFeatureOwner.replacement,
         debugLogFeatureController = debugLogFeatureController,
+        providerCatalogFeatureController = providerCatalogFeatureController,
+        providerAuthFeatureController = providerAuthFeatureController,
+        settingsFeatureController = settingsFeatureController,
+        onboardingFeatureController = onboardingFeatureController,
+        providerDetailOwners = providerDetailOwners,
+        localMusicFeatureController = localMusicFeatureController,
+        localPlaylistFeatureController = localPlaylistFeatureController,
+        homeFeatureController = homeFeatureController,
+        sharedResourceActionPort = sharedResourceActionPort,
         searchController = searchController,
         recognitionController = recognitionController,
         searchAppPort = searchAppPort,
@@ -255,13 +396,15 @@ private class IosAppContainer(
         navigator = navigator,
     )
 
-    val hasAudioPermission: Boolean
-        get() = localRepository.hasPermission
+    var hasMicrophonePermission by mutableStateOf(audioRecognitionOutput.hasPermission())
+        private set
+
+    val hasAudioPermission: Boolean get() = localRepository.hasPermission
 
     fun requestAudioPermission() {
         localRepository.requestPermission {
-            controller.onLocalMusicPermissionChange(true)
-            controller.refreshLocalMusic()
+            localMusicFeatureController.onPermissionChange(true)
+            localMusicFeatureController.refresh()
         }
     }
 
@@ -277,20 +420,13 @@ private class IosAppContainer(
         val groupsJson = loginConfig.cookieKeyGroups.joinToString(prefix = "[", postfix = "]") { group ->
             group.joinToString(prefix = "[\"", postfix = "\"]", separator = "\",\"")
         }
-        webLoginOutput.open(
-            provider.providerId,
-            provider.providerName,
-            loginConfig.loginUrl,
-            groupsJson,
-        ) { cookiesJson ->
-            if (!cookiesJson.isNullOrBlank()) {
-                controller.loginProviderWithCookies(provider.providerId, cookiesJson)
-            }
+        webLoginOutput.open(provider.providerId, provider.providerName, loginConfig.loginUrl, groupsJson) { cookiesJson ->
+            if (!cookiesJson.isNullOrBlank()) providerAuthFeatureController.loginWithCookies(provider.providerId, cookiesJson)
         }
     }
 
     fun logoutProvider(provider: ProviderInfo) {
         webLoginOutput.clear()
-        controller.logoutProvider(provider.providerId)
+        providerAuthFeatureController.logout(provider.providerId)
     }
 }

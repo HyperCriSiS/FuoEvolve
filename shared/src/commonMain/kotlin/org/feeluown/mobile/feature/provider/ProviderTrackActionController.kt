@@ -4,9 +4,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Provider-track actions shared by now playing while legacy screens still use controller facades. */
+/** Provider-track actions shared by now playing and feature/detail surfaces. */
 internal class ProviderTrackActionController(
     private val providerRepository: ProviderMusicRepository,
     private val scope: CoroutineScope,
@@ -27,16 +30,23 @@ internal class ProviderTrackActionController(
     var artistTargets by mutableStateOf<List<TrackArtistTarget>>(emptyList())
         private set
 
+    private val mutableArtistTargetPickerState = MutableStateFlow(ArtistTargetPickerUiState())
+    override val artistTargetPickerState: StateFlow<ArtistTargetPickerUiState> =
+        mutableArtistTargetPickerState.asStateFlow()
+    private val mutableFeedback = MutableStateFlow<String?>(null)
+    override val feedback: StateFlow<String?> = mutableFeedback.asStateFlow()
+
     override fun openTrackArtist(track: MusicTrack) {
         openTrackArtist(track, loadDetailWhenMissing = true)
     }
 
-    fun closeArtistTargetPicker() {
+    override fun closeArtistTargetPicker() {
         artistTargetTrack = null
         artistTargets = emptyList()
+        publishArtistTargetPickerState()
     }
 
-    fun openArtistTarget(target: TrackArtistTarget) {
+    override fun openArtistTarget(target: TrackArtistTarget) {
         val track = artistTargetTrack ?: return
         closeArtistTargetPicker()
         navigation.closeFullPlayer()
@@ -69,23 +79,27 @@ internal class ProviderTrackActionController(
         if (!canSetSongDisliked(track, disliked)) return
         scope.launch {
             setLoading(true)
-            setMessage(if (disliked) "正在设为不喜欢" else "正在取消不喜欢")
+            publishFeedback(if (disliked) "正在设为不喜欢" else "正在取消不喜欢")
             runCatching { providerRepository.setSongDisliked(track, disliked) }
                 .onSuccess { result ->
                     if (result.success) {
                         if (disliked) removeDislikedTrack(track) else refreshMineContent()
-                        setMessage(
+                        publishFeedback(
                             result.message.ifBlank {
                                 if (disliked) "已设为不喜欢" else "已取消不喜欢"
                             }
                         )
                     } else {
-                        setMessage(result.message.ifBlank { "操作失败" })
+                        publishFeedback(result.message.ifBlank { "操作失败" })
                     }
                 }
-                .onFailure(onError)
+                .onFailure(::publishFailure)
             setLoading(false)
         }
+    }
+
+    override fun dismissFeedback(feedback: String) {
+        if (mutableFeedback.value == feedback) mutableFeedback.value = null
     }
 
     private fun openTrackArtist(track: MusicTrack, loadDetailWhenMissing: Boolean) {
@@ -108,6 +122,7 @@ internal class ProviderTrackActionController(
         if (targets.size > 1) {
             artistTargetTrack = track
             artistTargets = targets
+            publishArtistTargetPickerState()
             return
         }
         targets.singleOrNull()?.mediaItem?.let {
@@ -177,6 +192,23 @@ internal class ProviderTrackActionController(
         return names.mapIndexed { index, name ->
             TrackArtistTarget(name, firstItem.takeIf { index == 0 })
         }
+    }
+
+    private fun publishArtistTargetPickerState() {
+        mutableArtistTargetPickerState.value = ArtistTargetPickerUiState(
+            track = artistTargetTrack,
+            targets = artistTargets,
+        )
+    }
+
+    private fun publishFeedback(message: String) {
+        mutableFeedback.value = message
+        setMessage(message)
+    }
+
+    private fun publishFailure(throwable: Throwable) {
+        publishFeedback(throwable.message ?: throwable::class.simpleName.orEmpty().ifBlank { "操作失败" })
+        onError(throwable)
     }
 
     private fun MusicTrack.canLoadProviderDetail(): Boolean =

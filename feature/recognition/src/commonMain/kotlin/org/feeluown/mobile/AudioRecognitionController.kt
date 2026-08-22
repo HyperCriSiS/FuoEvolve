@@ -17,14 +17,12 @@ sealed interface RecognitionAction {
     data object CancelIfInProgress : RecognitionAction
 }
 
-/** Feature-owned recognition state and operations. */
 interface RecognitionFeatureController {
     val uiState: StateFlow<RecognitionUiState>
 
     fun dispatch(action: RecognitionAction)
 }
 
-/** Composition-root factory for the recognition feature owner. */
 fun createRecognitionFeatureController(
     repository: AudioRecognitionRepository,
     scope: CoroutineScope,

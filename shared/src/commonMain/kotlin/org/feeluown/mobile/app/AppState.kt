@@ -14,67 +14,24 @@ import org.feeluown.mobile.playback.api.PlaybackSession
 
 @Serializable
 sealed interface AppRoute : NavKey {
-    @Serializable
-    data object Home : AppRoute
-
-    @Serializable
-    data object Search : AppRoute
-
-    @Serializable
-    data object AudioRecognition : AppRoute
-
-    /** Compatibility route kind. New navigation should push [FeatureDetail]. */
-    @Serializable
-    data object Feature : AppRoute
-
-    @Serializable
-    data class FeatureDetail(val feature: NavigationFeature) : AppRoute
-
-    /** Compatibility route kind. New navigation should push [TrackDetail]. */
-    @Serializable
-    data object Track : AppRoute
-
-    @Serializable
-    data class TrackDetail(val track: NavigationTrack) : AppRoute
-
-    /** Compatibility route kind. New navigation should push [VideoDetail]. */
-    @Serializable
-    data object Video : AppRoute
-
-    @Serializable
-    data class VideoDetail(val video: NavigationVideo) : AppRoute
-
-    /** Compatibility route kind. New navigation should push [PlaylistDetail]. */
-    @Serializable
-    data object Playlist : AppRoute
-
-    @Serializable
-    data class PlaylistDetail(
-        val playlist: NavigationPlaylist,
-        val category: String? = null,
-    ) : AppRoute
-
-    @Serializable
-    data object LocalPlaylist : AppRoute
-
-    @Serializable
-    data object LocalMusicCollection : AppRoute
-
-    /** Compatibility route kind. New navigation should push [MediaItemDetail]. */
-    @Serializable
-    data object MediaItem : AppRoute
-
-    @Serializable
-    data class MediaItemDetail(val item: NavigationMediaItem) : AppRoute
-
-    @Serializable
-    data object Settings : AppRoute
-
-    @Serializable
-    data object DebugLogs : AppRoute
-
-    @Serializable
-    data object DownloadManager : AppRoute
+    @Serializable data object Home : AppRoute
+    @Serializable data object Search : AppRoute
+    @Serializable data object AudioRecognition : AppRoute
+    @Serializable data object Feature : AppRoute
+    @Serializable data class FeatureDetail(val feature: NavigationFeature) : AppRoute
+    @Serializable data object Track : AppRoute
+    @Serializable data class TrackDetail(val track: NavigationTrack) : AppRoute
+    @Serializable data object Video : AppRoute
+    @Serializable data class VideoDetail(val video: NavigationVideo) : AppRoute
+    @Serializable data object Playlist : AppRoute
+    @Serializable data class PlaylistDetail(val playlist: NavigationPlaylist, val category: String? = null) : AppRoute
+    @Serializable data object LocalPlaylist : AppRoute
+    @Serializable data object LocalMusicCollection : AppRoute
+    @Serializable data object MediaItem : AppRoute
+    @Serializable data class MediaItemDetail(val item: NavigationMediaItem) : AppRoute
+    @Serializable data object Settings : AppRoute
+    @Serializable data object DebugLogs : AppRoute
+    @Serializable data object DownloadManager : AppRoute
 }
 
 private fun AppRoute.routeKind(): AppRoute = when (this) {
@@ -88,35 +45,24 @@ private fun AppRoute.routeKind(): AppRoute = when (this) {
 
 class AppNavigator {
     private val mutableBackStack = MutableStateFlow<List<AppRoute>>(listOf(AppRoute.Home))
-
     val backStack: StateFlow<List<AppRoute>> = mutableBackStack
+    val currentRoute: AppRoute get() = mutableBackStack.value.last().routeKind()
+    val currentEntry: AppRoute get() = mutableBackStack.value.last()
 
-    /** Route category retained for compatibility with controller-level navigation policy. */
-    val currentRoute: AppRoute
-        get() = mutableBackStack.value.last().routeKind()
-
-    /** Exact typed entry currently at the top of the stack. */
-    val currentEntry: AppRoute
-        get() = mutableBackStack.value.last()
-
-    fun contains(route: AppRoute): Boolean =
-        mutableBackStack.value.any { entry -> entry == route || entry.routeKind() == route }
-
+    fun contains(route: AppRoute): Boolean = mutableBackStack.value.any { it == route || it.routeKind() == route }
     fun containsWhere(predicate: (AppRoute) -> Boolean): Boolean = mutableBackStack.value.any(predicate)
 
     fun navigate(route: AppRoute) {
         if (route == AppRoute.Home) {
             mutableBackStack.value = listOf(AppRoute.Home)
-            return
-        }
-        if (currentEntry != route) {
+        } else if (currentEntry != route) {
             mutableBackStack.value = mutableBackStack.value + route
         }
     }
 
     fun pop(route: AppRoute): Boolean {
         val stack = mutableBackStack.value
-        val index = stack.indexOfLast { entry -> entry == route || entry.routeKind() == route }
+        val index = stack.indexOfLast { it == route || it.routeKind() == route }
         if (index <= 0) return false
         mutableBackStack.value = stack.take(index).ifEmpty { listOf(AppRoute.Home) }
         return true
@@ -155,11 +101,8 @@ data class AppUiState(
     val providerSessions: ProviderSessionState = ProviderSessionState(),
     val backStack: List<AppRoute> = listOf(AppRoute.Home),
 ) {
-    val isInitialized: Boolean
-        get() = settings.isLoaded
-
-    val onboardingCompleted: Boolean
-        get() = settings.settings.onboardingCompleted
+    val isInitialized: Boolean get() = settings.isLoaded
+    val onboardingCompleted: Boolean get() = settings.settings.onboardingCompleted
 }
 
 sealed interface AppIntent {
@@ -169,9 +112,7 @@ sealed interface AppIntent {
     data class UpdateThemeColorSpec(val value: ThemeColorSpec) : AppIntent
 }
 
-/** 应用壳层 ViewModel：组合设置、登录会话、导航和 feature owner。 */
 class FuoAppViewModel(
-    val controller: FuoPlayerController,
     val playbackSession: PlaybackSession,
     val playbackNavigationPort: PlaybackNavigationPort,
     val playbackPresentationPort: PlaybackPresentationPort,
@@ -183,6 +124,15 @@ class FuoAppViewModel(
     val localMusicActionPort: LocalMusicActionPort,
     val replacementActionPort: ReplacementActionPort,
     val debugLogFeatureController: DebugLogFeatureController,
+    val providerCatalogFeatureController: ProviderCatalogFeatureController,
+    val providerAuthFeatureController: ProviderAuthFeatureController,
+    val settingsFeatureController: SettingsFeatureController,
+    val onboardingFeatureController: OnboardingFeatureController? = null,
+    val providerDetailOwners: ProviderDetailOwners,
+    val localMusicFeatureController: LocalMusicFeatureController,
+    val localPlaylistFeatureController: LocalPlaylistFeatureController,
+    val homeFeatureController: HomeFeatureController,
+    val sharedResourceActionPort: SharedResourceActionPort,
     private val searchController: SearchFeatureController,
     private val recognitionController: RecognitionFeatureController,
     internal val searchAppPort: SearchAppPort,
@@ -193,8 +143,9 @@ class FuoAppViewModel(
 ) : ViewModel() {
     val searchUiState: StateFlow<SearchUiState> = searchController.uiState
     val recognitionUiState: StateFlow<RecognitionUiState> = recognitionController.uiState
+    private val mutableAppFeedback = MutableStateFlow<String?>(null)
+    val appFeedback: StateFlow<String?> = mutableAppFeedback
 
-    /** Composition-only holder; player composables consume the narrow ports installed from it. */
     val playbackUiPort = PlaybackUiGraph(
         navigation = playbackNavigationPort,
         presentation = playbackPresentationPort,
@@ -207,33 +158,43 @@ class FuoAppViewModel(
         replacement = replacementActionPort,
     )
 
+    val providerDetailUiGraph = ProviderDetailUiGraph(
+        owners = providerDetailOwners,
+        playbackQueue = playbackQueueUiPort,
+        downloads = downloadActionPort,
+        playlists = playlistActionPort,
+        providerTrackActions = providerTrackActionPort,
+    )
+
+    val homeFeatureUiGraph = HomeFeatureUiGraph(
+        home = homeFeatureController,
+        providerCatalog = providerCatalogFeatureController,
+        playbackQueue = playbackQueueUiPort,
+        downloads = downloadActionPort,
+        playlists = playlistActionPort,
+        providerTrackActions = providerTrackActionPort,
+        localPlaylist = localPlaylistFeatureController,
+        localMusic = localMusicFeatureController,
+    )
+
     val uiState: StateFlow<AppUiState> = combine(
         settingsRepository.state,
         providerSessionRepository.state,
         navigator.backStack,
-    ) { settings, sessions, backStack ->
-        AppUiState(settings, sessions, backStack)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = AppUiState(
-            settings = settingsRepository.state.value,
-            providerSessions = providerSessionRepository.state.value,
-            backStack = navigator.backStack.value,
-        ),
-    )
+    ) { settings, sessions, backStack -> AppUiState(settings, sessions, backStack) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = AppUiState(
+                settings = settingsRepository.state.value,
+                providerSessions = providerSessionRepository.state.value,
+                backStack = navigator.backStack.value,
+            ),
+        )
 
-    fun dispatchSearch(action: SearchAction) {
-        searchController.dispatch(action)
-    }
-
-    fun searchRecognizedSong(song: RecognizedSong) {
-        searchController.searchRecognizedSong(song)
-    }
-
-    fun dispatchRecognition(action: RecognitionAction) {
-        recognitionController.dispatch(action)
-    }
+    fun dispatchSearch(action: SearchAction) = searchController.dispatch(action)
+    fun searchRecognizedSong(song: RecognizedSong) = searchController.searchRecognizedSong(song)
+    fun dispatchRecognition(action: RecognitionAction) = recognitionController.dispatch(action)
 
     fun openRecognition() {
         recognitionController.dispatch(RecognitionAction.Reset)
@@ -246,52 +207,65 @@ class FuoAppViewModel(
     }
 
     fun openDebugLogs() {
-        if (debugLogFeatureController.isAvailable) {
-            navigator.navigate(AppRoute.DebugLogs)
-        }
+        if (debugLogFeatureController.isAvailable) navigator.navigate(AppRoute.DebugLogs)
     }
 
-    fun closeDebugLogs() {
-        navigator.pop(AppRoute.DebugLogs)
+    fun closeDebugLogs() { navigator.pop(AppRoute.DebugLogs) }
+    fun openDownloadManager() { navigator.navigate(AppRoute.DownloadManager) }
+    fun closeDownloadManager() { navigator.pop(AppRoute.DownloadManager) }
+
+    fun showFeedback(message: String) {
+        if (message.isNotBlank()) mutableAppFeedback.value = message
     }
 
-    fun openDownloadManager() {
-        navigator.navigate(AppRoute.DownloadManager)
-    }
-
-    fun closeDownloadManager() {
-        navigator.pop(AppRoute.DownloadManager)
+    fun dismissFeedback(message: String) {
+        if (mutableAppFeedback.value == message) mutableAppFeedback.value = null
     }
 
     fun onMicrophonePermissionChange(hasPermission: Boolean) {
-        if (
-            hasPermission &&
-            navigator.contains(AppRoute.AudioRecognition) &&
-            recognitionController.uiState.value == RecognitionUiState.Idle
-        ) {
+        if (hasPermission && navigator.contains(AppRoute.AudioRecognition) && recognitionController.uiState.value == RecognitionUiState.Idle) {
             recognitionController.dispatch(RecognitionAction.Start)
         }
     }
 
-    fun onAppBackgrounded() {
-        recognitionController.dispatch(RecognitionAction.CancelIfInProgress)
-    }
+    fun onAppBackgrounded() { recognitionController.dispatch(RecognitionAction.CancelIfInProgress) }
 
     fun dispatch(intent: AppIntent) {
         when (intent) {
-            AppIntent.NavigateBack -> when {
-                playbackNavigationPort.isQueueOpen -> playbackNavigationPort.toggleQueue()
-                playbackNavigationPort.isFullPlayerOpen -> playbackNavigationPort.closeFullPlayer()
-                else -> controller.navigateBack()
-            }
-            is AppIntent.UpdateSettings -> viewModelScope.launch {
-                settingsRepository.update(intent.transform)
-            }
-            is AppIntent.UpdateThemePaletteStyle -> viewModelScope.launch {
-                settingsRepository.updateThemePaletteStyle(intent.value)
-            }
-            is AppIntent.UpdateThemeColorSpec -> viewModelScope.launch {
-                settingsRepository.updateThemeColorSpec(intent.value)
+            AppIntent.NavigateBack -> navigateBack()
+            is AppIntent.UpdateSettings -> viewModelScope.launch { settingsRepository.update(intent.transform) }
+            is AppIntent.UpdateThemePaletteStyle -> viewModelScope.launch { settingsRepository.updateThemePaletteStyle(intent.value) }
+            is AppIntent.UpdateThemeColorSpec -> viewModelScope.launch { settingsRepository.updateThemeColorSpec(intent.value) }
+        }
+    }
+
+    private fun navigateBack() {
+        when {
+            playlistActionPort.targetPickerState.value.track != null -> playlistActionPort.closePlaylistTargetPicker()
+            providerTrackActionPort.artistTargetPickerState.value.track != null -> providerTrackActionPort.closeArtistTargetPicker()
+            localMusicFeatureController.uiState.value.metadataEditorTrack != null -> localMusicFeatureController.closeMetadataEditor()
+            playbackNavigationPort.isQueueOpen -> playbackNavigationPort.toggleQueue()
+            playbackNavigationPort.isFullPlayerOpen -> playbackNavigationPort.closeFullPlayer()
+            providerDetailOwners.video.uiState.value.isFullscreen -> providerDetailOwners.video.toggleFullscreen()
+            else -> when (navigator.currentEntry) {
+                AppRoute.Home -> Unit
+                AppRoute.Search -> searchAppPort.closeSearch()
+                AppRoute.AudioRecognition -> closeRecognition()
+                AppRoute.Settings -> settingsFeatureController.close()
+                AppRoute.DebugLogs -> closeDebugLogs()
+                AppRoute.DownloadManager -> closeDownloadManager()
+                AppRoute.LocalPlaylist -> localPlaylistFeatureController.close()
+                AppRoute.LocalMusicCollection -> localMusicFeatureController.closeCollection()
+                is AppRoute.FeatureDetail -> providerDetailOwners.feature.close()
+                is AppRoute.PlaylistDetail -> providerDetailOwners.playlist.close()
+                is AppRoute.TrackDetail -> providerDetailOwners.track.close()
+                is AppRoute.VideoDetail -> providerDetailOwners.video.close()
+                is AppRoute.MediaItemDetail -> providerDetailOwners.mediaItem.close()
+                AppRoute.Feature,
+                AppRoute.Playlist,
+                AppRoute.Track,
+                AppRoute.Video,
+                AppRoute.MediaItem -> navigator.pop()
             }
         }
     }
