@@ -1,17 +1,16 @@
 package org.feeluown.mobile
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import org.feeluown.mobile.feature.onboarding.OnboardingFeatureOwner as CoreOnboardingOwner
+import org.feeluown.mobile.feature.onboarding.OnboardingFeatureState as CoreOnboardingState
+import org.feeluown.mobile.feature.onboarding.OnboardingPreferencesPort as CorePreferencesPort
+import org.feeluown.mobile.feature.onboarding.OnboardingProviderPreferences as CoreProviderPreferences
+import org.feeluown.mobile.feature.onboarding.OnboardingProviderRuntimePort as CoreProviderRuntimePort
+import org.feeluown.mobile.feature.onboarding.createOnboardingFeatureOwner
 
-data class OnboardingUiState(
-    val selectedProviderIds: Set<String> = emptySet(),
-    val bilibiliReplacementOnly: Boolean = false,
-    val isBusy: Boolean = false,
-    val feedback: String? = null,
-)
+typealias OnboardingUiState = CoreOnboardingState
 
 interface OnboardingFeatureController {
     val uiState: StateFlow<OnboardingUiState>
@@ -28,142 +27,114 @@ fun createOnboardingFeatureController(
     settingsRepository: AppSettingsRepository,
     providerCatalog: ProviderCatalogFeatureController,
     scope: CoroutineScope,
-): OnboardingFeatureController = DefaultOnboardingFeatureController(
-    providerRepository = providerRepository,
-    settingsRepository = settingsRepository,
-    providerCatalog = providerCatalog,
-    scope = scope,
-)
+): OnboardingFeatureController {
+    val owner = createOnboardingFeatureOwner(
+        preferences = BoundOnboardingPreferencesPort(settingsRepository),
+        providerRuntime = BoundOnboardingProviderRuntimePort(providerRepository, providerCatalog),
+        smartReplacePolicy = UnavailablePlaybackPolicy.SmartReplace,
+        scope = scope,
+    )
+    return BoundOnboardingFeatureController(owner, providerCatalog)
+}
 
-private class DefaultOnboardingFeatureController(
-    private val providerRepository: ProviderMusicRepository,
-    private val settingsRepository: AppSettingsRepository,
+private class BoundOnboardingFeatureController(
+    private val owner: CoreOnboardingOwner,
     private val providerCatalog: ProviderCatalogFeatureController,
-    private val scope: CoroutineScope,
 ) : OnboardingFeatureController {
-    private val mutableUiState = MutableStateFlow(OnboardingUiState())
-    override val uiState: StateFlow<OnboardingUiState> = mutableUiState.asStateFlow()
-    private var initialized = false
+    override val uiState: StateFlow<OnboardingUiState> = owner.state
 
     override fun initialize(catalog: ProviderCatalogUiState) {
-        if (initialized || catalog.availableProviders.isEmpty()) return
-        initialized = true
-        val availableIds = catalog.availableProviders.mapTo(linkedSetOf(), ProviderInfo::providerId)
-        val settings = settingsRepository.state.value.settings
-        val selected = settings.enabledProviderIds.intersect(availableIds)
-            .ifEmpty { setOf(catalog.availableProviders.first().providerId) }
-        val replacementOnly = "bilibili" in selected &&
-            settings.smartReplacementProviderIds == setOf("bilibili") &&
-            listOf(
-                settings.searchProviderIds,
-                settings.recommendProviderIds,
-                settings.exploreProviderIds,
-                settings.mineProviderIds,
-            ).none { "bilibili" in it }
-        mutableUiState.value = mutableUiState.value.copy(
-            selectedProviderIds = selected,
-            bilibiliReplacementOnly = replacementOnly,
-        )
+        owner.initialize(catalog.availableProviders.map(ProviderInfo::providerId))
     }
 
     override fun setProviderSelected(providerId: String, selected: Boolean) {
-        val current = uiState.value
-        val next = if (selected) current.selectedProviderIds + providerId else current.selectedProviderIds - providerId
-        mutableUiState.value = current.copy(
-            selectedProviderIds = next,
-            bilibiliReplacementOnly = current.bilibiliReplacementOnly && "bilibili" in next,
-            feedback = null,
-        )
+        owner.setProviderSelected(providerId, selected)
     }
 
     override fun setBilibiliReplacementOnly(enabled: Boolean) {
-        mutableUiState.value = uiState.value.copy(
-            bilibiliReplacementOnly = enabled && "bilibili" in uiState.value.selectedProviderIds,
-            feedback = null,
-        )
+        owner.setBilibiliReplacementOnly(enabled)
     }
 
     override fun applyProviderSelection(onComplete: (Boolean) -> Unit) {
-        val state = uiState.value
-        val availableIds = providerCatalog.uiState.value.availableProviders.mapTo(mutableSetOf(), ProviderInfo::providerId)
-        val selected = state.selectedProviderIds.intersect(availableIds)
-        when {
-            selected.isEmpty() -> {
-                mutableUiState.value = state.copy(feedback = "请至少选择一个音源")
-                onComplete(false)
-                return
-            }
-            state.bilibiliReplacementOnly && selected == setOf("bilibili") -> {
-                mutableUiState.value = state.copy(feedback = "Bilibili 仅作为替换音源时，请再选择一个常规音源")
-                onComplete(false)
-                return
-            }
-        }
-        scope.launch {
-            val previous = settingsRepository.state.value.settings
-            mutableUiState.value = uiState.value.copy(isBusy = true, feedback = "正在初始化音源")
-            val next = onboardingProviderSettings(
-                current = previous,
-                selectedProviderIds = selected,
-                bilibiliReplacementOnly = state.bilibiliReplacementOnly,
+        val availableProviderIds = providerCatalog.uiState.value.availableProviders
+            .mapTo(mutableSetOf(), ProviderInfo::providerId)
+        owner.applyProviderSelection(availableProviderIds, onComplete)
+    }
+
+    override fun complete() = owner.complete()
+
+    override fun dismissFeedback(feedback: String) = owner.dismissFeedback(feedback)
+}
+
+private typealias BoundProviderPreferences = CoreProviderPreferences<UnavailablePlaybackPolicy>
+
+private class BoundOnboardingPreferencesPort(
+    private val repository: AppSettingsRepository,
+) : CorePreferencesPort<UnavailablePlaybackPolicy> {
+    override val providerPreferences: StateFlow<BoundProviderPreferences> =
+        repository.state.mapOnboardingState { it.settings.toOnboardingProviderPreferences() }
+
+    override suspend fun updateProviderPreferences(value: BoundProviderPreferences) {
+        repository.update { current ->
+            current.copy(
+                enabledProviderIds = value.enabledProviderIds,
+                searchProviderIds = value.searchProviderIds,
+                recommendProviderIds = value.recommendProviderIds,
+                exploreProviderIds = value.exploreProviderIds,
+                mineProviderIds = value.mineProviderIds,
+                smartReplacementProviderIds = value.smartReplacementProviderIds,
+                unavailablePlaybackPolicy = value.unavailablePlaybackPolicy,
             )
-            val result = runCatching {
-                providerRepository.updateEnabledProviders(selected)
-                settingsRepository.update { next }
-            }
-            if (result.isFailure) {
-                runCatching { providerRepository.updateEnabledProviders(previous.enabledProviderIds) }
-                runCatching { settingsRepository.update { previous } }
-                mutableUiState.value = uiState.value.copy(
-                    isBusy = false,
-                    feedback = result.exceptionOrNull()?.message ?: "音源初始化失败",
-                )
-                providerCatalog.refresh()
-                onComplete(false)
-                return@launch
-            }
-            providerCatalog.refresh()
-            mutableUiState.value = uiState.value.copy(isBusy = false, feedback = "音源初始化完成")
-            onComplete(true)
         }
     }
 
-    override fun complete() {
-        scope.launch {
-            settingsRepository.update { it.copy(onboardingCompleted = true) }
-        }
-    }
-
-    override fun dismissFeedback(feedback: String) {
-        if (uiState.value.feedback == feedback) {
-            mutableUiState.value = uiState.value.copy(feedback = null)
-        }
+    override suspend fun markCompleted() {
+        repository.update { it.copy(onboardingCompleted = true) }
     }
 }
 
-internal fun onboardingProviderSettings(
-    current: AppSettings,
-    selectedProviderIds: Set<String>,
-    bilibiliReplacementOnly: Boolean,
-): AppSettings {
-    if (bilibiliReplacementOnly && "bilibili" in selectedProviderIds) {
-        val regularProviderIds = selectedProviderIds - "bilibili"
-        return current.copy(
-            enabledProviderIds = selectedProviderIds,
-            searchProviderIds = regularProviderIds,
-            recommendProviderIds = regularProviderIds,
-            exploreProviderIds = regularProviderIds,
-            mineProviderIds = regularProviderIds,
-            smartReplacementProviderIds = setOf("bilibili"),
-            unavailablePlaybackPolicy = UnavailablePlaybackPolicy.SmartReplace,
-        )
+private class BoundOnboardingProviderRuntimePort(
+    private val providerRepository: ProviderMusicRepository,
+    private val providerCatalog: ProviderCatalogFeatureController,
+) : CoreProviderRuntimePort {
+    override suspend fun updateEnabledProviders(providerIds: Set<String>) {
+        providerRepository.updateEnabledProviders(providerIds)
     }
-    return current.copy(
-        enabledProviderIds = selectedProviderIds,
-        searchProviderIds = emptySet(),
-        recommendProviderIds = emptySet(),
-        exploreProviderIds = emptySet(),
-        mineProviderIds = emptySet(),
-        smartReplacementProviderIds = emptySet(),
+
+    override fun refreshCatalog() {
+        providerCatalog.refresh()
+    }
+}
+
+private fun AppSettings.toOnboardingProviderPreferences(): BoundProviderPreferences = CoreProviderPreferences(
+    enabledProviderIds = enabledProviderIds,
+    searchProviderIds = searchProviderIds,
+    recommendProviderIds = recommendProviderIds,
+    exploreProviderIds = exploreProviderIds,
+    mineProviderIds = mineProviderIds,
+    smartReplacementProviderIds = smartReplacementProviderIds,
+    unavailablePlaybackPolicy = unavailablePlaybackPolicy,
+)
+
+private class OnboardingMappedStateFlow<Source, Target>(
+    private val source: StateFlow<Source>,
+    private val transform: (Source) -> Target,
+) : StateFlow<Target> {
+    override val value: Target
+        get() = transform(source.value)
+
+    override val replayCache: List<Target>
+        get() = listOf(value)
+
+    override suspend fun collect(collector: FlowCollector<Target>): Nothing = source.collect(
+        object : FlowCollector<Source> {
+            override suspend fun emit(value: Source) {
+                collector.emit(transform(value))
+            }
+        },
     )
 }
+
+private fun <Source, Target> StateFlow<Source>.mapOnboardingState(
+    transform: (Source) -> Target,
+): StateFlow<Target> = OnboardingMappedStateFlow(this, transform)
