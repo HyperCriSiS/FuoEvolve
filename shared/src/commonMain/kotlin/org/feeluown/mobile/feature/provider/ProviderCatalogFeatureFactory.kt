@@ -67,7 +67,7 @@ private class BoundProviderCatalogFeatureController(
     scope: CoroutineScope,
 ) : ProviderCatalogFeatureController {
     override val uiState: StateFlow<ProviderCatalogUiState> = owner.state
-        .map(CoreProviderCatalogFeatureState<ProviderInfo, ProviderFeature, ProviderCapabilities, ProviderSessionState>::toUiState)
+        .map { state -> state.toUiState() }
         .stateIn(
             scope = scope,
             started = SharingStarted.Eagerly,
