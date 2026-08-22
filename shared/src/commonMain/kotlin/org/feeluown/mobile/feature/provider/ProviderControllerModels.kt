@@ -3,22 +3,6 @@ package org.feeluown.mobile
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class SearchScope {
-    Local,
-    Provider,
-    All,
-}
-
-@Serializable
-enum class ProviderSearchTab {
-    Songs,
-    Artists,
-    Albums,
-    Playlists,
-    Videos,
-}
-
-@Serializable
 enum class HomeSection {
     Recommend,
     Music,

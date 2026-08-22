@@ -10,7 +10,7 @@ plugins {
 }
 
 val migratedControllerBoundaryRoots = listOf(
-    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search",
+    "feature/search/src/commonMain/kotlin",
     "feature/recognition/src/commonMain/kotlin",
     "playback/runtime/src/commonMain/kotlin",
 )
@@ -19,6 +19,7 @@ val migratedControllerBoundaryFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppFeaturePortAdapters.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/SearchRoute.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/app/RecognitionRoute.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchFeatureBindings.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/debug/DebugLogFeatureController.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/debug/DebugLogFeatureScreen.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/download/DownloadController.kt",
@@ -63,15 +64,23 @@ val retiredControllerCompatibilityFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/provider/EnhancedProviderVideoScreen.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognition.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/recognition/AudioRecognitionController.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchController.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchControllerState.kt",
+    "shared/src/commonTest/kotlin/org/feeluown/mobile/SearchControllerTest.kt",
 )
 val requiredPhysicalFeatureFiles = listOf(
     "feature/recognition/build.gradle.kts",
     "feature/recognition/src/commonMain/kotlin/org/feeluown/mobile/AudioRecognition.kt",
     "feature/recognition/src/commonMain/kotlin/org/feeluown/mobile/AudioRecognitionController.kt",
+    "feature/search/build.gradle.kts",
+    "feature/search/src/commonMain/kotlin/org/feeluown/mobile/SearchFeature.kt",
+    "feature/search/src/commonTest/kotlin/org/feeluown/mobile/SearchFeatureTest.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/search/SearchFeatureBindings.kt",
 )
 val productionSourceRoots = listOf(
     "core/model/src/commonMain/kotlin",
     "feature/recognition/src/commonMain/kotlin",
+    "feature/search/src/commonMain/kotlin",
     "playback/api/src/commonMain/kotlin",
     "playback/runtime/src/commonMain/kotlin",
     "provider/api/src/commonMain/kotlin",
@@ -89,10 +98,12 @@ val platformCompositionRootFiles = listOf(
     "shared/src/iosMain/kotlin/org/feeluown/mobile/IosAppHost.kt",
 )
 val appRootFile = "shared/src/commonMain/kotlin/org/feeluown/mobile/app/AppRoot.kt"
+val searchFeatureBuildFile = "feature/search/build.gradle.kts"
+val searchFeatureSourceRoot = "feature/search/src/commonMain/kotlin"
 
 tasks.register("checkArchitectureBoundaries") {
     group = "verification"
-    description = "Reject retired P2 compatibility code, controller dependencies, or missing physical feature boundaries."
+    description = "Reject retired compatibility code, controller dependencies, or broken physical feature boundaries."
 
     val sourceFiles = provider {
         buildList {
@@ -131,6 +142,7 @@ tasks.register("checkArchitectureBoundaries") {
     inputs.files(platformCompositionRootFiles.map(rootProject::file))
     inputs.files(requiredPhysicalFeatureFiles.map(rootProject::file))
     inputs.file(rootProject.file(appRootFile))
+    inputs.file(rootProject.file(searchFeatureBuildFile))
 
     doLast {
         val retiredCompatViolations = retiredControllerCompatibilityFiles
@@ -140,7 +152,7 @@ tasks.register("checkArchitectureBoundaries") {
         if (retiredCompatViolations.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Retired P2 compatibility files were reintroduced:")
+                    appendLine("Retired architecture compatibility files were reintroduced:")
                     retiredCompatViolations.forEach { appendLine(" - $it") }
                     append("Use app ports or dedicated feature/playback owners instead.")
                 },
@@ -154,9 +166,46 @@ tasks.register("checkArchitectureBoundaries") {
         if (missingPhysicalFeatureFiles.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Required P2 physical feature boundary is missing:")
+                    appendLine("Required physical feature boundary is missing:")
                     missingPhysicalFeatureFiles.forEach { appendLine(" - $it") }
-                    append("Keep Recognition owned by :feature:recognition instead of moving it back into :shared.")
+                    append("Keep migrated feature ownership in its physical Gradle module instead of moving it back into :shared.")
+                },
+            )
+        }
+
+        val searchBuild = rootProject.file(searchFeatureBuildFile)
+        if (searchBuild.readText().contains("project(\":shared\")")) {
+            throw GradleException(":feature:search must not depend on :shared; adapt application repositories in the shared composition layer.")
+        }
+
+        val forbiddenSearchDependencies = listOf(
+            "ProviderMusicRepository",
+            "LocalMusicRepository",
+            "ProviderSearchResults",
+            "MusicTrack",
+            "RecognizedSong",
+        )
+        val searchRoot = rootProject.file(searchFeatureSourceRoot)
+        val searchDependencyViolations = if (searchRoot.isDirectory) {
+            searchRoot.walkTopDown()
+                .filter { it.isFile && it.extension == "kt" }
+                .flatMap { file ->
+                    file.readLines().mapIndexedNotNull { index, line ->
+                        forbiddenSearchDependencies.firstOrNull(line::contains)?.let { dependency ->
+                            "${file.relativeTo(rootProject.projectDir).invariantSeparatorsPath}:${index + 1} ($dependency)"
+                        }
+                    }.asSequence()
+                }
+                .toList()
+        } else {
+            emptyList()
+        }
+        if (searchDependencyViolations.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine(":feature:search leaked application/shared domain dependencies:")
+                    searchDependencyViolations.forEach { appendLine(" - $it") }
+                    append("Keep Search generic over its repository/result ports and bind concrete app models in :shared.")
                 },
             )
         }
@@ -181,7 +230,7 @@ tasks.register("checkArchitectureBoundaries") {
                 buildString {
                     appendLine("FuoPlayerController was reintroduced into production source:")
                     violations.forEach { appendLine(" - $it") }
-                    append("P2 production code must use feature-owned state/actions or narrow app/playback/provider contracts.")
+                    append("Production code must use feature-owned state/actions or narrow app/playback/provider contracts.")
                 },
             )
         }

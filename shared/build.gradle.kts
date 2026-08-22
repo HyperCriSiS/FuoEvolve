@@ -28,6 +28,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":playback:api"))
             api(project(":feature:recognition"))
+            api(project(":feature:search"))
             implementation(project(":provider:api"))
             implementation(compose.runtime)
             implementation(compose.foundation)
