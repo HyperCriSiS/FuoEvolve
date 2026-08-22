@@ -76,7 +76,6 @@ fun HomeScreen(
     val layoutInfo = LocalAppLayoutInfo.current
     val playbackUiPort = LocalPlaybackUiPort.current
     val state = home.uiState.collectAsStateWithLifecycle().value
-    LaunchedEffect(Unit) { home.ensureInitialContent() }
     Scaffold(
         topBar = {
             if (!layoutInfo.useWideLayout) {
