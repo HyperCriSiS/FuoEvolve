@@ -60,17 +60,19 @@ val settingsRequiredFiles = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/settings/SettingsFeatureController.kt",
 )
 
-val retiredSharedSettingsOwners = listOf(
+val retiredSharedSettingsSurfaces = listOf(
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/settings/SettingsController.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/settings/SettingsControllerState.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/settings/ResourceCacheController.kt",
+    "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/debug/DebugLogController.kt",
 )
 
 tasks.register("checkSettingsFeatureBoundaries") {
     group = "verification"
-    description = "Reject shared back-dependencies, aggregate settings contracts, or retired Settings owners."
+    description = "Reject shared back-dependencies, aggregate settings contracts, or retired Settings surfaces."
 
     inputs.files(settingsRequiredFiles.map(rootProject::file))
-    inputs.files(retiredSharedSettingsOwners.map(rootProject::file))
+    inputs.files(retiredSharedSettingsSurfaces.map(rootProject::file))
     inputs.file(rootProject.file("feature/settings/build.gradle.kts"))
     inputs.dir(rootProject.file("feature/settings/src/commonMain/kotlin"))
 
@@ -85,11 +87,11 @@ tasks.register("checkSettingsFeatureBoundaries") {
             )
         }
 
-        val reintroduced = retiredSharedSettingsOwners.map(rootProject::file).filter { it.isFile }
+        val reintroduced = retiredSharedSettingsSurfaces.map(rootProject::file).filter { it.isFile }
         if (reintroduced.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Retired shared Settings owners were reintroduced:")
+                    appendLine("Retired shared Settings surfaces were reintroduced:")
                     reintroduced.forEach { appendLine(" - ${it.relativeTo(rootProject.projectDir).invariantSeparatorsPath}") }
                 },
             )
