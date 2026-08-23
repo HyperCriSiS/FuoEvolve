@@ -624,7 +624,9 @@ suspend fun <Feature, Content, Track, Playlist> loadAllHomeTracks(
 
     while (hasMore) {
         val requestedOffset = nextOffset
-        val page = content.loadFeaturePage(feature, requestedOffset)
+        val page = withTimeout(HOME_PROVIDER_TIMEOUT_MS) {
+            content.loadFeaturePage(feature, requestedOffset)
+        }
         content.contentTracks(page).forEach { track ->
             if (seenIds.add(content.trackKey(track))) tracks += track
         }
