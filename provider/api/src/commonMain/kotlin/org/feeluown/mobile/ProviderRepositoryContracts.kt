@@ -7,7 +7,7 @@ data class ProviderSearchResults(
     val artists: List<MediaRef> = emptyList(),
     val albums: List<MediaRef> = emptyList(),
     val videos: List<ProviderVideo> = emptyList(),
-    val errorMessage: String? = null,
+    val failure: ProviderFailure? = null,
 )
 
 data class ProviderContentSection(
@@ -17,7 +17,7 @@ data class ProviderContentSection(
     val mediaItems: List<MediaRef> = emptyList(),
     val videos: List<ProviderVideo> = emptyList(),
     val isLoginRequired: Boolean = false,
-    val errorMessage: String? = null,
+    val failure: ProviderFailure? = null,
     val nextOffset: Int = 0,
     val hasMore: Boolean = false,
 )
