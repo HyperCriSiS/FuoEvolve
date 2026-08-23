@@ -23,6 +23,7 @@ class ProviderResultFailurePresentationTest {
             title = "Test",
             category = ProviderFeatureCategory.Music,
             contentType = ProviderContentType.Songs,
+            requiresLogin = false,
         )
         val section = ProviderContentSection(
             feature = feature,
