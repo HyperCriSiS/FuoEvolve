@@ -62,6 +62,42 @@ class PlaybackStartReasonTest {
     }
 
     @Test
+    fun restoredTrackCannotReplaceNewPlaylistBeforeFirstStart() = runTest {
+        val restoredTrack = track("track:restored")
+        val first = track("track:new-first")
+        val second = track("track:new-second")
+        val queue = PlaybackQueueController().apply {
+            mainQueue = listOf(restoredTrack)
+            mainQueueIndex = 0
+        }
+        var startedTrack: MusicTrack? = null
+        var startReason: PlaybackStartReason? = null
+        var playbackStarted = false
+        val coordinator = coordinator(
+            queue = queue,
+            onQueueUpdate = {
+                // Reproduce the old Android race: publishing the replacement queue caused runtime
+                // observers to republish the restored paused track, which synchronized it into the
+                // current queue slot before startPlayback() read that slot.
+                if (!playbackStarted) queue.updateCurrentTrack(restoredTrack)
+            },
+            onStart = { track, _, _ ->
+                playbackStarted = true
+                startedTrack = track
+                startReason = queue.consumePlaybackStartReason()
+            },
+        )
+
+        coordinator.playAllPlaylistTracks(
+            tracks = listOf(first, second),
+            sourcePlaylistId = "playlist:new",
+        )
+
+        assertEquals(first, startedTrack)
+        assertEquals(PlaybackStartReason.PLAYLIST_REPLACE, startReason)
+    }
+
+    @Test
     fun startingCurrentTrackUsesResumeReason() = runTest {
         val pausedTrack = track("track:a")
         val queue = PlaybackQueueController().apply {
@@ -105,6 +141,7 @@ class PlaybackStartReasonTest {
 
     private fun TestScope.coordinator(
         queue: PlaybackQueueController,
+        onQueueUpdate: () -> Unit = {},
         onStart: (MusicTrack, Int, Int?) -> Unit,
     ): PlaybackQueueCoordinator = PlaybackQueueCoordinator(
         queue = queue,
@@ -115,7 +152,7 @@ class PlaybackStartReasonTest {
         startPlayback = onStart,
         stopPlayback = {},
         persistQueue = {},
-        updateQueueState = {},
+        updateQueueState = onQueueUpdate,
         appendFeatureQueue = { 0 },
         setTrackChangeDirection = {},
         setMessage = {},
