@@ -4,8 +4,12 @@ enum class ProviderFailureKind {
     LoginExpired,
     RegionRestricted,
     CopyrightUnavailable,
+    ContentUnavailable,
+    AccountUnavailable,
+    UnsupportedOperation,
     UpstreamContractChanged,
     Network,
+    Unknown,
 }
 
 data class ProviderFailure(
