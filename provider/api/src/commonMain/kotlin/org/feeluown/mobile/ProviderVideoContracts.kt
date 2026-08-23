@@ -1,7 +1,17 @@
 package org.feeluown.mobile
 
+enum class ProviderVideoStatKind {
+    View,
+    Like,
+    Coin,
+    Favorite,
+    Comment,
+    Danmaku,
+    Share,
+}
+
 data class ProviderVideoStat(
-    val label: String,
+    val kind: ProviderVideoStatKind,
     val value: Long,
 )
 
