@@ -188,7 +188,7 @@ class HomeFeatureTest {
         content: FakeContentPort,
         playback: FakePlayback = FakePlayback(),
         localLibrary: FakeLocalLibrary = FakeLocalLibrary(),
-    ): HomeFeatureOwner<FakeProvider, FakeFeature, FakeContent, FakeTrack, FakePlaylist, Map<String, Int>> =
+    ): HomeFeatureOwner<FakeProvider, FakeFeature, FakeContent, FakeTrack, FakePlaylist, Unit> =
         createHomeFeatureOwner(
             preferences = preferences,
             catalog = catalog,
@@ -244,17 +244,17 @@ private class FakePreferences(
     homeSection: HomeTopSection = HomeTopSection.Recommend,
     mineSection: HomeMineSection = HomeMineSection.Playlists,
     playlistFilter: HomePlaylistFilter = HomePlaylistFilter.UserPlaylists,
-) : HomePreferencesPort<Map<String, Int>> {
-    val mutableState = MutableStateFlow(
+) : HomePreferencesPort<Unit> {
+    val mutableState: MutableStateFlow<HomePreferencesSnapshot<Unit>> = MutableStateFlow(
         HomePreferencesSnapshot(
             isLoaded = loaded,
             homeSection = homeSection,
             mineSection = mineSection,
             playlistFilter = playlistFilter,
-            playlistPlaybackStats = emptyMap(),
+            playlistPlaybackStats = Unit,
         ),
     )
-    override val state: StateFlow<HomePreferencesSnapshot<Map<String, Int>>> = mutableState
+    override val state: StateFlow<HomePreferencesSnapshot<Unit>> = mutableState
 
     override suspend fun setHomeSection(section: HomeTopSection) {
         mutableState.value = mutableState.value.copy(homeSection = section)
