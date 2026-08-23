@@ -11,4 +11,4 @@ internal actual fun createProviderHttpClient(): HttpClient = HttpClient(Darwin) 
 }
 
 @OptIn(ExperimentalForeignApi::class)
-internal actual fun currentTimeMillis(): Long = time(null) * 1_000
+internal actual fun platformCurrentTimeMillis(): Long = time(null) * 1_000

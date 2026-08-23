@@ -4,34 +4,6 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.serialization.SerializationException
 import org.feeluown.mobile.provider.core.network.ProviderNetworkException
 
-enum class ProviderFailureKind {
-    LoginExpired,
-    RegionRestricted,
-    CopyrightUnavailable,
-    UpstreamContractChanged,
-    Network,
-}
-
-data class ProviderFailure(
-    val kind: ProviderFailureKind,
-    val providerId: String? = null,
-    val technicalMessage: String? = null,
-) {
-    val userMessage: String
-        get() = when (kind) {
-            ProviderFailureKind.LoginExpired -> "登录状态已失效，请重新登录后重试"
-            ProviderFailureKind.RegionRestricted -> "当前地区暂不支持此内容"
-            ProviderFailureKind.CopyrightUnavailable -> "该内容因版权或资源限制不可用"
-            ProviderFailureKind.UpstreamContractChanged -> "音源接口响应已变化，请更新应用或稍后重试"
-            ProviderFailureKind.Network -> "网络请求失败，请检查网络后重试"
-        }
-}
-
-class ProviderOperationException(
-    val failure: ProviderFailure,
-    cause: Throwable? = null,
-) : IllegalStateException(failure.technicalMessage ?: failure.userMessage, cause)
-
 fun Throwable.providerFailureOrNull(providerId: String? = null): ProviderFailure? {
     causeSequence().filterIsInstance<ProviderOperationException>().firstOrNull()?.let { return it.failure }
 
@@ -60,7 +32,7 @@ fun Throwable.providerFailureOrNull(providerId: String? = null): ProviderFailure
     return null
 }
 
-internal fun providerBusinessException(
+fun providerBusinessException(
     providerId: String,
     code: Int?,
     message: String,
@@ -95,7 +67,7 @@ internal fun providerBusinessException(
     return ProviderOperationException(failure)
 }
 
-internal fun providerContractException(
+fun providerContractException(
     providerId: String,
     message: String,
     cause: Throwable? = null,

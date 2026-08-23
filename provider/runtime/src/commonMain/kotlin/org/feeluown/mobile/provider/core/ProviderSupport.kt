@@ -2,11 +2,11 @@ package org.feeluown.mobile.provider.core
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -15,7 +15,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.Serializable
+import org.feeluown.mobile.MediaRef
+import org.feeluown.mobile.MediaRefType
 import org.feeluown.mobile.MusicTrack
 import org.feeluown.mobile.PlaybackPayload
 import org.feeluown.mobile.ProviderAuthState
@@ -23,68 +24,52 @@ import org.feeluown.mobile.ProviderCapabilities
 import org.feeluown.mobile.ProviderContentSection
 import org.feeluown.mobile.ProviderFeature
 import org.feeluown.mobile.ProviderInfo
-import org.feeluown.mobile.ProviderMediaItem
 import org.feeluown.mobile.ProviderMediaItemDetail
-import org.feeluown.mobile.ProviderMediaItemType
 import org.feeluown.mobile.ProviderMutationResult
 import org.feeluown.mobile.ProviderPlaylist
 import org.feeluown.mobile.ProviderPlaylistDetail
+import org.feeluown.mobile.ProviderResourceState
 import org.feeluown.mobile.ProviderSearchResults
 import org.feeluown.mobile.ProviderVideo
+import org.feeluown.mobile.ProviderComment
 import org.feeluown.mobile.TrackSourceType
 import org.feeluown.mobile.VideoPlaybackPayload
-import org.feeluown.mobile.provider.core.network.ProviderCachePolicies
 import org.feeluown.mobile.provider.core.network.ProviderHttpClient
-import org.feeluown.mobile.provider.core.network.ProviderRequestKind
 
-internal val providerJson = Json {
+/** Shared JSON policy for concrete provider implementations. */
+val providerJson = Json {
     ignoreUnknownKeys = true
     isLenient = true
     explicitNulls = false
 }
 
-internal fun JsonElement.objOrNull(): JsonObject? = this as? JsonObject
+fun JsonElement.objOrNull(): JsonObject? = this as? JsonObject
+fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+fun JsonObject.array(key: String): JsonArray = (this[key] as? JsonArray) ?: JsonArray(emptyList())
+fun JsonObject.string(key: String): String = this[key]?.jsonPrimitive?.contentOrNull.orEmpty()
+fun JsonObject.stringOrNull(key: String): String? = string(key).takeIf { it.isNotBlank() }
+fun JsonObject.long(key: String): Long? = this[key]?.jsonPrimitive?.longOrNull
+fun JsonObject.int(key: String): Int? = this[key]?.jsonPrimitive?.intOrNull
+fun JsonObject.double(key: String): Double? = this[key]?.jsonPrimitive?.doubleOrNull
+fun JsonObject.boolean(key: String): Boolean = this[key]?.jsonPrimitive?.booleanOrNull ?: false
+fun JsonElement.asObject(): JsonObject = jsonObject
+fun JsonElement.asArray(): JsonArray = jsonArray
+fun JsonElement.asString(): String = jsonPrimitive.contentOrNull.orEmpty()
+fun JsonElement.asLong(): Long? = jsonPrimitive.longOrNull
+fun JsonElement.asInt(): Int? = jsonPrimitive.intOrNull
+fun JsonElement.asBoolean(): Boolean = jsonPrimitive.booleanOrNull ?: false
 
-internal fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+fun trackKey(providerId: String, identifier: String): String = "$providerId:$identifier"
+fun playlistKey(providerId: String, identifier: String): String = "playlist:$providerId:$identifier"
 
-internal fun JsonObject.array(key: String): JsonArray = (this[key] as? JsonArray) ?: JsonArray(emptyList())
-
-internal fun JsonObject.string(key: String): String = this[key]?.jsonPrimitive?.contentOrNull.orEmpty()
-
-internal fun JsonObject.stringOrNull(key: String): String? = string(key).takeIf { it.isNotBlank() }
-
-internal fun JsonObject.long(key: String): Long? = this[key]?.jsonPrimitive?.longOrNull
-
-internal fun JsonObject.int(key: String): Int? = this[key]?.jsonPrimitive?.intOrNull
-
-internal fun JsonObject.double(key: String): Double? = this[key]?.jsonPrimitive?.doubleOrNull
-
-internal fun JsonObject.boolean(key: String): Boolean = this[key]?.jsonPrimitive?.booleanOrNull ?: false
-
-internal fun JsonElement.asObject(): JsonObject = jsonObject
-
-internal fun JsonElement.asArray(): JsonArray = jsonArray
-
-internal fun JsonElement.asString(): String = jsonPrimitive.contentOrNull.orEmpty()
-
-internal fun JsonElement.asLong(): Long? = jsonPrimitive.longOrNull
-
-internal fun JsonElement.asInt(): Int? = jsonPrimitive.intOrNull
-
-internal fun JsonElement.asBoolean(): Boolean = jsonPrimitive.booleanOrNull ?: false
-
-internal fun trackKey(providerId: String, identifier: String): String = "$providerId:$identifier"
-
-internal fun playlistKey(providerId: String, identifier: String): String = "playlist:$providerId:$identifier"
-
-internal fun mediaItemKey(type: ProviderMediaItemType, providerId: String, identifier: String): String {
-    val prefix = if (type == ProviderMediaItemType.Artist) "artist" else "album"
+fun mediaItemKey(type: MediaRefType, providerId: String, identifier: String): String {
+    val prefix = if (type == MediaRefType.Artist) "artist" else "album"
     return "$prefix:$providerId:$identifier"
 }
 
-internal fun videoKey(providerId: String, identifier: String): String = "video:$providerId:$identifier"
+fun videoKey(providerId: String, identifier: String): String = "video:$providerId:$identifier"
 
-internal fun splitResourceId(value: String, expectedPrefix: String? = null): Pair<String, String> {
+fun splitResourceId(value: String, expectedPrefix: String? = null): Pair<String, String> {
     val parts = value.split(':')
     val start = if (expectedPrefix != null && parts.firstOrNull() == expectedPrefix) 1 else 0
     val provider = parts.getOrNull(start).orEmpty()
@@ -116,7 +101,7 @@ interface ProviderCredentialStore {
     suspend fun migrateLegacyIfNeeded() = Unit
 }
 
-internal class InMemoryProviderCredentialStore : ProviderCredentialStore {
+class InMemoryProviderCredentialStore : ProviderCredentialStore {
     private val mutex = Mutex()
     private val values = mutableMapOf<String, ProviderCredentials>()
 
@@ -131,7 +116,7 @@ internal class InMemoryProviderCredentialStore : ProviderCredentialStore {
     }
 }
 
-internal fun parseCookies(raw: String): Map<String, String> {
+fun parseCookies(raw: String): Map<String, String> {
     val value = raw.trim()
     if (value.isBlank()) return emptyMap()
     runCatching {
@@ -162,12 +147,16 @@ fun providerCredentialsFromCookieInput(raw: String): ProviderCredentials {
     }
 }
 
-internal fun cookieHeader(credentials: ProviderCredentials?): String {
+fun cookieHeader(credentials: ProviderCredentials?): String {
     if (credentials == null) return ""
     credentials.cookieHeader?.takeIf { it.isNotBlank() }?.let { return it }
     return credentials.cookies.entries.joinToString("; ") { (key, value) -> "$key=$value" }
 }
 
+/**
+ * Reusable provider implementation base. Concrete providers live above this module
+ * and depend only on provider/runtime + lower contracts.
+ */
 abstract class BaseKotlinProvider(
     protected val http: ProviderHttpClient,
     protected val credentials: ProviderCredentialStore,
@@ -236,7 +225,7 @@ abstract class BaseKotlinProvider(
     )
 
     protected fun mediaItem(
-        type: ProviderMediaItemType,
+        type: MediaRefType,
         identifier: String,
         title: String,
         coverUrl: String? = null,
@@ -244,7 +233,7 @@ abstract class BaseKotlinProvider(
         trackCount: Int? = null,
         albumCount: Int? = null,
         providerUrl: String? = null,
-    ): ProviderMediaItem = ProviderMediaItem(
+    ): MediaRef = MediaRef(
         id = mediaItemKey(type, id, identifier),
         title = title,
         providerId = id,
@@ -289,7 +278,6 @@ abstract class BaseKotlinProvider(
     )
 
     override suspend fun initialize() = Unit
-
     override suspend fun authState(): ProviderAuthState = authState(currentCredentials())
 
     override suspend fun loginWithCookies(cookiesJson: String): ProviderAuthState {
@@ -312,7 +300,7 @@ abstract class BaseKotlinProvider(
         val authorization = json.string("Authorization")
         val cookie = json.string("Cookie")
         require(authorization.isNotBlank() && cookie.isNotBlank()) {
-            "ytmusic header file must contain Authorization and Cookie"
+            "provider header file must contain Authorization and Cookie"
         }
         val value = ProviderCredentials(
             authorization = authorization,
@@ -355,35 +343,30 @@ abstract class BaseKotlinProvider(
     }
 
     override suspend fun trackDetail(identifier: String): MusicTrack? = null
-
     override suspend fun search(keyword: String): ProviderSearchResults = ProviderSearchResults()
-
     override suspend fun resolve(track: MusicTrack, qualityPolicy: String): PlaybackPayload? = null
-
     override suspend fun lyrics(track: MusicTrack): String? = null
-
     override suspend fun playlistTracks(playlist: ProviderPlaylist): List<MusicTrack> = emptyList()
 
     override suspend fun playlistDetail(playlist: ProviderPlaylist, offset: Int, limit: Int): ProviderPlaylistDetail =
         ProviderPlaylistDetail(playlist, playlistTracks(playlist))
 
-    override suspend fun mediaItemTracks(item: ProviderMediaItem): List<MusicTrack> = emptyList()
+    override suspend fun mediaItemTracks(item: MediaRef): List<MusicTrack> = emptyList()
 
-    override suspend fun mediaItemDetail(item: ProviderMediaItem, tracksOffset: Int, albumsOffset: Int, limit: Int): ProviderMediaItemDetail =
-        ProviderMediaItemDetail(item, mediaItemTracks(item))
+    override suspend fun mediaItemDetail(
+        item: MediaRef,
+        tracksOffset: Int,
+        albumsOffset: Int,
+        limit: Int,
+    ): ProviderMediaItemDetail = ProviderMediaItemDetail(item, mediaItemTracks(item))
 
     override suspend fun loadFeature(feature: ProviderFeature, offset: Int, limit: Int): ProviderContentSection =
         ProviderContentSection(feature = feature)
 
     override suspend fun similarTracks(track: MusicTrack): List<MusicTrack> = emptyList()
-
-    override suspend fun hotComments(track: MusicTrack): List<org.feeluown.mobile.ProviderComment> = emptyList()
-
+    override suspend fun hotComments(track: MusicTrack): List<ProviderComment> = emptyList()
     override suspend fun trackVideo(track: MusicTrack): ProviderVideo? = null
-
-    override suspend fun videoPlaybackPayload(video: ProviderVideo): VideoPlaybackPayload =
-        VideoPlaybackPayload(video = video)
-
+    override suspend fun videoPlaybackPayload(video: ProviderVideo): VideoPlaybackPayload = VideoPlaybackPayload(video = video)
     override suspend fun playlistOperationTargets(track: MusicTrack): List<ProviderPlaylist> = emptyList()
 
     override suspend fun addTrackToPlaylist(playlist: ProviderPlaylist, track: MusicTrack): ProviderMutationResult =
@@ -393,17 +376,18 @@ abstract class BaseKotlinProvider(
         unsupported("当前音源不支持从歌单移除歌曲")
 
     override suspend fun createPlaylist(name: String): ProviderMutationResult = unsupported("当前音源不支持新建歌单")
-
     override suspend fun deletePlaylist(playlist: ProviderPlaylist): ProviderMutationResult = unsupported("当前音源不支持删除歌单")
-
     override suspend fun setSongDisliked(track: MusicTrack, disliked: Boolean): ProviderMutationResult =
         unsupported("当前音源不支持不喜欢操作")
 
-    override suspend fun resourceState(resourceType: String, resourceId: String) =
-        org.feeluown.mobile.ProviderResourceState(providerId = id, resourceId = resourceId)
+    override suspend fun resourceState(resourceType: String, resourceId: String): ProviderResourceState =
+        ProviderResourceState(providerId = id, resourceId = resourceId)
 
-    override suspend fun setResourceFavorite(resourceType: String, resourceId: String, favorite: Boolean): ProviderMutationResult =
-        unsupported("当前音源不支持该收藏操作")
+    override suspend fun setResourceFavorite(
+        resourceType: String,
+        resourceId: String,
+        favorite: Boolean,
+    ): ProviderMutationResult = unsupported("当前音源不支持该收藏操作")
 
     protected fun unsupported(message: String) = ProviderMutationResult(false, message)
 
@@ -434,6 +418,7 @@ abstract class BaseKotlinProvider(
     }
 }
 
+/** SPI implemented by concrete providers. */
 interface KotlinMusicProvider {
     val id: String
     val name: String
@@ -468,12 +453,12 @@ interface KotlinMusicProvider {
     suspend fun createPlaylist(name: String): ProviderMutationResult
     suspend fun deletePlaylist(playlist: ProviderPlaylist): ProviderMutationResult
     suspend fun setSongDisliked(track: MusicTrack, disliked: Boolean): ProviderMutationResult
-    suspend fun mediaItemTracks(item: ProviderMediaItem): List<MusicTrack>
-    suspend fun mediaItemDetail(item: ProviderMediaItem, tracksOffset: Int, albumsOffset: Int, limit: Int): ProviderMediaItemDetail
+    suspend fun mediaItemTracks(item: MediaRef): List<MusicTrack>
+    suspend fun mediaItemDetail(item: MediaRef, tracksOffset: Int, albumsOffset: Int, limit: Int): ProviderMediaItemDetail
     suspend fun similarTracks(track: MusicTrack): List<MusicTrack>
-    suspend fun hotComments(track: MusicTrack): List<org.feeluown.mobile.ProviderComment>
+    suspend fun hotComments(track: MusicTrack): List<ProviderComment>
     suspend fun trackVideo(track: MusicTrack): ProviderVideo?
     suspend fun videoPlaybackPayload(video: ProviderVideo): VideoPlaybackPayload
-    suspend fun resourceState(resourceType: String, resourceId: String): org.feeluown.mobile.ProviderResourceState
+    suspend fun resourceState(resourceType: String, resourceId: String): ProviderResourceState
     suspend fun setResourceFavorite(resourceType: String, resourceId: String, favorite: Boolean): ProviderMutationResult
 }

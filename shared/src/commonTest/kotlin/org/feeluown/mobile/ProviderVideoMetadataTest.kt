@@ -35,11 +35,12 @@ class ProviderVideoMetadataTest {
         assertEquals(1920, metadata.width)
         assertEquals(1080, metadata.height)
         assertEquals(7, metadata.stats.size)
+        assertEquals(ProviderVideoStatKind.View, metadata.stats.first().kind)
         assertEquals(123456, metadata.stats.first().value)
     }
 
     @Test
-    fun parsesNeteaseMetadata() {
+    fun parsesNeteaseMetadataWithStableStatKinds() {
         val metadata = parseNeteaseVideoMetadata(
             """
             {
@@ -58,6 +59,14 @@ class ProviderVideoMetadataTest {
         assertNotNull(metadata)
         assertEquals("MV 描述", metadata.description)
         assertEquals("2026-08-01", metadata.publishedAt)
-        assertEquals(listOf("播放", "收藏", "评论", "分享"), metadata.stats.map { it.label })
+        assertEquals(
+            listOf(
+                ProviderVideoStatKind.View,
+                ProviderVideoStatKind.Favorite,
+                ProviderVideoStatKind.Comment,
+                ProviderVideoStatKind.Share,
+            ),
+            metadata.stats.map { it.kind },
+        )
     }
 }

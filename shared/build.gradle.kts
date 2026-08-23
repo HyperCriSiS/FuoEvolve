@@ -32,6 +32,7 @@ kotlin {
             api(project(":core:model"))
             api(project(":playback:api"))
             api(project(":provider:api"))
+            api(project(":provider:runtime"))
             api(project(":feature:recognition"))
             api(project(":feature:search"))
             api(project(":feature:localplaylist"))
@@ -103,6 +104,15 @@ val p4RequiredContractFiles = listOf(
     "core/model/src/commonMain/kotlin/org/feeluown/mobile/TrackSourceType.kt",
     "core/model/src/commonMain/kotlin/org/feeluown/mobile/MediaModels.kt",
     "provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderContracts.kt",
+    "provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderRepositoryContracts.kt",
+    "provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderFailureContracts.kt",
+    "provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderVideoContracts.kt",
+    "provider/runtime/build.gradle.kts",
+    "provider/runtime/src/commonMain/kotlin/org/feeluown/mobile/provider/core/ProviderSupport.kt",
+    "provider/runtime/src/commonMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.kt",
+    "provider/runtime/src/androidMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.android.kt",
+    "provider/runtime/src/iosMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.ios.kt",
+    "provider/runtime/src/commonMain/kotlin/org/feeluown/mobile/ProviderFailureMapping.kt",
     "playback/api/src/commonMain/kotlin/org/feeluown/mobile/PlaybackContracts.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/AppSettingsContracts.kt",
     "shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/PlaybackApplicationContracts.kt",
@@ -136,6 +146,17 @@ val p4MovedContractNames = listOf(
     "ProviderVideo",
     "ProviderComment",
     "VideoPlaybackPayload",
+    "ProviderSearchResults",
+    "ProviderContentSection",
+    "ProviderPlaylistDetail",
+    "ProviderMediaItemDetail",
+    "ProviderDeviceAuthorization",
+    "ProviderOAuthToken",
+    "ProviderFailureKind",
+    "ProviderFailure",
+    "ProviderOperationException",
+    "ProviderVideoStat",
+    "ProviderVideoMetadata",
     "AudioQualityPolicy",
     "UnavailablePlaybackPolicy",
     "RepeatMode",
@@ -160,21 +181,37 @@ val p4IosExportedModules = listOf(
 
 tasks.register("checkP4ContractBoundaries") {
     group = "verification"
-    description = "Reject restoration of shared contract aggregates or invalid lower-layer media dependencies."
+    description = "Reject restoration of shared contracts/runtime infrastructure or invalid lower-layer dependencies."
 
     val retiredSharedFiles = listOf(
         rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/FuoContracts.kt"),
         rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/MediaContracts.kt"),
+        rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/ProviderFailure.kt"),
+        rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/provider/core/ProviderSupport.kt"),
+        rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.kt"),
+        rootProject.file("shared/src/androidMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.android.kt"),
+        rootProject.file("shared/src/iosMain/kotlin/org/feeluown/mobile/provider/core/network/ProviderNetwork.ios.kt"),
     )
     val requiredFiles = p4RequiredContractFiles.map(rootProject::file)
     val coreBuildFile = rootProject.file("core/model/build.gradle.kts")
     val providerApiBuildFile = rootProject.file("provider/api/build.gradle.kts")
+    val providerRuntimeBuildFile = rootProject.file("provider/runtime/build.gradle.kts")
     val playbackApiBuildFile = rootProject.file("playback/api/build.gradle.kts")
-    val lowerBuildFiles = listOf(coreBuildFile, providerApiBuildFile, playbackApiBuildFile)
+    val lowerBuildFiles = listOf(coreBuildFile, providerApiBuildFile, providerRuntimeBuildFile, playbackApiBuildFile)
     val sharedBuildFile = rootProject.file("shared/build.gradle.kts")
     val sharedModelRoot = rootProject.file("shared/src/commonMain/kotlin/org/feeluown/mobile/core/model")
+    val sharedProviderCapabilityFile = rootProject.file(
+        "shared/src/commonMain/kotlin/org/feeluown/mobile/feature/provider/ProviderRepositoryCapabilities.kt",
+    )
     val coreMediaFile = rootProject.file("core/model/src/commonMain/kotlin/org/feeluown/mobile/MediaModels.kt")
     val providerContractsFile = rootProject.file("provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderContracts.kt")
+    val providerRepositoryContractsFile = rootProject.file(
+        "provider/api/src/commonMain/kotlin/org/feeluown/mobile/ProviderRepositoryContracts.kt",
+    )
+    val providerLowerRoots = listOf(
+        rootProject.file("provider/api/src"),
+        rootProject.file("provider/runtime/src"),
+    )
     val playbackApplicationContractsFile = rootProject.file(
         "shared/src/commonMain/kotlin/org/feeluown/mobile/core/model/PlaybackApplicationContracts.kt",
     )
@@ -183,13 +220,15 @@ tasks.register("checkP4ContractBoundaries") {
     inputs.files(lowerBuildFiles)
     inputs.file(sharedBuildFile)
     inputs.dir(sharedModelRoot)
+    inputs.file(sharedProviderCapabilityFile)
+    providerLowerRoots.forEach(inputs::dir)
 
     doLast {
         val restoredRetiredFiles = retiredSharedFiles.filter { it.isFile }
         if (restoredRetiredFiles.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Retired shared contract files were restored:")
+                    appendLine("Retired shared contract/runtime files were restored:")
                     restoredRetiredFiles.forEach { appendLine(" - ${it.relativeTo(rootProject.projectDir).invariantSeparatorsPath}") }
                 },
             )
@@ -199,7 +238,7 @@ tasks.register("checkP4ContractBoundaries") {
         if (missing.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("P4 contract boundary files are missing:")
+                    appendLine("P4 contract/runtime boundary files are missing:")
                     missing.forEach { appendLine(" - ${it.relativeTo(rootProject.projectDir).invariantSeparatorsPath}") }
                 },
             )
@@ -211,14 +250,14 @@ tasks.register("checkP4ContractBoundaries") {
         if (sharedBackDependencies.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("Lower contract modules must not depend on :shared:")
+                    appendLine("Lower modules must not depend on :shared:")
                     sharedBackDependencies.forEach { appendLine(" - ${it.relativeTo(rootProject.projectDir).invariantSeparatorsPath}") }
                 },
             )
         }
 
         val coreBuildText = coreBuildFile.readText()
-        val forbiddenCoreDependencies = listOf(":provider:api", ":playback:api", ":feature:").filter { dependency ->
+        val forbiddenCoreDependencies = listOf(":provider:api", ":provider:runtime", ":playback:api", ":feature:").filter { dependency ->
             coreBuildText.contains("project(\"$dependency")
         }
         if (forbiddenCoreDependencies.isNotEmpty()) {
@@ -227,8 +266,40 @@ tasks.register("checkP4ContractBoundaries") {
             )
         }
 
-        if (!providerApiBuildFile.readText().contains("api(project(\":core:model\"))")) {
+        val providerApiBuildText = providerApiBuildFile.readText()
+        if (!providerApiBuildText.contains("api(project(\":core:model\"))")) {
             throw GradleException(":provider:api must consume :core:model as its public media identity boundary.")
+        }
+        val forbiddenProviderApiDependencies = listOf(":shared", ":feature:", ":playback:", ":provider:runtime").filter { dependency ->
+            providerApiBuildText.contains("project(\"$dependency")
+        }
+        if (forbiddenProviderApiDependencies.isNotEmpty()) {
+            throw GradleException(
+                ":provider:api must remain provider-neutral and independent from runtime/playback/app layers: ${forbiddenProviderApiDependencies.joinToString()}",
+            )
+        }
+
+        val providerRuntimeBuildText = providerRuntimeBuildFile.readText()
+        if (!providerRuntimeBuildText.contains("api(project(\":provider:api\"))")) {
+            throw GradleException(":provider:runtime must expose :provider:api as its contract boundary.")
+        }
+        if (!providerRuntimeBuildText.contains("api(project(\":playback:api\"))")) {
+            throw GradleException(":provider:runtime must depend on :playback:api for resolved playback payload SPI.")
+        }
+        val forbiddenProviderRuntimeDependencies = listOf(":shared", ":feature:").filter { dependency ->
+            providerRuntimeBuildText.contains("project(\"$dependency")
+        }
+        if (forbiddenProviderRuntimeDependencies.isNotEmpty()) {
+            throw GradleException(
+                ":provider:runtime must not depend on app/feature layers: ${forbiddenProviderRuntimeDependencies.joinToString()}",
+            )
+        }
+
+        val lowerProviderSourceText = providerLowerRoots
+            .flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
+            .joinToString("\n") { it.readText() }
+        if (lowerProviderSourceText.contains("org.feeluown.mobile.provider.ytmusic")) {
+            throw GradleException(":provider:api/:provider:runtime must not expose concrete YTMusic types.")
         }
 
         val coreMediaText = coreMediaFile.readText()
@@ -244,15 +315,41 @@ tasks.register("checkP4ContractBoundaries") {
             !providerContractsText.contains("typealias ProviderMediaItemType = MediaRefType") ||
             !providerContractsText.contains("typealias ProviderMediaItem = MediaRef")
         ) {
-            throw GradleException("Provider media compatibility names must remain aliases to the core MediaRef contracts.")
+            throw GradleException("Provider media compatibility names must remain aliases to the core MediaRef contracts during P4-C.")
+        }
+
+        val providerRepositoryContractsText = providerRepositoryContractsFile.readText()
+        if (
+            !providerRepositoryContractsText.contains("val artists: List<MediaRef>") ||
+            !providerRepositoryContractsText.contains("val mediaItems: List<MediaRef>") ||
+            Regex("\\bProviderMediaItem\\b").containsMatchIn(providerRepositoryContractsText)
+        ) {
+            throw GradleException(":provider:api repository contracts must use canonical MediaRef naming.")
+        }
+
+        val sharedCapabilityText = sharedProviderCapabilityFile.readText()
+        val providerNeutralDeclarationsStillInShared = listOf(
+            "interface ProviderSearchRepository",
+            "interface ProviderAuthRepository",
+            "data class ProviderDeviceAuthorization",
+            "data class ProviderOAuthToken",
+            "sealed interface ProviderDeviceAuthorizationPollResult",
+        ).filter(sharedCapabilityText::contains)
+        if (providerNeutralDeclarationsStillInShared.isNotEmpty()) {
+            throw GradleException(
+                "Provider-neutral capability contracts must live in :provider:api, not :shared: ${providerNeutralDeclarationsStillInShared.joinToString()}",
+            )
         }
 
         val playbackApplicationText = playbackApplicationContractsFile.readText()
         if (!playbackApplicationText.contains("private const val CURRENT_VERSION = \"v2\"")) {
-            throw GradleException("P4-B must preserve the existing v2 playback queue persistence format.")
+            throw GradleException("P4 must preserve the existing v2 playback queue persistence format.")
         }
 
         val sharedBuildText = sharedBuildFile.readText()
+        if (!sharedBuildText.contains("api(project(\":provider:runtime\"))")) {
+            throw GradleException(":shared must consume the physical :provider:runtime boundary for concrete provider integration.")
+        }
         val missingIosExports = p4IosExportedModules.filterNot { module ->
             sharedBuildText.contains("export(project(\"$module\"))")
         }
@@ -263,7 +360,7 @@ tasks.register("checkP4ContractBoundaries") {
         }
 
         val declarationPattern = Regex(
-            "\\b(?:data\\s+class|enum\\s+class)\\s+(?:${p4MovedContractNames.joinToString("|")})\\b",
+            "\\b(?:data\\s+class|enum\\s+class|class)\\s+(?:${p4MovedContractNames.joinToString("|")})\\b",
         )
         val duplicateDeclarations = sharedModelRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }

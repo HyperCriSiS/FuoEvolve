@@ -14,9 +14,9 @@ import org.feeluown.mobile.provider.core.network.PersistedProviderCacheEntry
 import org.feeluown.mobile.provider.core.network.ProviderCachePolicy
 import org.feeluown.mobile.provider.core.network.ProviderHttpClient
 import org.feeluown.mobile.provider.core.network.ProviderNetworkException
+import org.feeluown.mobile.provider.core.network.ProviderPersistentCache
 import org.feeluown.mobile.provider.core.network.ProviderRequestKind
 import org.feeluown.mobile.provider.core.network.ProviderRetryPolicy
-import org.feeluown.mobile.provider.core.network.ProviderPersistentCache
 
 class ProviderNetworkTest {
     @Test
@@ -26,11 +26,7 @@ class ProviderNetworkTest {
             engine {
                 addHandler {
                     calls += 1
-                    if (calls < 3) {
-                        respondError(HttpStatusCode.ServiceUnavailable)
-                    } else {
-                        respond("ok")
-                    }
+                    if (calls < 3) respondError(HttpStatusCode.ServiceUnavailable) else respond("ok")
                 }
             }
         }

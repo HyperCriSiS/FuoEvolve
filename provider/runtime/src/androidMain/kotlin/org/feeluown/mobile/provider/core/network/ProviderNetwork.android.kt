@@ -21,4 +21,4 @@ internal actual fun createProviderHttpClient(): HttpClient = HttpClient(OkHttp) 
     }
 }
 
-internal actual fun currentTimeMillis(): Long = System.currentTimeMillis()
+internal actual fun platformCurrentTimeMillis(): Long = System.currentTimeMillis()

@@ -1,30 +1,29 @@
 package org.feeluown.mobile.provider.core.network
 
 import io.ktor.client.HttpClient
-import io.ktor.client.request.header
-import io.ktor.client.request.request
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.HttpResponse
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.HttpClientConfig
-import io.ktor.serialization.kotlinx.json.json
+import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
-import io.ktor.http.formUrlEncode
 import io.ktor.http.content.TextContent
+import io.ktor.http.formUrlEncode
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlin.math.min
 import kotlin.random.Random
 
@@ -74,11 +73,8 @@ data class PersistedProviderCacheEntry(
 
 interface ProviderPersistentCache {
     suspend fun read(key: String): PersistedProviderCacheEntry?
-
     suspend fun write(key: String, entry: PersistedProviderCacheEntry)
-
     suspend fun invalidate(prefix: String)
-
     suspend fun clear()
 }
 
@@ -90,7 +86,6 @@ sealed class ProviderNetworkException(message: String, cause: Throwable? = null)
     ) : ProviderNetworkException(httpFailureMessage(statusCode, responseBody))
 
     class Transport(cause: Throwable) : ProviderNetworkException("provider request transport failure", cause)
-
     class Timeout(cause: Throwable) : ProviderNetworkException("provider request timed out", cause)
 }
 
@@ -99,8 +94,6 @@ private fun httpFailureMessage(statusCode: Int, responseBody: String): String {
     val detail = if (trimmed.isEmpty()) {
         null
     } else {
-        // Prefer JSON error.message when present (YouTube InnerTube, Google OAuth, etc.).
-        // Search the whole body: pretty-printed responses often start with "{" alone.
         val messageMatch = Regex(""""message"\s*:\s*"((?:\\.|[^"\\])*)"""").find(trimmed)
         val message = messageMatch?.groupValues?.getOrNull(1)
             ?.replace("\\\"", "\"")
@@ -153,9 +146,7 @@ class ProviderResponseCache(
     }
 
     suspend fun invalidate(prefix: String) {
-        mutex.withLock {
-            records.keys.removeAll { it.startsWith(prefix) }
-        }
+        mutex.withLock { records.keys.removeAll { it.startsWith(prefix) } }
     }
 
     suspend fun clear() = mutex.withLock { records.clear() }
@@ -176,18 +167,16 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
-    ): CachedText {
-        return execute(
-            providerId = providerId,
-            method = HttpMethod.Get,
-            url = url,
-            headers = headers,
-            kind = kind,
-            body = null,
-            cacheKey = cacheKey,
-            cachePolicy = cachePolicy,
-        )
-    }
+    ): CachedText = execute(
+        providerId = providerId,
+        method = HttpMethod.Get,
+        url = url,
+        headers = headers,
+        kind = kind,
+        body = null,
+        cacheKey = cacheKey,
+        cachePolicy = cachePolicy,
+    )
 
     suspend fun postForm(
         providerId: String,
@@ -197,18 +186,16 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
-    ): CachedText {
-        return execute(
-            providerId = providerId,
-            method = HttpMethod.Post,
-            url = url,
-            headers = headers,
-            kind = kind,
-            body = TextContent(form.formUrlEncode(), ContentType.Application.FormUrlEncoded),
-            cacheKey = cacheKey,
-            cachePolicy = cachePolicy,
-        )
-    }
+    ): CachedText = execute(
+        providerId = providerId,
+        method = HttpMethod.Post,
+        url = url,
+        headers = headers,
+        kind = kind,
+        body = TextContent(form.formUrlEncode(), ContentType.Application.FormUrlEncoded),
+        cacheKey = cacheKey,
+        cachePolicy = cachePolicy,
+    )
 
     suspend fun postJson(
         providerId: String,
@@ -218,18 +205,16 @@ class ProviderHttpClient(
         kind: ProviderRequestKind = ProviderRequestKind.SafeRead,
         cacheKey: String? = null,
         cachePolicy: ProviderCachePolicy = ProviderCachePolicies.none,
-    ): CachedText {
-        return execute(
-            providerId = providerId,
-            method = HttpMethod.Post,
-            url = url,
-            headers = headers,
-            kind = kind,
-            body = TextContent(json, ContentType.Application.Json),
-            cacheKey = cacheKey,
-            cachePolicy = cachePolicy,
-        )
-    }
+    ): CachedText = execute(
+        providerId = providerId,
+        method = HttpMethod.Post,
+        url = url,
+        headers = headers,
+        kind = kind,
+        body = TextContent(json, ContentType.Application.Json),
+        cacheKey = cacheKey,
+        cachePolicy = cachePolicy,
+    )
 
     suspend fun invalidateCache(prefix: String) {
         cache.invalidate(prefix)
@@ -273,10 +258,7 @@ class ProviderHttpClient(
                 if (response.status.isSuccess()) {
                     effectiveCacheKey?.let { key ->
                         cache.put(key, responseBody)
-                        persistentCache?.write(
-                            key,
-                            PersistedProviderCacheEntry(responseBody, nowMillis()),
-                        )
+                        persistentCache?.write(key, PersistedProviderCacheEntry(responseBody, nowMillis()))
                     }
                     return CachedText(responseBody, CacheFreshness.Network, nowMillis())
                 }
@@ -321,13 +303,11 @@ class ProviderHttpClient(
         throw lastFailure ?: ProviderNetworkException.Transport(IllegalStateException("request failed: $providerId $url"))
     }
 
-    private fun retryCount(kind: ProviderRequestKind): Int {
-        return if (kind == ProviderRequestKind.SafeRead) retryPolicy.maxRetries + 1 else 1
-    }
+    private fun retryCount(kind: ProviderRequestKind): Int =
+        if (kind == ProviderRequestKind.SafeRead) retryPolicy.maxRetries + 1 else 1
 
-    private fun shouldRetry(statusCode: Int, kind: ProviderRequestKind): Boolean {
-        return kind == ProviderRequestKind.SafeRead && statusCode in setOf(408, 425, 429, 500, 502, 503, 504)
-    }
+    private fun shouldRetry(statusCode: Int, kind: ProviderRequestKind): Boolean =
+        kind == ProviderRequestKind.SafeRead && statusCode in setOf(408, 425, 429, 500, 502, 503, 504)
 
     private fun retryDelayMillis(attempt: Int, retryAfterMillis: Long?): Long {
         retryAfterMillis?.let { return it.coerceAtMost(retryPolicy.maxDelayMillis) }
@@ -372,4 +352,6 @@ internal fun HttpClientConfig<*>.installProviderClientDefaults() {
 
 internal expect fun createProviderHttpClient(): HttpClient
 
-internal expect fun currentTimeMillis(): Long
+fun currentTimeMillis(): Long = platformCurrentTimeMillis()
+
+internal expect fun platformCurrentTimeMillis(): Long

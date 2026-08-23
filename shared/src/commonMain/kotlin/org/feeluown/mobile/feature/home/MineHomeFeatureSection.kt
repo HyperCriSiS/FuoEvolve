@@ -162,7 +162,8 @@ private fun MineOwnerPlaylists(home: HomeFeatureController, showFilter: Boolean,
                         }
                     }
                 }
-                if (section.errorMessage != null) item("err:${section.feature.id}") { ProviderContentMessage(section.errorMessage) }
+                val errorMessage = section.errorMessage
+                if (errorMessage != null) item("err:${section.feature.id}") { ProviderContentMessage(errorMessage) }
                 else if (section.playlists.isNotEmpty()) item("grid:${section.feature.id}") {
                     ProviderPlaylistGrid(
                         mineSortPlaylists(section.playlists, state.playlistPlaybackStats),
@@ -233,7 +234,8 @@ private fun MineOwnerMediaItems(home: HomeFeatureController, type: ProviderConte
         if (sections.isEmpty()) item { EmptyProviderContentHint(title) }
         sections.filterNot { it.isLoginRequired }.forEach { section ->
             item("head:${section.feature.id}") { ProviderFeatureHeader(section.feature) }
-            if (section.errorMessage != null) item("err:${section.feature.id}") { ProviderContentMessage(section.errorMessage) }
+            val errorMessage = section.errorMessage
+            if (errorMessage != null) item("err:${section.feature.id}") { ProviderContentMessage(errorMessage) }
             else if (section.mediaItems.isNotEmpty()) item("items:${section.feature.id}") {
                 ProviderMediaItemGrid(section.mediaItems, home::openMediaItem)
             }
