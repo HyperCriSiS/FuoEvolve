@@ -72,9 +72,10 @@ fun ProviderContentHomeFeatureSection(
                         item(key = "header:${contentSection.feature.id}") {
                             ProviderFeatureHeader(feature = contentSection.feature)
                         }
+                        val errorMessage = contentSection.errorMessage
                         when {
-                            contentSection.errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
-                                ProviderContentMessage(contentSection.errorMessage)
+                            errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
+                                ProviderContentMessage(errorMessage)
                             }
                             contentSection.playlists.isNotEmpty() -> item(key = "playlists:${contentSection.feature.id}") {
                                 ProviderPlaylistGrid(
@@ -132,9 +133,10 @@ fun ProviderContentHomeFeatureSection(
                                 },
                             )
                         }
+                        val errorMessage = contentSection.errorMessage
                         when {
-                            contentSection.errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
-                                ProviderContentMessage(contentSection.errorMessage)
+                            errorMessage != null -> item(key = "error:${contentSection.feature.id}") {
+                                ProviderContentMessage(errorMessage)
                             }
                             contentSection.tracks.isNotEmpty() -> itemsIndexed(
                                 contentSection.tracks,
