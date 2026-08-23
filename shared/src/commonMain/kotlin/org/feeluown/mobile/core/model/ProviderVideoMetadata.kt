@@ -58,13 +58,13 @@ internal object ProviderVideoMetadataRepository {
             description = data.string("desc").trim(),
             publishedAt = data.long("pubdate")?.let(::formatEpochDate),
             stats = buildList {
-                stats?.long("view")?.let { add(ProviderVideoStat("播放", it)) }
-                stats?.long("like")?.let { add(ProviderVideoStat("点赞", it)) }
-                stats?.long("coin")?.let { add(ProviderVideoStat("投币", it)) }
-                stats?.long("favorite")?.let { add(ProviderVideoStat("收藏", it)) }
-                stats?.long("reply")?.let { add(ProviderVideoStat("评论", it)) }
-                stats?.long("danmaku")?.let { add(ProviderVideoStat("弹幕", it)) }
-                stats?.long("share")?.let { add(ProviderVideoStat("分享", it)) }
+                stats?.long("view")?.let { add(ProviderVideoStat(ProviderVideoStatKind.View, it)) }
+                stats?.long("like")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Like, it)) }
+                stats?.long("coin")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Coin, it)) }
+                stats?.long("favorite")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Favorite, it)) }
+                stats?.long("reply")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Comment, it)) }
+                stats?.long("danmaku")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Danmaku, it)) }
+                stats?.long("share")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Share, it)) }
             },
             width = width,
             height = height,
@@ -91,10 +91,10 @@ internal object ProviderVideoMetadataRepository {
                 .trim(),
             publishedAt = data.stringOrNull("publishTime"),
             stats = buildList {
-                data.long("playCount")?.let { add(ProviderVideoStat("播放", it)) }
-                data.long("subCount")?.let { add(ProviderVideoStat("收藏", it)) }
-                data.long("commentCount")?.let { add(ProviderVideoStat("评论", it)) }
-                data.long("shareCount")?.let { add(ProviderVideoStat("分享", it)) }
+                data.long("playCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.View, it)) }
+                data.long("subCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Favorite, it)) }
+                data.long("commentCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Comment, it)) }
+                data.long("shareCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Share, it)) }
             },
         )
     }
@@ -113,13 +113,13 @@ internal fun parseBilibiliVideoMetadata(raw: String): ProviderVideoMetadata? {
         description = data.string("desc").trim(),
         publishedAt = data.long("pubdate")?.let(::formatEpochDate),
         stats = buildList {
-            stats?.long("view")?.let { add(ProviderVideoStat("播放", it)) }
-            stats?.long("like")?.let { add(ProviderVideoStat("点赞", it)) }
-            stats?.long("coin")?.let { add(ProviderVideoStat("投币", it)) }
-            stats?.long("favorite")?.let { add(ProviderVideoStat("收藏", it)) }
-            stats?.long("reply")?.let { add(ProviderVideoStat("评论", it)) }
-            stats?.long("danmaku")?.let { add(ProviderVideoStat("弹幕", it)) }
-            stats?.long("share")?.let { add(ProviderVideoStat("分享", it)) }
+            stats?.long("view")?.let { add(ProviderVideoStat(ProviderVideoStatKind.View, it)) }
+            stats?.long("like")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Like, it)) }
+            stats?.long("coin")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Coin, it)) }
+            stats?.long("favorite")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Favorite, it)) }
+            stats?.long("reply")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Comment, it)) }
+            stats?.long("danmaku")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Danmaku, it)) }
+            stats?.long("share")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Share, it)) }
         },
         width = if (rotate % 180 == 0) rawWidth else rawHeight,
         height = if (rotate % 180 == 0) rawHeight else rawWidth,
@@ -133,10 +133,10 @@ internal fun parseNeteaseVideoMetadata(raw: String): ProviderVideoMetadata? {
         description = data.string("desc").ifBlank { data.string("briefDesc") }.trim(),
         publishedAt = data.stringOrNull("publishTime"),
         stats = buildList {
-            data.long("playCount")?.let { add(ProviderVideoStat("播放", it)) }
-            data.long("subCount")?.let { add(ProviderVideoStat("收藏", it)) }
-            data.long("commentCount")?.let { add(ProviderVideoStat("评论", it)) }
-            data.long("shareCount")?.let { add(ProviderVideoStat("分享", it)) }
+            data.long("playCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.View, it)) }
+            data.long("subCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Favorite, it)) }
+            data.long("commentCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Comment, it)) }
+            data.long("shareCount")?.let { add(ProviderVideoStat(ProviderVideoStatKind.Share, it)) }
         },
     )
 }
