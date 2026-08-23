@@ -1,14 +1,14 @@
 # FuoEvolve architecture boundaries
 
-This document records the compile-time and ownership boundaries after the P2 ownership migration and the current P3 physical feature extraction.
+This document records the compile-time and ownership boundaries after the P2 ownership migration and P3 physical feature modularization.
 
 ## Dependency direction
 
 The intended dependency direction is:
 
-`platform composition root -> app shell -> feature owner -> core/api`
+`platform composition root -> app/shared integration -> feature owner -> core/api or feature-owned ports`
 
-Platform hosts (`androidApp`, iOS host/adapters) construct platform dependencies and feature owners. Feature implementations must not use a platform service locator or depend back on `:shared`.
+Platform hosts (`androidApp`, iOS host/adapters) construct platform dependencies and application bindings. Physical feature implementations must not use a platform service locator or depend back on `:shared`.
 
 The current compile-time modules are:
 
@@ -16,20 +16,21 @@ The current compile-time modules are:
 - `:provider:api`: provider-neutral capability contracts.
 - `:playback:api`: app-scoped playback session contracts.
 - `:playback:runtime`: controller-free playback session state/transport implementation.
-- `:feature:recognition`: physical Recognition feature module containing recognition contracts, state, controller and tests.
-- `:feature:search`: physical Search feature module containing search actions, state ownership, repository/result ports, orchestration and tests.
-- `:feature:localplaylist`: physical Local Playlist state/orchestration boundary.
-- `:feature:localmusic`: physical Local Music state/orchestration boundary.
-- `:feature:download`: physical Download state/orchestration and offline-library coordination boundary.
-- `:feature:providercatalog`: physical provider discovery/configuration/catalog state boundary.
-- `:feature:providerauth`: physical provider authentication and device-OAuth orchestration boundary.
-- `:feature:providerdetail`: physical provider feature/playlist/track/media/video detail orchestration boundary.
-- `:feature:settings`: physical Settings state/orchestration boundary using feature-owned preference and collaborator ports.
-- `:feature:onboarding`: physical startup provider-selection/rollback/completion boundary.
-- `:shared`: app shell, shared Compose/design primitives and application bindings for physical feature modules plus feature implementations not yet physically extracted.
+- `:feature:recognition`: Recognition contracts, state, orchestration and tests.
+- `:feature:search`: Search state, repository/result ports, orchestration and tests.
+- `:feature:localplaylist`: Local Playlist state and CRUD/import/export orchestration.
+- `:feature:localmusic`: Local Music refresh/filter/permission/metadata/lyrics orchestration.
+- `:feature:download`: Download state/actions and offline-library coordination.
+- `:feature:providercatalog`: provider discovery/configuration/catalog state.
+- `:feature:providerauth`: provider authentication and device-OAuth orchestration.
+- `:feature:providerdetail`: provider feature/playlist/track/media/video detail orchestration.
+- `:feature:settings`: Settings state/orchestration behind feature-owned collaborator ports.
+- `:feature:onboarding`: startup provider-selection/rollback/completion orchestration.
+- `:feature:home`: Recommend/Explore/Mine aggregation, loading and playback intent orchestration.
+- `:shared`: app shell, Compose/design primitives and concrete application bindings for physical feature modules.
 - `:androidApp`: Android composition root and platform adapters.
 
-Recognition, Search, Offline Library, Provider Catalog/Auth, Provider Detail, Settings and Onboarding have one-way dependency graphs. Application-domain types remain at the `:shared` binding layer when moving them lower would unnecessarily widen a feature contract.
+All physical feature modules have one-way dependency graphs. Application-domain types remain in the `:shared` binding layer when pushing them lower would unnecessarily widen a feature contract.
 
 ## P2 ownership result
 
@@ -37,118 +38,70 @@ Recognition, Search, Offline Library, Provider Catalog/Auth, Provider Detail, Se
 
 App-scoped navigation is owned by `AppNavigator` / `FuoAppViewModel`. Feature state is owned by dedicated feature controllers/owners. Loading, errors and transient feedback are feature-local unless they are genuinely app-scoped.
 
-Major migrated ownership boundaries include:
+Major ownership boundaries include:
 
-- Search and Recognition feature owners and app ports;
-- Debug log and Download manager owners;
-- Local Music and Local Playlist owners;
-- Settings, provider authentication and onboarding owners;
-- provider feature/playlist/track/media/video detail owners;
-- Home/provider-content owner;
-- playback queue/start/lifecycle/replacement/sleep-timer owners.
+- Search and Recognition;
+- Debug logs and Download manager;
+- Local Music and Local Playlist;
+- Settings, provider authentication and onboarding;
+- provider feature/playlist/track/media/video detail;
+- Home/provider-content;
+- playback queue/start/lifecycle/replacement/sleep-timer.
 
-Legacy Home, Settings, Onboarding, provider-detail and controller-backed player screens were deleted after their owner-based replacements became active.
+## P3 physical feature boundaries
 
-## P3-A Search physical boundary
+P3 converted stable logical owners into Kotlin Multiplatform modules while keeping `feature -> shared` forbidden.
 
-Search is implemented by `:feature:search` rather than mutable controller/state implementations under `:shared`.
+### Search
 
-The physical module owns:
+`:feature:search` owns query/scope/provider selection, recognized-song query construction, merge/deduplication, loading/feedback state and search orchestration. It is generic over application tracks/provider results. `:shared` adapts the concrete provider/local repositories and keeps Compose UI.
 
-- `SearchScope`, `ProviderSearchTab` and `SearchAction`;
-- `SearchFeatureState` and `SearchFeatureOwner`;
-- `SearchProviderRepository` and `SearchLocalRepository` feature ports;
-- `SearchResultOperations`, which supplies the minimal result semantics needed for merge/count/error handling;
-- query/scope/provider selection, recognized-song query construction, loading/feedback state and search orchestration;
-- Search owner tests.
+### Offline library
 
-The module is generic over the application's track and provider-result types. This keeps it independent from `MusicTrack`, `ProviderSearchResults`, `ProviderMusicRepository`, `LocalMusicRepository` and `RecognizedSong`, while preserving app-facing Search names through the shared integration binding.
+`:feature:localplaylist`, `:feature:localmusic` and `:feature:download` are separate physical boundaries. Download coordinates with Local Music through a narrow local-library port rather than a concrete feature controller. Concrete `MusicTrack`, repositories, provider integration and navigation stay in `:shared`.
 
-Search UI remains in `:shared` because it uses shared Compose/design-system and cross-feature actions.
+### Provider Catalog/Auth
 
-## P3-B offline-library physical boundaries
+`:feature:providercatalog` owns provider discovery, enabled-provider normalization, ordering, display-scope configuration, capability/feature catalog state and session rehydration orchestration.
 
-Local Playlist, Local Music and Download are extracted together because they form a small offline-library cluster but each keeps an independent physical feature boundary.
+`:feature:providerauth` separately owns authentication input state, cookie/header login, logout/refresh feedback and the complete device-code OAuth lifecycle. Catalog and Auth do not depend on each other.
 
-### Local Playlist
+### Provider Detail
 
-`:feature:localplaylist` owns immutable feature state and CRUD/import/export/add/remove orchestration. A feature-owned operations contract provides only the semantics needed for playlist IDs/titles/tracks, repository mutations and import/export results.
+`:feature:providerdetail` contains destination-specific owners for Feature Detail, Playlist Detail, Track Detail, Media Item Detail and Video Detail. Each consumes a destination-specific capability port rather than the aggregate `ProviderMusicRepository`.
 
-`:shared` adapts `MusicTrack`, `LocalPlaylistRepository`, `LocalPlaylistFileCodec`, provider display metadata and `AppNavigator`. The old shared `LocalPlaylistController` is retired; the app-facing controller/state names are aliases or narrow bindings rather than parallel state owners.
+### Settings / Onboarding
 
-### Local Music
+`:feature:settings` owns Settings preference projection and runtime coordination through narrow preference/audio/download/cache/local-music/navigation ports.
 
-`:feature:localmusic` owns permission state, refresh concurrency, directory/filter state, metadata editing, provider metadata search and lyric saving. The module depends on feature-owned local-repository/provider ports and generic track/provider/directory/view-mode operations.
+`:feature:onboarding` separately owns startup provider-selection policy, validation, provider enablement/persistence transaction handling, rollback and completion. It reuses Settings and Provider Auth at the application integration layer instead of duplicating those domains.
 
-`:shared` adapts `LocalMusicRepository`, provider search/playback capabilities, application settings, navigation and `MusicTrack`. Existing timeout and stale-refresh protection remain feature-owned rather than moving into the app shell.
+### Home
 
-### Download
+`:feature:home` is the final P3 physical boundary. It owns the Home business state and orchestration that previously lived in the shared `DefaultHomeFeatureController`:
 
-`:feature:download` owns download/task state, actions, parallelism and offline-library coordination. Provider resolution is expressed as a `DownloadMediaResolver`; repository access and task interpretation are feature-owned ports.
+- Recommend / Explore / Mine section selection;
+- startup readiness gating on preferences + provider catalog;
+- provider display-scope filtering and section ordering;
+- incremental provider section loading;
+- stale refresh suppression with per-surface generations;
+- login-required and deferred-home section policy;
+- Home Play All pagination and track de-duplication;
+- dynamic feature first-load-and-play behavior;
+- Mine playlist/favorite/content refresh coordination;
+- provider playlist creation and Home-local transient loading/error feedback.
 
-Download no longer depends directly on `LocalMusicFeatureController`. A narrow `DownloadLocalLibraryPort` exposes only permission, database readiness, media-change events and refresh. Newly completed tasks still refresh the local library, media-change events retain the 750 ms debounce, and deleting a download refreshes the local library when permission is available.
+The physical Home owner depends on feature-owned contracts only:
 
-Concrete `DownloadRepository`, `ProviderMusicRepository`, settings/smart-replacement policy and `MusicTrack` stay in the `:shared` binding layer.
+- `HomePreferencesPort` — the Home-owned settings snapshot and mutations;
+- `HomeCatalogPort` — provider/catalog readiness and provider-selection snapshot;
+- `HomeContentPort` — feature loading, content semantics and provider playlist mutation;
+- `HomePlaybackPort` — the narrow play-feature-tracks intent;
+- `HomeLocalLibraryPort` — local playlist refresh and local-music refresh/ensure.
 
-## P3-C Provider Catalog/Auth physical boundaries
+The module is generic over provider, feature, content, track, playlist and playback-stat representations. It does not depend on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `ProviderDetailOwners`, `PlaybackQueueUiPort`, Local Music/Playlist controllers, `AppNavigator`, `MusicTrack`, `ProviderFeature`, `ProviderContentSection`, `ProviderPlaylist`, `ProviderInfo` or `:shared`.
 
-Provider Catalog and Provider Auth are delivered together but remain separate physical modules and state owners.
-
-### Provider Catalog
-
-`:feature:providercatalog` owns provider discovery, enabled-provider normalization, provider ordering, per-surface provider visibility, capability/feature catalog state, loading/error state and session rehydration orchestration.
-
-Its feature-owned contracts are limited to catalog repository operations, provider preferences and session synchronization. The module is generic over provider, feature, capability and session representations, so it does not depend on `ProviderMusicRepository`, `ProviderSessionRepository`, `AppSettingsRepository`, `ProviderInfo`, `ProviderFeature` or `ProviderCapabilities`.
-
-`:shared` adapts those concrete application types and preserves the existing `ProviderCatalogFeatureController` API. Compatibility forwarding for the provider-normalization policy keeps existing characterization coverage while the real policy implementation remains owned by the physical feature module.
-
-### Provider Auth
-
-`:feature:providerauth` owns cookie/header/OAuth input state, authentication feedback, login/logout/refresh orchestration and the complete device-code OAuth lifecycle: authorization start, polling, pending/slow-down handling, timeout, cancellation, user-code presentation state and token handoff.
-
-The module depends only on feature-owned session, device-authorization, device-code-assistant and OAuth-import ports. It is generic over application provider/auth/session types and has no dependency on concrete `ProviderMusicRepository`, `ProviderSessionRepository`, `ProviderAuthRepository`, `OAuthDeviceCodeAssistant`, `ProviderAuthState` or YTMusic implementation classes.
-
-`:shared` binds the physical owner to the existing provider/session repositories, maps the app-facing input/UI-state models, adapts the platform device-code assistant, and keeps YTMusic-specific client-secret/oauth.json parsing outside the feature module.
-
-The previous shared Provider Catalog owner and Provider Auth feature/legacy controller owners are retired. Catalog and Auth deliberately do not depend on each other; shared composition may observe both without creating a provider mega-controller.
-
-## P3-D Provider Detail physical boundary
-
-Provider Detail is implemented as one physical module, `:feature:providerdetail`, with five destination-specific owners instead of one aggregate provider-detail owner.
-
-The module owns:
-
-- Feature Detail page loading, merge/prefetch, dynamic-queue handling and complete-queue playback orchestration;
-- Playlist Detail paging, playback-background page loading, track de-duplication, remove/delete permission policy and mutation state;
-- Track Detail loading plus independent similar-track, comment and video related-content state;
-- Media Item Detail track/album pagination and complete-track playback orchestration;
-- Video Detail payload loading, timeout/error state and fullscreen state.
-
-Each destination consumes a separate feature-owned capability port. The module is generic over feature, content, playlist, category, track, comment, media-item, video and playback representations. It therefore does not depend on concrete `ProviderMusicRepository`, `PlaybackQueueUiPort`, `AppSettingsRepository`, `ProviderCatalogFeatureController`, `AppNavigator`, `MusicTrack`, provider detail models or application routes.
-
-`:shared` remains the application integration boundary. It adapts the aggregate provider repository into destination-specific ports, binds playback queue and navigation operations, persists playlist playback statistics, reads provider login/capability state, maps provider failures to user-facing errors and maps the physical feature states back to the stable app-facing models.
-
-The existing concrete `ProviderFeatureDetailUiState`, `ProviderPlaylistDetailUiState`, `ProviderTrackDetailUiState`, `ProviderMediaItemDetailUiState` and `ProviderVideoDetailUiState` classes remain in `org.feeluown.mobile` with their existing default constructors. The controller interfaces, `ProviderDetailOwners` aggregate and `createProviderDetailOwners(...)` composition API also remain stable while their business ownership is delegated to the physical module.
-
-## P3-E Settings and Onboarding physical boundaries
-
-Settings and Onboarding are delivered together but remain separate physical owners and Gradle modules.
-
-### Settings
-
-`:feature:settings` owns observation/composition of Settings preference, cache, download and local-music state; startup application of persisted audio-quality/cache policy; explicit theme/playback/display/download/cache/local-music actions; cache cleanup feedback; and Settings navigation requests.
-
-`SettingsFeaturePreferences` is deliberately narrower than `AppSettings`: it contains only fields used by Settings. Persistence and cross-feature coordination are split across `SettingsPreferencesPort`, `SettingsAudioQualityPort`, `SettingsDownloadPort`, `SettingsCachePort`, `SettingsLocalMusicPort` and `SettingsNavigationPort`. Consequently `:feature:settings` does not depend on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `DownloadRepository`, `ResourceCacheRepository`, `LocalMusicFeatureController`, `AppNavigator` or `:shared`.
-
-`:shared` adapts those concrete application collaborators. The old shared `SettingsController`, `SettingsControllerState` and unused debug/cache helper surfaces are retired. The former `SettingsFeatureController.update(AppSettings -> AppSettings)` write bridge is retired as well; the remaining Compose transform accepts only the Settings-owned preference snapshot and cannot modify unrelated application settings.
-
-### Onboarding
-
-`:feature:onboarding` owns startup provider-selection state, initialization from persisted provider preferences, Bilibili replacement-only policy, selection validation, provider enablement and preference persistence orchestration, failure rollback, completion and transient feedback.
-
-Its contracts are deliberately small: `OnboardingPreferencesPort` exposes only provider-related preferences plus the completion mutation, while `OnboardingProviderRuntimePort` exposes provider enablement and catalog refresh. The module is generic over the unavailable-playback policy type and therefore does not depend on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `ProviderCatalogUiState`, `ProviderInfo`, `UnavailablePlaybackPolicy` or `:shared`.
-
-`:shared` adapts the concrete settings/provider/catalog implementations. Onboarding continues to reuse Settings for theme/audio-quality pages and Provider Auth for login pages, so it does not duplicate those owners or create a startup mega-controller.
+`:shared` keeps the stable concrete `HomeFeatureController` / `HomeFeatureUiState` API, Compose Home UI, app navigation/detail routing and bindings from concrete application repositories/owners to the Home-owned ports. That binding is a state projection and adapter layer; it is not a second Home business owner.
 
 ## Playback
 
@@ -166,66 +119,56 @@ Playback status, timing and transport come from `PlaybackSession`. Rich UI conce
 
 `RuntimeMiniPlayer` and `RuntimeFullPlayer` consume these narrow contracts. Controller-backed player UI and the retired broad `PlaybackUiPort` aggregate must not be reintroduced.
 
+Recent active-playback transaction fixes preserve the same boundary: Home and other features issue playback intent through narrow queue/playback ports; Media3 resume/session details remain inside playback runtime/platform integration.
+
 ## Provider and feature dependencies
 
-New features should depend on narrow provider capability interfaces or feature-owned ports instead of the aggregate `ProviderMusicRepository` wherever a lower-level boundary has been extracted.
+New feature logic should depend on narrow capability interfaces or feature-owned ports instead of aggregate application repositories wherever a lower-level boundary exists.
 
-A feature may move to its own Gradle module only when all of its dependencies point to core/api contracts, other lower-level modules, or generic feature-owned ports bound by the application integration layer. `feature -> shared` is forbidden because it distributes the monolith rather than establishing a real boundary.
+A feature may move to its own Gradle module only when all dependencies point to core/api contracts, lower-level modules, or generic feature-owned ports bound by the application integration layer. `feature -> shared` is forbidden because it distributes the monolith rather than establishing a real boundary.
 
-Cross-feature behavior should use the smallest stable contract. The Download/Local Music boundary is the reference example: Download asks for local-library readiness/refresh rather than depending on the Local Music controller. Provider Catalog/Auth similarly keep session synchronization and authentication transport behind feature-owned ports instead of depending on concrete provider owners. Provider Detail uses five destination-specific ports rather than exposing `ProviderMusicRepository` or a replacement mega-repository to its physical module. Settings separates preferences, audio quality, downloads, cache, local music and navigation; Onboarding separately coordinates only startup provider selection and completion.
+Cross-feature behavior must use the smallest stable contract. Examples:
+
+- Download asks Local Music for readiness/refresh instead of depending on its controller.
+- Provider Catalog/Auth use session/preferences ports instead of concrete provider owners.
+- Provider Detail uses five destination-specific ports instead of a replacement provider mega-repository.
+- Settings separates preference/audio/download/cache/local-music/navigation operations.
+- Home asks for catalog/content/playback/local-library capabilities instead of depending on concrete feature controllers.
 
 ## Composition roots
 
-Android uses `AndroidAppContainer`; iOS uses `IosAppContainer`. They compose feature owners, playback runtime and app ports directly. Neither platform constructs `FuoPlayerController` or platform-local forwarding versions of Search/Recognition app ports.
+Android uses `AndroidAppContainer`; iOS uses `IosAppContainer`. They compose feature owners, playback runtime and app ports directly.
 
-`AppRoot` installs the resulting app/feature/playback graphs and renders typed routes. It does not rebuild feature business state or controller compatibility bridges.
+`AppRoot` installs the resulting app/feature/playback graphs and renders typed routes. It does not rebuild feature business state or controller compatibility facades.
 
 ## Architecture fitness checks
 
-`checkArchitectureBoundaries` remains the global ownership/playback regression gate. It rejects the retired player controller, compatibility surfaces and broken Search/Recognition boundaries.
+`checkArchitectureBoundaries` remains the global ownership/playback regression gate and rejects retired broad controller surfaces.
 
-The offline-library cluster adds `checkOfflineFeatureBoundaries`, which runs with the Download feature test lifecycle and:
+Physical feature modules add dedicated gates:
 
-- requires all three physical feature modules, their owner sources/tests and shared binding files;
-- rejects reintroduction of the old shared Local Playlist, Local Music and Download controller/state owners;
-- rejects `:feature:localplaylist`, `:feature:localmusic` or `:feature:download` depending on `:shared`;
-- uses identifier-aware matching to reject concrete shared/application dependencies from each feature's commonMain sources;
-- keeps the Download-to-LocalMusic boundary narrow by rejecting a concrete `LocalMusicFeatureController` dependency in the Download module.
+- `checkOfflineFeatureBoundaries` for Local Playlist / Local Music / Download;
+- `checkProviderFeatureBoundaries` for Provider Catalog / Auth;
+- `checkProviderDetailFeatureBoundaries` for Provider Detail;
+- `checkSettingsFeatureBoundaries` for Settings;
+- `checkOnboardingFeatureBoundaries` for Onboarding;
+- `checkHomeFeatureBoundaries` for Home.
 
-Provider Catalog/Auth add `checkProviderFeatureBoundaries`, wired to the Provider Auth test lifecycle. It:
+The Home gate:
 
-- requires both provider physical modules, feature sources/tests and shared binding files;
-- rejects reintroduction of the retired shared Provider Catalog/Auth owners;
-- rejects either provider feature module depending on `:shared`;
-- rejects concrete shared/application/provider types from each module's commonMain source.
+- requires the physical module source/test and shared binding;
+- rejects `:feature:home -> :shared`;
+- rejects concrete application/shared/provider/playback model/controller identifiers from Home commonMain;
+- rejects restoration of the old shared `DefaultHomeFeatureController` business implementation and shared loading/sorting/dynamic-play orchestration helpers.
 
-Provider Detail adds `checkProviderDetailFeatureBoundaries`, wired to its feature test lifecycle. It:
+Android and iOS CI run Recognition, Search, Local Playlist, Local Music, Download, Provider Catalog, Provider Auth, Provider Detail, Settings, Onboarding, Home, playback runtime and shared tests in addition to architecture gates.
 
-- requires the physical module source/test and shared integration binding;
-- rejects `:feature:providerdetail -> :shared`;
-- rejects concrete shared/application/provider types from the physical module;
-- rejects the previous shared `DefaultProvider*DetailController` business owners from returning;
-- requires all five stable app-facing UiState models to remain concrete data classes rather than typealiases.
+## P3 closeout and next phase
 
-Settings adds `checkSettingsFeatureBoundaries`, wired to its feature test lifecycle. It:
+P3 physical modularization is complete after Home extraction. The feature layer now has explicit physical ownership for every feature that was scheduled during the P2/P3 migration.
 
-- requires the Settings physical source/test and shared integration binding;
-- rejects `:feature:settings -> :shared`;
-- rejects `AppSettings`, aggregate repositories/controllers and concrete app navigation/model types from the physical module;
-- rejects the retired shared Settings/debug/cache surfaces from returning;
-- rejects restoration of an `update(AppSettings -> AppSettings)` Settings write bridge.
+The next phase should not mechanically create more `feature:*` modules. P4 should reduce `:shared` as an application integration boundary by identifying stable provider, persistence and app-shell contracts that can move downward without leaking UI/platform concerns into feature modules or introducing another aggregate facade.
 
-Onboarding adds `checkOnboardingFeatureBoundaries`, wired to its feature test lifecycle. It:
+Architecture changes should remain behavior-preserving and independently reviewable: isolate ownership, introduce the smallest cross-boundary contract, validate behavior, then retire compatibility implementation only after the last production caller has migrated.
 
-- requires the Onboarding physical source/test and shared integration binding;
-- rejects `:feature:onboarding -> :shared`;
-- rejects aggregate app/provider/catalog types and the concrete unavailable-playback policy from the physical module;
-- rejects moving `DefaultOnboardingFeatureController` business ownership back into `:shared`.
-
-Android and iOS CI run Recognition, Search, Local Playlist, Local Music, Download, Provider Catalog, Provider Auth, Provider Detail, Settings, Onboarding, playback runtime and shared tests in addition to the architecture gates.
-
-## Migration rule
-
-Architecture changes remain behavior-preserving and independently reviewable: move ownership first, introduce narrow ports at cross-feature boundaries, then remove compatibility surfaces only after the last production caller has migrated. Physical module extraction is the final step for a feature, not a substitute for ownership isolation.
-
-P2 sequencing and P3 progress are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md). Home is the final planned P3 physical boundary because it is the application-level feature aggregation surface.
+P2 sequencing and P3 completion are tracked in [`p2-architecture-roadmap.md`](p2-architecture-roadmap.md).
