@@ -43,16 +43,25 @@ Exit criterion reached: `:core:model` owns the stable track/media identity used 
 
 ## P4-C: provider contract/runtime split
 
-Goal: turn the currently thin `:provider:api` into the true provider-neutral boundary and separate reusable provider runtime infrastructure from concrete providers.
+In progress on the P4-C provider runtime boundary PR.
 
-- decompose `ProviderMusicRepository` into narrow capability contracts;
-- migrate provider callers from the temporary `ProviderMediaItem` compatibility aliases to canonical `MediaRef` naming where appropriate;
-- move provider-neutral failures/capabilities/contracts into `:provider:api`;
-- move HTTP/request/session/common mapping infrastructure into a provider runtime/core boundary;
-- keep NetEase, QQ Music, Bilibili and YTMusic implementations above the API/runtime layer;
-- forbid `provider:* -> shared` and `provider:* -> feature:*` dependencies.
+This step turns `:provider:api` into the provider-neutral public boundary and introduces a physical `:provider:runtime` module for reusable implementation infrastructure:
 
-Provider-specific physical modules are a later step only after these dependencies are one-way.
+- `:provider:api` owns provider registry, search, catalog/detail, library mutation and authentication capability contracts;
+- provider search/content/detail result models use canonical `MediaRef` values rather than provider-named media aliases;
+- stable provider failure and video-metadata value contracts live in `:provider:api`;
+- `:provider:runtime` owns HTTP/retry/cache infrastructure, persistent-cache SPI, credential SPI/value model, provider JSON/resource-key helpers, failure mapping, `BaseKotlinProvider` and the concrete-provider SPI;
+- Android OkHttp and iOS Darwin provider HTTP engines are actual implementations inside `:provider:runtime`;
+- provider runtime/network and failure-mapping tests move with the implementation instead of remaining in `:shared`;
+- `:shared` keeps concrete NetEase, QQ Music, Bilibili and YTMusic providers plus an application compatibility aggregate while callers migrate to narrow provider capabilities;
+- YTMusic-specific OAuth types stay above the provider-neutral API/runtime boundary; the shared aggregate adapts them to provider-neutral device-authorization/OAuth contracts;
+- `ProviderMediaItem` remains only a temporary P4-B source-compatibility alias, while new lower repository/runtime contracts use `MediaRef` directly.
+
+Architecture fitness checks reject provider API/runtime back-dependencies on `:shared` or features, concrete provider types leaking into lower provider modules, restoration of the old shared provider runtime/network/failure files, and movement of canonical provider-neutral capability contracts back into `:shared`.
+
+P4-C exit criterion: provider API/runtime compile and test independently on Android/iOS, application/provider behavior remains unchanged, and concrete provider implementations depend downward on the extracted runtime without the runtime depending back on app/feature code.
+
+Provider-specific physical modules remain P5 work after this boundary is validated.
 
 ## P4-D: persistence boundaries
 
