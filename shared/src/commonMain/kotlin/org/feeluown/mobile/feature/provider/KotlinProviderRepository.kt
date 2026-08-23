@@ -141,8 +141,6 @@ class KotlinProviderRepository : ProviderMusicRepository {
         } else {
             wifiAudioQualityPolicy.policy
         }
-        // Persisted smart-replaced tracks keep original ids but may flip `source` to the
-        // replacement provider. Prefer the known replacement, then the original identity.
         var failedKnownReplacementId: String? = null
         if (track.isSmartReplacement) {
             resolveKnownReplacement(
@@ -528,10 +526,12 @@ class KotlinProviderRepository : ProviderMusicRepository {
             originArtists.contains(candidateArtists) || candidateArtists.contains(originArtists) -> 0.8
             else -> tokenSimilarity(originArtists, candidateArtists)
         }
-        val durationScore = if (origin.durationMs == null || candidate.durationMs == null) {
+        val originDurationMs = origin.durationMs
+        val candidateDurationMs = candidate.durationMs
+        val durationScore = if (originDurationMs == null || candidateDurationMs == null) {
             0.5
         } else {
-            (1.0 - (kotlin.math.abs(origin.durationMs - candidate.durationMs).toDouble() / 30_000.0)).coerceIn(0.0, 1.0)
+            (1.0 - (kotlin.math.abs(originDurationMs - candidateDurationMs).toDouble() / 30_000.0)).coerceIn(0.0, 1.0)
         }
         return titleScore * 0.55 + artistScore * 0.35 + durationScore * 0.10
     }
