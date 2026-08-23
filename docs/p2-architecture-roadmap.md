@@ -64,7 +64,7 @@ Completed.
 
 ## P3 physical modularization
 
-P3 continues the final step of the migration: turning stable logical feature ownership boundaries into physical Gradle modules without introducing `feature -> shared` dependencies.
+P3 completes the final step of the migration: turning stable logical feature ownership boundaries into physical Gradle modules without introducing `feature -> shared` dependencies.
 
 ### P3-A: Search
 
@@ -72,9 +72,9 @@ Completed.
 
 `:feature:search` owns Search actions, state, repository/result ports, orchestration and tests. The module is generic over application track/result types, so it does not depend on `MusicTrack`, `ProviderSearchResults`, `ProviderMusicRepository`, `LocalMusicRepository` or `RecognizedSong` from `:shared`.
 
-`:shared` keeps the Search Compose UI and a thin `SearchFeatureBindings.kt` integration layer that binds application repositories/models to the feature-owned ports. Existing app-facing Search state/controller names are compile-time aliases rather than duplicate owners.
+`:shared` keeps the Search Compose UI and a thin integration layer that binds application repositories/models to the feature-owned ports. Existing app-facing Search state/controller names remain compatibility APIs rather than duplicate owners.
 
-Architecture checks reject moving Search ownership back into `:shared`, adding `:feature:search -> :shared`, or leaking the aggregate application repositories/models into the physical Search module. Android and iOS CI both run `:feature:search:allTests`.
+Architecture checks reject moving Search ownership back into `:shared`, adding `:feature:search -> :shared`, or leaking aggregate application repositories/models into the physical Search module. Android and iOS CI run `:feature:search:allTests`.
 
 ### P3-B: Offline library cluster
 
@@ -86,7 +86,7 @@ Completed as one physical-boundary change set for the three mutually related low
 
 The three modules are generic over application-facing track/repository/provider/navigation types. Concrete `MusicTrack`, provider repositories, settings and `AppNavigator` are bound only in `:shared`, so none of the new feature modules depends back on `:shared`.
 
-The previous direct `DownloadController -> LocalMusicFeatureController` coordination is replaced by a narrow local-library port. Completion-triggered refresh, media-change debounce and delete-download refresh behavior remain owned by Download without a concrete feature-to-feature dependency.
+The previous direct Download -> Local Music controller coordination is replaced by a narrow local-library port. Completion-triggered refresh, media-change debounce and delete-download refresh behavior remain owned by Download without a concrete feature-to-feature dependency.
 
 Shared Compose screens remain in `:shared`; the physical modules own business state and orchestration rather than UI styling/navigation composition. Android and iOS CI run all three feature suites, and the offline feature fitness check rejects reintroducing the retired shared owners or leaking concrete shared dependencies into the modules.
 
@@ -115,11 +115,11 @@ Completed as one physical feature module with destination-specific owners rather
 - media-item track/album pagination and complete-track playback;
 - video payload loading and fullscreen state.
 
-Each destination consumes its own feature-owned capability port. The module is generic over provider/application models and does not depend on `ProviderMusicRepository`, `PlaybackQueueUiPort`, `AppSettingsRepository`, `ProviderCatalogFeatureController`, `AppNavigator`, `MusicTrack` or concrete provider detail models.
+Each destination consumes its own feature-owned capability port. The module is generic over provider/application models and does not depend on aggregate application repositories or navigation/playback controllers.
 
-`:shared` keeps navigation, playback queue, repository, settings/playback-stat persistence, provider-session/capability lookup and provider-failure adaptation. Existing `ProviderFeatureDetailUiState`, `ProviderPlaylistDetailUiState`, `ProviderTrackDetailUiState`, `ProviderMediaItemDetailUiState`, `ProviderVideoDetailUiState`, controller interfaces and `createProviderDetailOwners(...)` remain concrete compatibility APIs in their stable package.
+`:shared` keeps navigation, playback queue, repository, settings/playback-stat persistence, provider-session/capability lookup and provider-failure adaptation. Existing provider-detail UiState/controller APIs remain stable compatibility APIs.
 
-The Provider Detail fitness check rejects `feature -> shared` dependencies, concrete app/provider types leaking into the physical module, reintroduction of the previous shared `DefaultProvider*DetailController` owners, and accidental conversion of the five stable UiState classes to typealiases. Android and iOS CI run `:feature:providerdetail:allTests` alongside shared characterization coverage.
+The Provider Detail fitness check rejects `feature -> shared` dependencies, concrete app/provider types leaking into the physical module and reintroduction of previous shared business owners. Android and iOS CI run `:feature:providerdetail:allTests` alongside shared characterization coverage.
 
 ### P3-E: Settings and Onboarding
 
@@ -127,18 +127,40 @@ Completed as two independent physical feature boundaries delivered in the same c
 
 `:feature:settings` owns the Settings state machine and runtime coordination for playback/audio-quality preferences, appearance preferences, download parallelism, cache limits/cleanup, local-music settings actions, navigation requests and transient feedback. Its preference input is a feature-owned snapshot containing only fields used by Settings rather than the aggregate `AppSettings` object.
 
-Cross-feature collaborators are expressed through narrow ports for preferences, audio-quality application, downloads, cache, local music and navigation. The physical module therefore has no dependency on `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `DownloadRepository`, `ResourceCacheRepository`, `LocalMusicFeatureController`, `AppNavigator` or `:shared`.
+Cross-feature collaborators are expressed through narrow ports for preferences, audio quality, downloads, cache, local music and navigation. The physical module therefore does not depend on aggregate shared repositories/controllers.
 
-`:shared` maps application repositories and models to those ports. The old `SettingsController` / `SettingsControllerState` owners and their unused debug/cache helpers are retired. The former `SettingsFeatureController.update(AppSettings -> AppSettings)` write surface is also retired: the temporary Compose transform accepts only the Settings-owned preference snapshot, so unrelated application settings cannot cross the Settings write boundary.
+`:feature:onboarding` separately owns startup provider selection, Bilibili replacement-only policy, validation, provider enablement/persistence transaction handling, rollback, completion and transient feedback. It consumes only a narrow provider-preference snapshot plus provider-runtime operations.
 
-`:feature:onboarding` separately owns startup provider selection, Bilibili replacement-only policy, validation, provider enablement/persistence transaction handling, rollback, completion and transient feedback. It consumes only a narrow provider-preference snapshot plus provider-runtime operations; concrete `AppSettings`, `AppSettingsRepository`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `ProviderInfo` and `UnavailablePlaybackPolicy` remain in the shared binding layer.
+Onboarding continues to reuse Settings for theme/audio-quality pages and Provider Auth for login pages instead of duplicating those owners. Settings and Onboarding each have an architecture fitness gate and Android/iOS feature suites.
 
-Onboarding continues to reuse the Settings owner for theme and audio-quality pages instead of duplicating those settings into its own module. Provider authentication remains owned by `:feature:providerauth`. This keeps Onboarding as a startup coordinator rather than a new Settings/provider mega-controller.
+### P3-F: Home
 
-Settings and Onboarding each have an architecture fitness gate rejecting `feature -> shared` dependencies and concrete application types in their physical modules. Android and iOS CI run both `:feature:settings:allTests` and `:feature:onboarding:allTests`.
+Completed.
 
-### Follow-up module candidates
+`:feature:home` is the final planned P3 physical feature boundary. It owns:
 
-P3-F Home remains the final planned physical extraction because it is the application-level aggregation surface. It should move only after its remaining inputs can be expressed as narrow read/action ports rather than by recreating another aggregate controller in a new Gradle module.
+- Recommend / Explore / Mine selection state and startup readiness gating;
+- provider section selection, incremental loading, ordering and stale-refresh suppression;
+- login-required/deferred section policy;
+- Home Play All pagination and track de-duplication;
+- dynamic feature first-load-and-play orchestration;
+- Mine playlist/favorite/content refresh coordination;
+- provider-playlist creation flow and transient loading/error feedback.
 
-Every extraction must preserve the one-way dependency rule. A feature that still requires `:shared` remains logically isolated there until the missing contract is extracted; creating a Gradle module that depends back on `:shared` is explicitly not considered successful modularization.
+Home consumes feature-owned preference, catalog, content, playback and local-library ports. The physical module is generic over provider/content/track/playlist/stat representations and therefore does not depend on `AppSettings`, `ProviderMusicRepository`, `ProviderCatalogFeatureController`, `PlaybackQueueUiPort`, Local Music/Playlist controllers, `AppNavigator`, `MusicTrack`, `ProviderFeature`, `ProviderContentSection` or `:shared`.
+
+`:shared` keeps the existing concrete `HomeFeatureController` / `HomeFeatureUiState` API, Compose UI, application navigation/detail routing and adapters from the concrete repositories/owners to Home-owned ports. The former shared `DefaultHomeFeatureController` business owner is retired rather than mirrored.
+
+`checkHomeFeatureBoundaries` rejects `:feature:home -> :shared`, concrete application dependencies in the module and movement of Home business orchestration back into the shared binding. Android and iOS CI run `:feature:home:allTests`.
+
+## P3 closeout
+
+P3 physical modularization is complete once P3-F is merged. The feature layer now consists of one-way KMP boundaries for Recognition, Search, Local Playlist, Local Music, Download, Provider Catalog, Provider Auth, Provider Detail, Settings, Onboarding and Home.
+
+The invariant remains:
+
+`platform composition root -> app/shared integration -> physical feature owner -> core/api or feature-owned ports`
+
+A physical feature must never depend back on `:shared`. Cross-feature behavior must use the smallest stable read/action port rather than another aggregate controller.
+
+The next architecture phase should stop creating feature modules mechanically. P4 should focus on reducing the remaining responsibilities of `:shared` as the application integration layer: identify stable provider/persistence/application contracts that can move downward, keep Compose and composition-root concerns above feature owners, and avoid turning integration cleanup into a second broad facade migration.
