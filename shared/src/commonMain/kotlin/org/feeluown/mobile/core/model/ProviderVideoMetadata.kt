@@ -11,19 +11,6 @@ import org.feeluown.mobile.provider.core.stringOrNull
 import org.feeluown.mobile.provider.core.network.ProviderCachePolicies
 import org.feeluown.mobile.provider.core.network.ProviderHttpClient
 
-data class ProviderVideoStat(
-    val label: String,
-    val value: Long,
-)
-
-data class ProviderVideoMetadata(
-    val description: String = "",
-    val publishedAt: String? = null,
-    val stats: List<ProviderVideoStat> = emptyList(),
-    val width: Int? = null,
-    val height: Int? = null,
-)
-
 internal object ProviderVideoMetadataRepository {
     private val http = ProviderHttpClient()
     private val cache = mutableMapOf<String, ProviderVideoMetadata>()
