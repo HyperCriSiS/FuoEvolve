@@ -2,8 +2,10 @@ package org.feeluown.mobile.feature.home
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -117,6 +119,38 @@ class HomeFeatureTest {
 
         assertEquals(listOf("1", "2", "3", "4"), result.map { it.id })
         assertEquals(listOf("recommend" to 2, "recommend" to 4), content.loads)
+    }
+
+    @Test
+    fun playAllTimesOutWhenFollowUpPageDoesNotReturn() = runTest {
+        val feature = FakeFeature("recommend", "p1", HomeFeatureKind.Recommend)
+        val preferences = FakePreferences(loaded = false)
+        val catalog = FakeCatalog(readyCatalog())
+        val content = FakeContentPort().apply {
+            hangingPages += feature.id to 1
+        }
+        val playback = FakePlayback()
+        val owner = owner(backgroundScope, preferences, catalog, content, playback = playback)
+
+        owner.playAllFeature(
+            FakeContent(
+                feature = feature,
+                tracks = listOf(FakeTrack("1")),
+                nextOffset = 1,
+                hasMore = true,
+            ),
+        )
+        runCurrent()
+
+        assertTrue(owner.state.value.isLoading)
+        assertEquals(listOf("recommend" to 1), content.loads)
+
+        advanceTimeBy(30_001)
+        runCurrent()
+
+        assertFalse(owner.state.value.isLoading)
+        assertTrue(owner.state.value.errorMessage != null)
+        assertTrue(playback.calls.isEmpty())
     }
 
     @Test
@@ -279,13 +313,16 @@ private class FakeCatalog(
 
 private class FakeContentPort : HomeContentPort<FakeFeature, FakeContent, FakeTrack, FakePlaylist> {
     val pages = mutableMapOf<Pair<String, Int>, FakeContent>()
+    val hangingPages = mutableSetOf<Pair<String, Int>>()
     val loads = mutableListOf<Pair<String, Int>>()
     val createdPlaylists = mutableListOf<Pair<String, String>>()
     var createResult = HomeMutationResult(success = true, message = "created")
 
     override suspend fun loadFeaturePage(feature: FakeFeature, offset: Int): FakeContent {
-        loads += feature.id to offset
-        return pages[feature.id to offset] ?: FakeContent(feature)
+        val key = feature.id to offset
+        loads += key
+        if (key in hangingPages) awaitCancellation()
+        return pages[key] ?: FakeContent(feature)
     }
 
     override suspend fun createPlaylist(providerId: String, name: String): HomeMutationResult {
