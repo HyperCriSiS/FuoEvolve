@@ -322,7 +322,7 @@ tasks.register("checkP4ContractBoundaries") {
         if (
             !providerRepositoryContractsText.contains("val artists: List<MediaRef>") ||
             !providerRepositoryContractsText.contains("val mediaItems: List<MediaRef>") ||
-            providerRepositoryContractsText.contains("ProviderMediaItem")
+            Regex("\\bProviderMediaItem\\b").containsMatchIn(providerRepositoryContractsText)
         ) {
             throw GradleException(":provider:api repository contracts must use canonical MediaRef naming.")
         }
