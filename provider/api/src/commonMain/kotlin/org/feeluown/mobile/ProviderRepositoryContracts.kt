@@ -105,19 +105,19 @@ interface ProviderCatalogRepository {
 interface ProviderLibraryRepository {
     suspend fun playlistOperationTargets(track: MusicTrack): List<ProviderPlaylist> = emptyList()
     suspend fun addTrackToPlaylist(playlist: ProviderPlaylist, track: MusicTrack): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support playlist add song")
+        ProviderMutationResult(false, "")
     suspend fun removeTrackFromPlaylist(playlist: ProviderPlaylist, track: MusicTrack): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support playlist remove song")
+        ProviderMutationResult(false, "")
     suspend fun createPlaylist(providerId: String, name: String): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support playlist create")
+        ProviderMutationResult(false, "")
     suspend fun deletePlaylist(playlist: ProviderPlaylist): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support playlist delete")
+        ProviderMutationResult(false, "")
     suspend fun setSongDisliked(track: MusicTrack, disliked: Boolean): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support dislike operation")
+        ProviderMutationResult(false, "")
     suspend fun resourceState(resourceType: String, resourceId: String): ProviderResourceState =
         ProviderResourceState(providerId = "", resourceId = resourceId)
     suspend fun setResourceFavorite(resourceType: String, resourceId: String, favorite: Boolean): ProviderMutationResult =
-        ProviderMutationResult(false, "provider does not support favorite operation")
+        ProviderMutationResult(false, "")
 }
 
 /** Provider authentication surface independent of any concrete provider implementation. */
