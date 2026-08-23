@@ -4,7 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,15 +31,15 @@ class HomeFeatureTest {
         }
         val owner = owner(backgroundScope, preferences, catalog, content)
 
-        advanceUntilIdle()
+        runCurrent()
         assertTrue(content.loads.isEmpty())
 
         preferences.mutableState.value = preferences.mutableState.value.copy(isLoaded = true)
-        advanceUntilIdle()
+        runCurrent()
         assertTrue(content.loads.isEmpty())
 
         catalog.mutableState.value = catalog.mutableState.value.copy(isInitialized = true)
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(listOf("recommend" to 0), content.loads)
         assertEquals(listOf("1"), owner.state.value.recommendSections.single().tracks.map { it.id })
@@ -64,7 +64,7 @@ class HomeFeatureTest {
         val content = FakeContentPort()
         val owner = owner(backgroundScope, preferences, catalog, content)
 
-        advanceUntilIdle()
+        runCurrent()
 
         assertTrue(content.loads.isEmpty())
         assertTrue(owner.state.value.recommendSections.single().loginRequired)
@@ -81,7 +81,7 @@ class HomeFeatureTest {
         val localLibrary = FakeLocalLibrary()
 
         owner(backgroundScope, preferences, catalog, FakeContentPort(), localLibrary = localLibrary)
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(1, localLibrary.ensureMusicCalls)
         assertEquals(0, localLibrary.refreshMusicCalls)
@@ -136,7 +136,7 @@ class HomeFeatureTest {
         val owner = owner(backgroundScope, preferences, catalog, content, playback = playback)
 
         owner.playAllFeature(FakeContent(feature))
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(listOf("fm" to 0), content.loads)
         assertEquals(listOf(PlaybackCall("fm", listOf("fm-1"), 0)), playback.calls)
@@ -173,7 +173,7 @@ class HomeFeatureTest {
         val owner = owner(backgroundScope, preferences, catalog, content, localLibrary = localLibrary)
 
         owner.createProviderPlaylist("p1", "  New playlist  ")
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(listOf("p1" to "New playlist"), content.createdPlaylists)
         assertEquals(1, localLibrary.refreshPlaylistCalls)
