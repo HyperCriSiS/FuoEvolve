@@ -1,5 +1,6 @@
 package org.feeluown.mobile.feature.home
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -26,7 +27,7 @@ class HomeFeatureTest {
         val content = FakeContentPort().apply {
             pages[feature.id to 0] = FakeContent(feature, tracks = listOf(FakeTrack("1")))
         }
-        val owner = owner(preferences, catalog, content)
+        val owner = owner(this, preferences, catalog, content)
 
         advanceUntilIdle()
         assertTrue(content.loads.isEmpty())
@@ -59,7 +60,7 @@ class HomeFeatureTest {
             ),
         )
         val content = FakeContentPort()
-        val owner = owner(preferences, catalog, content)
+        val owner = owner(this, preferences, catalog, content)
 
         advanceUntilIdle()
 
@@ -77,7 +78,7 @@ class HomeFeatureTest {
         val catalog = FakeCatalog(readyCatalog())
         val localLibrary = FakeLocalLibrary()
 
-        owner(preferences, catalog, FakeContentPort(), localLibrary = localLibrary)
+        owner(this, preferences, catalog, FakeContentPort(), localLibrary = localLibrary)
         advanceUntilIdle()
 
         assertEquals(1, localLibrary.ensureMusicCalls)
@@ -130,7 +131,7 @@ class HomeFeatureTest {
             pages[feature.id to 0] = FakeContent(feature, tracks = listOf(FakeTrack("fm-1")))
         }
         val playback = FakePlayback()
-        val owner = owner(preferences, catalog, content, playback = playback)
+        val owner = owner(this, preferences, catalog, content, playback = playback)
 
         owner.playAllFeature(FakeContent(feature))
         advanceUntilIdle()
@@ -150,7 +151,7 @@ class HomeFeatureTest {
                 creatablePlaylistProviderIds = setOf("a", "c"),
             ),
         )
-        val owner = owner(preferences, catalog, FakeContentPort())
+        val owner = owner(this, preferences, catalog, FakeContentPort())
 
         assertEquals(listOf("a"), owner.creatablePlaylistProviders().map { it.id })
     }
@@ -167,7 +168,7 @@ class HomeFeatureTest {
             createResult = HomeMutationResult(success = true, message = "created")
         }
         val localLibrary = FakeLocalLibrary()
-        val owner = owner(preferences, catalog, content, localLibrary = localLibrary)
+        val owner = owner(this, preferences, catalog, content, localLibrary = localLibrary)
 
         owner.createProviderPlaylist("p1", "  New playlist  ")
         advanceUntilIdle()
@@ -179,6 +180,7 @@ class HomeFeatureTest {
     }
 
     private fun owner(
+        scope: CoroutineScope,
         preferences: FakePreferences,
         catalog: FakeCatalog,
         content: FakeContentPort,
@@ -191,13 +193,8 @@ class HomeFeatureTest {
             content = content,
             playback = playback,
             localLibrary = localLibrary,
-            scope = this@HomeFeatureTest.testScope,
+            scope = scope,
         )
-
-    private val testScope
-        get() = currentTestScope ?: error("test scope is only available inside runTest")
-
-    private var currentTestScope: kotlinx.coroutines.test.TestScope? = null
 
     private fun readyCatalog(
         providers: List<FakeProvider> = emptyList(),
