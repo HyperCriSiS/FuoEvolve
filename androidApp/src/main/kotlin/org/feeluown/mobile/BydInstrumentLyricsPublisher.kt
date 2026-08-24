@@ -181,6 +181,7 @@ internal class BydInstrumentLyricsPublisher(
                     break
                 }
                 if (!publishAtPosition(snapshot, estimatedPositionMs())) break
+                bridge?.refreshSessionLease(snapshot.status)
                 delay(POSITION_SYNC_INTERVAL_MS)
             }
         }
@@ -276,7 +277,7 @@ private class BydInstrumentLyricsBridge(
 
     private var useMusicNameTransport = threeLineLyricsMethod == null
     private var lastMusicStateValue: Int? = null
-    private var musicSourceInitialized = false
+    private var lastMusicSessionRefreshRealtimeMs = 0L
 
     fun publish(window: InstrumentLyricsWindow, status: PlaybackSessionStatus): Boolean {
         if (!useMusicNameTransport) {
@@ -290,9 +291,22 @@ private class BydInstrumentLyricsBridge(
         }
 
         val nameMethod = musicNameMethod ?: return false
-        initializeMusicSourceIfAvailable()
-        publishMusicStateIfAvailable(status)
+        refreshMusicSession(status)
         return invokeRequired(nameMethod, window.current)
+    }
+
+    fun refreshSessionLease(
+        status: PlaybackSessionStatus,
+        realtimeMs: Long = SystemClock.elapsedRealtime(),
+    ) {
+        if (!useMusicNameTransport || status != PlaybackSessionStatus.Playing) return
+        if (
+            lastMusicSessionRefreshRealtimeMs != 0L &&
+            realtimeMs - lastMusicSessionRefreshRealtimeMs < MUSIC_SESSION_LEASE_INTERVAL_MS
+        ) {
+            return
+        }
+        refreshMusicSession(status, realtimeMs)
     }
 
     fun clear() {
@@ -301,18 +315,30 @@ private class BydInstrumentLyricsBridge(
             if (method != null && invokeOptional(method, "", "", "")) return
         }
         musicNameMethod?.let { invokeOptional(it, "") }
-        publishMusicStateValueIfAvailable(musicStopValue)
+        publishMusicStateValueIfAvailable(musicStopValue, force = true)
+        lastMusicStateValue = null
+        lastMusicSessionRefreshRealtimeMs = 0L
     }
 
-    private fun initializeMusicSourceIfAvailable() {
-        if (musicSourceInitialized) return
-        musicSourceInitialized = true
+    private fun refreshMusicSession(
+        status: PlaybackSessionStatus,
+        realtimeMs: Long = SystemClock.elapsedRealtime(),
+    ) {
+        // Reassert source/state on actual lyric/status changes, then maintain the same ownership
+        // with a low-frequency lease while playing. The lease intentionally never resends
+        // sendMusicName, so long scrolling lyrics are not restarted.
+        lastMusicSessionRefreshRealtimeMs = realtimeMs
+        publishMusicSourceIfAvailable()
+        publishMusicStateIfAvailable(status, force = true)
+    }
+
+    private fun publishMusicSourceIfAvailable() {
         val method = musicSourceMethod ?: return
         val value = musicSourceOthersValue ?: return
         invokeOptional(method, value)
     }
 
-    private fun publishMusicStateIfAvailable(status: PlaybackSessionStatus) {
+    private fun publishMusicStateIfAvailable(status: PlaybackSessionStatus, force: Boolean = false) {
         val value = when (status) {
             PlaybackSessionStatus.Playing -> musicPlayValue
             PlaybackSessionStatus.Paused -> musicPauseValue
@@ -322,13 +348,13 @@ private class BydInstrumentLyricsBridge(
             -> musicStopValue
             PlaybackSessionStatus.Loading -> null
         }
-        publishMusicStateValueIfAvailable(value)
+        publishMusicStateValueIfAvailable(value, force)
     }
 
-    private fun publishMusicStateValueIfAvailable(value: Int?) {
+    private fun publishMusicStateValueIfAvailable(value: Int?, force: Boolean = false) {
         val method = musicStateMethod ?: return
         val stateValue = value ?: return
-        if (lastMusicStateValue == stateValue) return
+        if (!force && lastMusicStateValue == stateValue) return
         if (invokeOptional(method, stateValue)) lastMusicStateValue = stateValue
     }
 
@@ -354,6 +380,7 @@ private class BydInstrumentLyricsBridge(
 
     companion object {
         private const val TAG = "BydInstrumentLyrics"
+        private const val MUSIC_SESSION_LEASE_INTERVAL_MS = 5_000L
 
         fun create(context: Context): Result<BydInstrumentLyricsBridge> = runCatching {
             val instrumentClass = Class.forName(BYD_INSTRUMENT_DEVICE_CLASS)
