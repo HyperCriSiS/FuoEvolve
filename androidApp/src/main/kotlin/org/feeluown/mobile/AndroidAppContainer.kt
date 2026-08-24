@@ -323,6 +323,7 @@ internal class AndroidAppContainer(
             playlistActionPort = playlistActionPort,
             providerTrackActionPort = providerTrackActionPort,
             localMusicActionPort = localMusicFeatureController,
+            playbackLyricsPort = playbackFeatureOwner.lyrics,
             replacementActionPort = playbackFeatureOwner.replacement,
             debugLogFeatureController = debugLogFeatureController,
             providerCatalogFeatureController = providerCatalogFeatureController,
