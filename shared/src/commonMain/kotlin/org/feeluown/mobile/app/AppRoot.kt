@@ -75,6 +75,31 @@ private data class SnackbarFeedbackEvent(
     val dismiss: () -> Unit,
 )
 
+private fun AppRoute.showsMiniPlayer(
+    hasCurrentTrack: Boolean,
+    hasQueueTrack: Boolean,
+    isVideoFullscreen: Boolean,
+): Boolean = when (this) {
+    AppRoute.Home -> hasCurrentTrack
+    AppRoute.LocalPlaylist,
+    AppRoute.LocalMusicCollection,
+    is AppRoute.FeatureDetail,
+    is AppRoute.PlaylistDetail,
+    is AppRoute.TrackDetail,
+    is AppRoute.MediaItemDetail -> hasQueueTrack
+    is AppRoute.VideoDetail -> hasQueueTrack && !isVideoFullscreen
+    AppRoute.Search,
+    AppRoute.AudioRecognition,
+    AppRoute.Settings,
+    AppRoute.DebugLogs,
+    AppRoute.DownloadManager,
+    AppRoute.Feature,
+    AppRoute.Playlist,
+    AppRoute.Track,
+    AppRoute.Video,
+    AppRoute.MediaItem -> false
+}
+
 private fun Flow<String?>.toSnackbarFeedbackEvents(
     lifecycle: Lifecycle,
     dismissFeedback: (String) -> Unit,
@@ -144,6 +169,7 @@ fun AppRoot(
 ) {
     val appUiState by appViewModel.uiState.collectAsStateWithLifecycle()
     val localPlaylistState by appViewModel.localPlaylistFeatureController.uiState.collectAsStateWithLifecycle()
+    val videoDetailState by appViewModel.providerDetailOwners.video.uiState.collectAsStateWithLifecycle()
     val playbackGraph = appViewModel.playbackUiPort
 
     FuoTheme(
@@ -222,6 +248,17 @@ fun AppRoot(
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val layoutInfo = remember(maxWidth, maxHeight) { appLayoutInfoFor(maxWidth, maxHeight) }
+            val miniPlayerVisible = !playbackGraph.isFullPlayerOpen &&
+                appUiState.backStack.lastOrNull()?.showsMiniPlayer(
+                    hasCurrentTrack = playbackGraph.currentTrack != null,
+                    hasQueueTrack = playbackGraph.queue.currentQueueTrack != null,
+                    isVideoFullscreen = videoDetailState.isFullscreen,
+                ) == true
+            val snackbarBottomPadding = if (miniPlayerVisible) {
+                if (layoutInfo.useWideLayout) 80.dp else 96.dp
+            } else {
+                16.dp
+            }
             CompositionLocalProvider(
                 LocalPlaybackSession provides appViewModel.playbackSession,
                 LocalPlaybackUiPort provides playbackGraph,
@@ -327,7 +364,15 @@ fun AppRoot(
                                 TrackArtistTargetFeatureDialog(appViewModel.providerTrackActionPort)
                                 SnackbarHost(
                                     hostState = snackbar,
-                                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .navigationBarsPadding()
+                                        .padding(
+                                            start = 16.dp,
+                                            top = 16.dp,
+                                            end = 16.dp,
+                                            bottom = snackbarBottomPadding,
+                                        ),
                                 ) { data ->
                                     Snackbar(
                                         snackbarData = data,

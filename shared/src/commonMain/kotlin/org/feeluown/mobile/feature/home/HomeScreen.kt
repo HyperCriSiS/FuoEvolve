@@ -80,7 +80,7 @@ fun HomeScreen(
         topBar = {
             if (!layoutInfo.useWideLayout) {
                 CenterAlignedTopAppBar(
-                    title = { Text("FeelUOwn") },
+                    title = {},
                     navigationIcon = {
                         IconButton(onClick = { home.openSettings() }) {
                             Icon(Icons.Filled.Settings, contentDescription = "设置")
