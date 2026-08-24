@@ -222,6 +222,13 @@ fun AppRoot(
 
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val layoutInfo = remember(maxWidth, maxHeight) { appLayoutInfoFor(maxWidth, maxHeight) }
+            val snackbarBottomPadding = if (
+                playbackGraph.currentTrack != null && !playbackGraph.isFullPlayerOpen
+            ) {
+                if (layoutInfo.useWideLayout) 80.dp else 96.dp
+            } else {
+                16.dp
+            }
             CompositionLocalProvider(
                 LocalPlaybackSession provides appViewModel.playbackSession,
                 LocalPlaybackUiPort provides playbackGraph,
@@ -327,7 +334,15 @@ fun AppRoot(
                                 TrackArtistTargetFeatureDialog(appViewModel.providerTrackActionPort)
                                 SnackbarHost(
                                     hostState = snackbar,
-                                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .navigationBarsPadding()
+                                        .padding(
+                                            start = 16.dp,
+                                            top = 16.dp,
+                                            end = 16.dp,
+                                            bottom = snackbarBottomPadding,
+                                        ),
                                 ) { data ->
                                     Snackbar(
                                         snackbarData = data,
