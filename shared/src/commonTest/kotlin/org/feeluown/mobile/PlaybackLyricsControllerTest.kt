@@ -83,6 +83,30 @@ class PlaybackLyricsControllerTest {
     }
 
     @Test
+    fun bilibiliBgmKeywordRemovesDiscoveryPrefixAndBookTitleMarks() = runTest {
+        val source = providerTrack("bilibili:BVdemo", "视频标题", "bilibili")
+        val repository = FakePlaybackLyricsRepository(
+            searchKeyword = "发现《春を告げる》",
+        )
+        val controller = PlaybackLyricsController(
+            repository = repository,
+            scope = this,
+            currentRequestSerial = { 1L },
+            currentTrackId = { source.id },
+            currentLyrics = { null },
+            updateLyrics = {},
+            associationForTrackId = { null },
+            rememberAssociation = { _, _ -> },
+        )
+
+        controller.openAssociationSearch(source)
+        advanceUntilIdle()
+
+        assertEquals("春を告げる", controller.associationState.value.query)
+        assertEquals(listOf("春を告げる"), repository.searchRequests)
+    }
+
+    @Test
     fun rememberedAssociationIsPreservedWhenLookupFails() = runTest {
         val source = providerTrack("bilibili:BVdemo", "视频标题", "bilibili")
         val repository = FakePlaybackLyricsRepository()
