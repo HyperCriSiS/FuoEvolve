@@ -29,12 +29,14 @@ Android is the primary supported platform. iOS builds are available for experime
 
 - 🎵 **Multiple music sources in one app** — use NetEase Cloud Music, QQ Music, Bilibili, and YouTube Music side by side, and choose which sources are enabled and preferred.
 - 🧭 **Rich discovery** — browse daily recommendations, private radio, charts, playlist and artist collections, new releases, MV collections, music styles, and other source-specific content.
-- 🔎 **Unified search** — search enabled online sources and local music, with dedicated results for songs, artists, albums, playlists, and videos where available.
-- ▶️ **Complete playback experience** — queue management, shuffle and repeat, up next, seeking, multipart content, audio playback, and a full-screen MV/video player with playback controls.
-- 🎤 **Better lyrics** — synchronized lyrics, translations, NetEase word-by-word karaoke highlighting, and ColorOS lock-screen live lyrics on supported OPPO/OnePlus devices.
-- 🔁 **Smart source replacement** — when a track is unavailable, FuoEvolve can automatically look for a close match from another enabled source while keeping the original song information and lyrics.
-- 💽 **Local music and playlists** — browse local music by artist, album, or directory, edit metadata, create local playlists, and import or share playlist files.
-- ⬇️ **Downloads for offline listening** — download supported online tracks and play them locally from the app.
+- 🔎 **Unified search** — search enabled online sources and local music, with dedicated result types where available and persistent recent-search history for quick reuse.
+- ▶️ **Resilient playback** — manage the queue, shuffle/repeat, Up Next, seeking, multipart content, audio and video playback, use a sleep timer, and resume the active queue and playback state after an Android process restart.
+- 🎤 **Rich and flexible lyrics** — synchronized, translated, romanized, and word-level lyrics where providers support them; manually associate and remember lyrics for tracks whose source does not provide lyrics.
+- 📱 **System and device lyric output** — publish timed lyrics to supported ColorOS lock screens, Lyricon status-bar lyrics, and supported BYD instrument clusters on Android.
+- 🔁 **Smarter source replacement** — when a track is unavailable, automatically find a close match from another enabled source with recording-aware scoring while preserving the original song context and lyrics.
+- ❤️ **Manage online libraries** — where the provider allows it, favorite or unfavorite playlists, artists, and albums, and manage owned NetEase/QQ Music playlists from inside FuoEvolve.
+- 💽 **Local music and offline listening** — browse and edit local music, create portable local playlists, download supported online tracks, resume interrupted downloads, and keep downloaded content indexed in the local library.
+- 🔐 **Portable provider credentials** — Android can export encrypted credential backups for all or individual providers and restore them later without replacing normal on-device secure storage.
 - 🎙️ **Audio recognition** — identify a song from the microphone and jump directly to search or song details.
 - 🔗 **Share into FuoEvolve** — on Android, share supported NetEase, QQ Music, Bilibili, YouTube, or YouTube Music links to the app to open the matching content; unsupported share text can fall back to search.
 - 🎨 **Material 3 Expressive UI** — light/dark themes, dynamic color, cover-inspired player colors, smooth transitions, and layouts that adapt across phone and larger screens.
@@ -45,38 +47,46 @@ FuoEvolve currently includes four online sources. Available content can vary by 
 
 | Source | What you can explore |
 | --- | --- |
-| **NetEase Cloud Music** | Daily songs, recommended and new songs, private FM, charts, playlist square, artist square, MV square, music styles, favorite songs, cloud songs, playlists, artists, and albums. |
-| **QQ Music** | Daily songs, recommendations, private FM, charts, playlist square, artist square, new albums, MV square, multi-type search, user playlists, favorites, artists, and albums. |
-| **Bilibili** | Music/video search and playback, personalized recommendations, dynamic videos, weekly must-watch, watch later, viewing history, followed creators and uploads, favorites, and collected bangumi/films. |
-| **YouTube Music** | Song and video search, recommendations and library content, playlists, artists, albums, charts, and video playback where available. |
+| **NetEase Cloud Music** | Daily songs, recommended and new songs, private FM, charts, playlist square, artist square, MV square, music styles, favorite songs, cloud songs, playlists, artists, and albums, with supported playlist and favorite mutations. |
+| **QQ Music** | Daily songs, recommendations, private FM, charts, playlist square, artist square, new albums, MV square, multi-type search, owned/favorite playlists, favorite albums, followed artists, and supported playlist/favorite mutations. |
+| **Bilibili** | Music/video search and playback, personalized recommendations, dynamic videos, weekly must-watch, watch later, viewing history, followed creators and uploads, favorites, collected bangumi/films, and multipart playback. |
+| **YouTube Music** | Song/video search, recommendations and library content, playlists, artists, albums, charts, lyrics, similar-track radio, and video playback where available. |
 
 Sources can be enabled, disabled, reordered, and signed in from Settings. NetEase, QQ Music, and Bilibili use account cookies. YouTube Music supports Google authorization as well as imported account headers/cookies.
 
 ## Playback and Lyrics
 
-FuoEvolve is designed for both everyday listening and mixed music/video libraries. You can manage the play queue, use shuffle or repeat, add tracks to Up Next, seek through playback, and open artist or album details directly from the player.
+FuoEvolve is designed for both everyday listening and mixed music/video libraries. You can manage the play queue, use shuffle or repeat, add tracks to Up Next, seek through playback, open artist or album details directly from the player, and start a sleep timer that stops playback after a chosen duration or at the end of the current track.
 
-MV and video playback has a dedicated viewing experience with transport controls, full-screen playback, orientation handling, and support for multipart Bilibili videos.
+On Android, the playback session and durable queue cooperate so a process restart can restore the active track, queue, shuffle/repeat state, multipart position, and playback progress. Explicit user selections remain separate from resume behavior, so choosing a new song or playlist does not accidentally revive an older paused session.
 
-Lyrics support includes classic synchronized lyrics, translated lines, and NetEase word-level lyrics with karaoke-style progress highlighting. On supported ColorOS devices, timed lyrics can also appear on the lock screen while music is playing.
+MV and video playback has a dedicated viewing experience with transport controls, full-screen playback, orientation handling, and support for multipart Bilibili videos. Smart replacement treats multipart replacement candidates as a single replacement track instead of unexpectedly advancing through their parts.
+
+Lyrics support includes synchronized lyrics, translations, romanized lines, and rich word-level timing from NetEase and QQ Music where available. For sources without usable lyrics, you can manually search for another track's lyrics, associate them with the current track, and keep that choice for future playback. Bilibili uses the video's BGM title as the preferred lyric search keyword when the upstream metadata provides one, falling back to the video title.
+
+Android can also publish timed lyrics outside the player: supported ColorOS devices can show lock-screen live lyrics, Lyricon can provide status-bar lyrics, and supported BYD vehicles can receive instrument-cluster lyrics.
 
 ## Discovery and Personal Library
 
-The home and library experience follows the content each source actually provides instead of forcing every source into the same shape.
+The home and library experience follows the content each source actually provides instead of forcing every source into the same shape. Provider sections load incrementally, keeping large discovery and library views responsive while additional content is fetched.
 
-NetEase and QQ Music expose broader discovery areas such as charts, playlist collections, artist browsing, MV browsing, categories, and filters. NetEase also includes music-style browsing, while QQ Music includes new album discovery.
+NetEase and QQ Music expose broader discovery areas such as charts, playlist collections, artist browsing, MV browsing, categories, and filters. NetEase also includes music-style browsing, while QQ Music includes new album discovery and expanded Mine content such as favorite playlists, favorite albums, and followed artists.
+
+Where supported, provider detail pages expose the resource's current favorite state and let you favorite or unfavorite playlists, artists, and albums. Owned NetEase and QQ Music playlists expose only the mutations they actually allow; QQ Music supports creating and deleting owned playlists, and supported playlists can add or remove tracks.
 
 Bilibili focuses on its own content model: personalized and dynamic videos, weekly recommendations, Watch Later, viewing history, followed creators, creator uploads, favorites, and collected bangumi/films.
 
-Your library also surfaces frequently played playlists so commonly used collections are easier to return to.
+Your library also surfaces frequently played playlists so commonly used collections are easier to return to. Search keeps recent queries newest-first for quick reuse and lets you remove individual history entries.
 
 ## Local Music, Playlists, and Downloads
 
-Local music can be scanned into the app and browsed by all tracks, artist, album, or directory. Scan rules can be adjusted to include specific folders or ignore very short audio files.
+Local music can be scanned into the app and browsed by all tracks, artist, album, or directory. Scan rules can be adjusted to include specific folders or ignore very short audio files. The local index tracks media changes and stored lyrics so large libraries can refresh without rebuilding unchanged entries unnecessarily.
 
-Track title, artist, and album information can be edited locally. FuoEvolve can also use enabled online sources to help find better metadata and lyrics.
+Track title, artist, and album information can be edited locally. FuoEvolve can also use enabled online sources to help find better metadata and lyrics, and manually associated lyrics remain available across later playback.
 
-Local playlists can contain local, downloaded, and supported online tracks. They can be created and managed in the app, imported from files, and shared as playlist files. Downloaded tracks remain available for local playback inside FuoEvolve.
+Local playlists can contain local, downloaded, and supported online tracks. They can be created and managed in the app, imported from files, and shared as playlist files.
+
+Supported online tracks can be downloaded for offline listening. Download state and resume metadata are persisted so interrupted transfers can continue, and completed downloads are integrated into the offline/local library for normal playback and browsing.
 
 ## Audio Recognition
 
@@ -89,11 +99,12 @@ Recognized songs can be searched immediately or opened in their NetEase details.
 FuoEvolve lets you tune the experience without requiring deep configuration. Common options include:
 
 - online source enablement, priority, and login management;
+- encrypted provider credential backup and restore on Android, including per-provider export;
 - separate Wi-Fi and cellular audio-quality preferences;
-- smart replacement behavior for unavailable tracks;
+- smart replacement providers, behavior, and matching strictness for unavailable tracks;
 - playback behavior, including whether another app starting audio should pause FuoEvolve;
-- system, light, or dark appearance, dynamic color, preset colors, and cover-inspired player colors;
-- lyric font size and display preferences;
+- system, light, or dark appearance, dynamic color, preset colors, and cover-inspired player colors on a dedicated appearance settings page;
+- lyric font size and external lyric output such as supported ColorOS, Lyricon, and BYD integrations;
 - local music scan folders and minimum track duration;
 - audio and image cache limits.
 
@@ -105,7 +116,7 @@ iOS is not currently published as a GitHub Release or App Store build, so it sho
 
 ## Development
 
-FuoEvolve uses Kotlin Multiplatform and Compose Multiplatform to share most application code across platforms. Android uses AndroidX Media3 for playback.
+FuoEvolve uses Kotlin Multiplatform and Compose Multiplatform to share most application code across platforms. Android uses AndroidX Media3 for playback. The codebase is split into explicit feature, playback, provider, persistence, and platform boundaries so shared UI does not own provider or playback runtime responsibilities.
 
 Requirements:
 
@@ -127,10 +138,15 @@ Run shared tests and Android lint:
 ./gradlew :androidApp:lint :shared:lint
 ```
 
-Main project areas:
+Main Gradle module groups:
 
-- `shared` — shared UI, application state, music-source integrations, and common tests;
-- `androidApp` — Android application and platform playback integration;
+- `core:model` — shared application/domain models;
+- `feature:*` — feature ownership for search, recognition, local/offline libraries, provider browsing/auth/details, settings, onboarding, and home;
+- `playback:api` / `playback:runtime` — playback contracts, session orchestration, queue/lyrics/timer behavior, and platform integration boundaries;
+- `provider:api` / `provider:runtime` plus `provider:netease`, `provider:qqmusic`, `provider:bilibili`, and `provider:ytmusic` — provider contracts, runtime plumbing, and source-specific implementations;
+- `persistence:settings` — persisted shared settings and user choices;
+- `shared` — shared Compose application/UI integration;
+- `androidApp` — Android application and platform services;
 - `iosApp/FuoEvolve` — experimental iOS application;
 - `.github/workflows` — Android release/build automation and iOS development builds.
 
