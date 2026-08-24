@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+private val LYRICS_ASSOCIATION_PROVIDER_IDS = setOf("netease", "qqmusic", "ytmusic")
+
 internal interface PlaybackLyricsRepository {
     suspend fun lyrics(track: MusicTrack): String?
     suspend fun search(keyword: String): List<MusicTrack>
@@ -19,8 +21,17 @@ private class ProviderPlaybackLyricsRepository(
 ) : PlaybackLyricsRepository {
     override suspend fun lyrics(track: MusicTrack): String? = delegate.lyrics(track)
 
-    override suspend fun search(keyword: String): List<MusicTrack> =
-        delegate.search(keyword, providerId = null)
+    override suspend fun search(keyword: String): List<MusicTrack> {
+        val enabledProviderIds = delegate.providers().mapTo(mutableSetOf()) { it.providerId }
+        val results = mutableListOf<MusicTrack>()
+        for (providerId in LYRICS_ASSOCIATION_PROVIDER_IDS) {
+            if (providerId !in enabledProviderIds) continue
+            val providerResults = runCatching { delegate.search(keyword, providerId) }
+                .getOrDefault(emptyList())
+            results += providerResults
+        }
+        return results.distinctBy { it.id }
+    }
 
     override suspend fun trackDetail(trackId: String): MusicTrack? =
         runCatching { delegate.trackDetail(trackId) }.getOrNull()
@@ -172,10 +183,13 @@ internal class PlaybackLyricsController(
         searchJob?.cancel()
         searchJob = scope.launch {
             val sourceTrack = lyricSourceTrackForPlayback(track)
-            val keyword = runCatching { repository.searchKeyword(sourceTrack) }
+            val rawKeyword = runCatching { repository.searchKeyword(sourceTrack) }
                 .getOrNull()
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
+                ?: sourceTrack.title.trim()
+            val keyword = normalizeAssociationSearchKeyword(sourceTrack, rawKeyword)
+                .takeIf { it.isNotBlank() }
                 ?: sourceTrack.title.trim()
             if (associationSearchTrack?.id != track.id || currentTrackId() != track.id) return@launch
             if (associationQueryEdited) {
@@ -293,6 +307,21 @@ internal class PlaybackLyricsController(
 
     private fun isCurrent(track: MusicTrack, requestSerial: Long): Boolean =
         requestSerial == currentRequestSerial() && currentTrackId() == track.id
+
+    private fun normalizeAssociationSearchKeyword(track: MusicTrack, keyword: String): String {
+        val trimmed = keyword.trim()
+        if (track.source != "bilibili") return trimmed
+        val withoutDiscoveryPrefix = trimmed.removePrefix("发现").trim()
+        return if (
+            withoutDiscoveryPrefix.length >= 2 &&
+            withoutDiscoveryPrefix.startsWith('《') &&
+            withoutDiscoveryPrefix.endsWith('》')
+        ) {
+            withoutDiscoveryPrefix.substring(1, withoutDiscoveryPrefix.length - 1).trim()
+        } else {
+            withoutDiscoveryPrefix
+        }
+    }
 
     private fun lyricSourceTrackForPlayback(track: MusicTrack): MusicTrack {
         if (!track.isSmartReplacement) return track
