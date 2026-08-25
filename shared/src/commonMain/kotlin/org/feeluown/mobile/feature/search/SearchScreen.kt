@@ -141,10 +141,10 @@ internal fun SearchFeatureScreen(
                             onQueryChange = { actions.dispatch(SearchAction.QueryChanged(it)) },
                             onSearch = { performSearch() },
                             enabled = !uiState.isLoading,
-                            placeholder = "歌曲、歌手或专辑",
+                            placeholder = "Titel, Interpret oder Album",
                             trailingContent = {
                                 FuoIconButton(
-                                    contentDescription = "搜索",
+                                    contentDescription = "Suchen",
                                     enabled = !uiState.isLoading,
                                     onClick = { performSearch() },
                                 ) {
@@ -158,14 +158,14 @@ internal fun SearchFeatureScreen(
                         ) {
                             Icon(Icons.Filled.Mic, contentDescription = null)
                             Spacer(Modifier.size(8.dp))
-                            Text("听歌识曲")
+                            Text("Musik erkennen")
                         }
                         Row(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            SearchScopeChip(actions, uiState, SearchScope.All, "全部")
-                            SearchScopeChip(actions, uiState, SearchScope.Local, "本地")
+                            SearchScopeChip(actions, uiState, SearchScope.All, "Alle")
+                            SearchScopeChip(actions, uiState, SearchScope.Local, "Lokal")
                             providers.forEach { provider ->
                                 SearchProviderChip(actions, uiState, provider)
                             }
@@ -182,7 +182,7 @@ internal fun SearchFeatureScreen(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                         Spacer(Modifier.size(4.dp))
-                        Text("返回")
+                        Text("Zurück")
                     }
                 }
                 Column(
@@ -225,7 +225,7 @@ internal fun SearchFeatureScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(onClick = actions.onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                             }
                             FuoSearchField(
                                 modifier = Modifier.weight(1f),
@@ -233,17 +233,17 @@ internal fun SearchFeatureScreen(
                                 onQueryChange = { actions.dispatch(SearchAction.QueryChanged(it)) },
                                 onSearch = { performSearch() },
                                 enabled = !uiState.isLoading,
-                                placeholder = "歌曲、歌手或专辑",
+                                placeholder = "Titel, Interpret oder Album",
                                 trailingContent = {
                                     Row {
                                         FuoIconButton(
-                                            contentDescription = "听歌识曲",
+                                            contentDescription = "Musik erkennen",
                                             onClick = onOpenRecognition,
                                         ) {
                                             Icon(Icons.Filled.Mic, contentDescription = null)
                                         }
                                         FuoIconButton(
-                                            contentDescription = "搜索",
+                                            contentDescription = "Suchen",
                                             enabled = !uiState.isLoading,
                                             onClick = { performSearch() },
                                         ) {
@@ -259,8 +259,8 @@ internal fun SearchFeatureScreen(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            SearchScopeChip(actions, uiState, SearchScope.All, "全部")
-                            SearchScopeChip(actions, uiState, SearchScope.Local, "本地")
+                            SearchScopeChip(actions, uiState, SearchScope.All, "Alle")
+                            SearchScopeChip(actions, uiState, SearchScope.Local, "Lokal")
                             providers.forEach { provider ->
                                 SearchProviderChip(actions, uiState, provider)
                             }
@@ -297,8 +297,8 @@ internal fun SearchFeatureScreen(
     pendingHistoryDeletion?.let { keyword ->
         AlertDialog(
             onDismissRequest = { pendingHistoryDeletion = null },
-            title = { Text("删除搜索历史") },
-            text = { Text("确定删除“$keyword”吗？") },
+            title = { Text("Suchverlauf löschen") },
+            text = { Text("„$keyword“ wirklich löschen?") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -306,12 +306,12 @@ internal fun SearchFeatureScreen(
                         pendingHistoryDeletion = null
                     },
                 ) {
-                    Text("删除")
+                    Text("Löschen")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingHistoryDeletion = null }) {
-                    Text("取消")
+                    Text("Abbrechen")
                 }
             },
         )
@@ -330,7 +330,7 @@ private fun SearchHistoryStrip(
         verticalArrangement = Arrangement.spacedBy(FuoSpacing.xs),
     ) {
         Text(
-            text = "搜索历史",
+            text = "Suchverlauf",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -450,12 +450,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.searchResultItems(
         }
         ProviderSearchTab.Artists -> mediaItems(
             uiState.providerSearchResults.artists,
-            "没有歌手结果",
+            "Keine Interpreten gefunden",
             actions,
         )
         ProviderSearchTab.Albums -> mediaItems(
             uiState.providerSearchResults.albums,
-            "没有专辑结果",
+            "Keine Alben gefunden",
             actions,
         )
         ProviderSearchTab.Playlists -> playlists(uiState.providerSearchResults.playlists, actions)
@@ -492,7 +492,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.playlists(
     actions: SearchFeatureActions,
 ) {
     if (playlists.isEmpty()) {
-        item { ProviderContentMessage("没有歌单结果") }
+        item { ProviderContentMessage("Keine Playlists gefunden") }
     } else {
         itemsIndexed(playlists, key = { _, item -> item.id }) { _, playlist ->
             ProviderSearchRow(
@@ -512,7 +512,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.videos(
     actions: SearchFeatureActions,
 ) {
     if (videos.isEmpty()) {
-        item { ProviderContentMessage("没有视频结果") }
+        item { ProviderContentMessage("Keine Videos gefunden") }
     } else {
         itemsIndexed(videos, key = { _, item -> item.id }) { _, video ->
             ProviderSearchRow(
@@ -554,7 +554,7 @@ private fun ProviderSearchRow(
         },
         headlineContent = {
             Text(
-                text = title.ifBlank { "未命名" },
+                text = title.ifBlank { "Unbenannt" },
                 maxLines = 1,
             )
         },
@@ -569,11 +569,11 @@ private fun ProviderSearchRow(
 }
 
 private fun ProviderSearchTab.label(uiState: SearchUiState): String = when (this) {
-    ProviderSearchTab.Songs -> "歌曲 ${uiState.searchResults.size}"
-    ProviderSearchTab.Artists -> "歌手 ${uiState.providerSearchResults.artists.size}"
-    ProviderSearchTab.Albums -> "专辑 ${uiState.providerSearchResults.albums.size}"
-    ProviderSearchTab.Playlists -> "歌单 ${uiState.providerSearchResults.playlists.size}"
-    ProviderSearchTab.Videos -> "视频 ${uiState.providerSearchResults.videos.size}"
+    ProviderSearchTab.Songs -> "Titel ${uiState.searchResults.size}"
+    ProviderSearchTab.Artists -> "Interpreten ${uiState.providerSearchResults.artists.size}"
+    ProviderSearchTab.Albums -> "Alben ${uiState.providerSearchResults.albums.size}"
+    ProviderSearchTab.Playlists -> "Playlists ${uiState.providerSearchResults.playlists.size}"
+    ProviderSearchTab.Videos -> "Videos ${uiState.providerSearchResults.videos.size}"
 }
 
 @Composable
@@ -582,7 +582,7 @@ private fun EmptySearchHint(query: String, compactTop: Boolean = false) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = if (compactTop) 0.dp else 24.dp),
-        title = if (query.isBlank()) "输入关键词查找音乐" else "没有结果",
+        title = if (query.isBlank()) "Suchbegriff eingeben" else "Keine Ergebnisse",
     )
 }
 

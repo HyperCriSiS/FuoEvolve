@@ -101,14 +101,14 @@ fun OnboardingFeatureScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("初始设置") },
+                title = { Text("Ersteinrichtung") },
                 navigationIcon = {
                     if (!sourcePage) {
                         IconButton(
                             enabled = !busy,
                             onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "上一步")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                         }
                     }
                 },
@@ -120,11 +120,11 @@ fun OnboardingFeatureScreen(
                 pageCount = pageCount,
                 isBusy = busy,
                 actionLabel = when {
-                    sourcePage || themePage -> "继续"
-                    qualityPage -> "完成"
+                    sourcePage || themePage -> "Weiter"
+                    qualityPage -> "Fertig"
                     else -> {
                         val provider = selectedProviders.getOrNull(pagerState.currentPage - 1)
-                        if (provider != null && providerAuth.authStateFor(provider).isLoggedIn) "继续" else "跳过"
+                        if (provider != null && providerAuth.authStateFor(provider).isLoggedIn) "Weiter" else "Überspringen"
                     }
                 },
                 onAction = {
@@ -193,9 +193,9 @@ private fun OnboardingProviderSelectionPage(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(Icons.Filled.MusicNote, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-        Text("选择要启用的音源", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Musikquellen auswählen", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "至少选择一个音源，之后可以逐一登录；这些设置也可以稍后在设置中修改。",
+            "Wähle mindestens eine Musikquelle. Du kannst dich anschließend einzeln anmelden und die Auswahl später in den Einstellungen ändern.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (providers.isEmpty()) {
@@ -205,7 +205,7 @@ private fun OnboardingProviderSelectionPage(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                Text("音源正在初始化")
+                Text("Musikquelle wird initialisiert")
             }
         } else {
             providers.forEach { provider ->
@@ -230,7 +230,7 @@ private fun OnboardingProviderSelectionPage(
                         Column(Modifier.weight(1f)) {
                             Text(provider.providerName, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (selected) "将启用此音源" else "不会加载此音源",
+                                if (selected) "Diese Musikquelle wird aktiviert" else "Diese Musikquelle wird nicht geladen",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -259,9 +259,9 @@ private fun OnboardingProviderSelectionPage(
                         onCheckedChange = onReplacementOnlyChange,
                     )
                     Column(Modifier.weight(1f)) {
-                        Text("Bilibili 仅作为替换音源", fontWeight = FontWeight.SemiBold)
+                        Text("Bilibili nur als Ersatzquelle verwenden", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "不在搜索和首页展示，只在原音源资源不可用时参与智能替换。",
+                            "Nicht in Suche und Startseite anzeigen; nur für intelligenten Ersatz verwenden, wenn die ursprüngliche Quelle nicht verfügbar ist.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -271,7 +271,7 @@ private fun OnboardingProviderSelectionPage(
         state.feedback?.let { feedback ->
             Text(
                 feedback,
-                color = if (feedback.contains("失败") || feedback.startsWith("请至少") || feedback.startsWith("Bilibili")) {
+                color = if (feedback.contains("Fehlgeschlagen") || feedback.startsWith("Bitte mindestens") || feedback.startsWith("Bilibili")) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -291,9 +291,9 @@ private fun OnboardingThemePage(
         modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("选择应用主题", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("之后仍可在设置中修改。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("外观模式", style = MaterialTheme.typography.titleMedium)
+        Text("App-Design auswählen", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Kann später in den Einstellungen geändert werden.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Darstellung", style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ThemeMode.entries.forEach { mode ->
                 FilterChip(
@@ -303,7 +303,7 @@ private fun OnboardingThemePage(
                 )
             }
         }
-        Text("配色方案", style = MaterialTheme.typography.titleMedium)
+        Text("Farbschema", style = MaterialTheme.typography.titleMedium)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ThemeColorScheme.entries.chunked(3).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -319,8 +319,8 @@ private fun OnboardingThemePage(
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("封面动态取色")
-                Text("根据当前播放封面生成播放器主题色", style = MaterialTheme.typography.bodySmall)
+                Text("Dynamische Farben aus dem Cover")
+                Text("Player-Farben aus dem aktuell abgespielten Cover erzeugen", style = MaterialTheme.typography.bodySmall)
             }
             Switch(
                 checked = appSettings.dynamicCoverColorEnabled,
@@ -340,14 +340,14 @@ private fun OnboardingQualityPage(
         modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("选择默认音质", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("可以分别设置 Wi‑Fi 和蜂窝网络下的播放音质。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Standard-Audioqualität auswählen", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Die Audioqualität kann für WLAN und Mobilfunk getrennt eingestellt werden.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Wi‑Fi", style = MaterialTheme.typography.titleMedium)
         OnboardingQualityChoices(
             selected = appSettings.wifiAudioQualityPolicy,
             onSelect = settingsController::setWifiAudioQualityPolicy,
         )
-        Text("蜂窝网络", style = MaterialTheme.typography.titleMedium)
+        Text("Mobilfunk", style = MaterialTheme.typography.titleMedium)
         OnboardingQualityChoices(
             selected = appSettings.cellularAudioQualityPolicy,
             onSelect = settingsController::setCellularAudioQualityPolicy,
@@ -403,14 +403,14 @@ private fun OnboardingProviderLoginPage(
         Text(provider.providerName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
             if (currentAuth.isLoggedIn) {
-                currentAuth.userName?.takeIf { it.isNotBlank() }?.let { "已登录：$it" } ?: "已登录"
+                currentAuth.userName?.takeIf { it.isNotBlank() }?.let { "Angemeldet: $it" } ?: "Angemeldet"
             } else {
-                "登录可使用个性化推荐、我的歌单等功能；也可以先跳过。"
+                "Mit Anmeldung stehen personalisierte Empfehlungen, eigene Playlists und weitere Funktionen zur Verfügung. Du kannst dies auch überspringen."
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (currentAuth.isLoggedIn) {
-            OutlinedButton(onClick = { onLogoutProvider(provider) }, enabled = !busy) { Text("退出登录") }
+            OutlinedButton(onClick = { onLogoutProvider(provider) }, enabled = !busy) { Text("Abmelden") }
             return@Column
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -427,7 +427,7 @@ private fun OnboardingProviderLoginPage(
             ProviderLoginMode.WebView -> Button(
                 onClick = { onOpenProviderWebLogin(provider) },
                 enabled = provider.loginConfig != null && !busy,
-            ) { Text("网页登录") }
+            ) { Text("Web-Anmeldung") }
             ProviderLoginMode.Cookie -> {
                 OutlinedTextField(
                     value = authController.cookieInput(provider.providerId),
@@ -440,7 +440,7 @@ private fun OnboardingProviderLoginPage(
                 Button(
                     onClick = { authController.loginWithCookies(provider.providerId, authController.cookieInput(provider.providerId)) },
                     enabled = !busy,
-                ) { Text("使用 Cookie 登录") }
+                ) { Text("Mit Cookie anmelden") }
             }
             ProviderLoginMode.Headers -> {
                 OutlinedTextField(
@@ -460,17 +460,17 @@ private fun OnboardingProviderLoginPage(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Button(onClick = { authController.loginWithHeaders(provider.providerId) }, enabled = !busy) {
-                    Text("使用 Headers 登录")
+                    Text("Mit Headern anmelden")
                 }
                 if (provider.providerId == "ytmusic") {
                     onImportYtmusicHeaderFile?.let { action ->
-                        TextButton(onClick = action, enabled = !busy) { Text("导入 ytmusic_header.json") }
+                        TextButton(onClick = action, enabled = !busy) { Text("ytmusic_header.json importieren") }
                     }
                 }
             }
             ProviderLoginMode.OAuth -> {
                 Text(
-                    "使用 Google Cloud「TVs and Limited Input devices」类型的 OAuth 客户端。",
+                    "Google-Cloud-OAuth-Client vom Typ „TVs and Limited Input devices“ verwenden.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -491,9 +491,9 @@ private fun OnboardingProviderLoginPage(
                 )
                 if (oauthFlow == null) {
                     val startAction = onStartYtmusicOAuth ?: authController::startYtmusicTvOAuthLogin
-                    Button(onClick = startAction, enabled = !busy) { Text("使用 Google 登录（TV）") }
+                    Button(onClick = startAction, enabled = !busy) { Text("Mit Google anmelden (TV)") }
                     onImportYtmusicOAuthFile?.let { action ->
-                        TextButton(onClick = action, enabled = !busy) { Text("导入 client_secret.json / oauth.json") }
+                        TextButton(onClick = action, enabled = !busy) { Text("client_secret.json / oauth.json importieren") }
                     }
                 } else {
                     val verificationUrl = oauthFlow.verificationUrlWithCode.ifBlank { oauthFlow.verificationUrl }
@@ -504,7 +504,7 @@ private fun OnboardingProviderLoginPage(
                         }
                     }
                     Text(
-                        if (oauthFlow.browserOpened) "浏览器已打开，请输入下方验证码" else oauthFlow.statusMessage,
+                        if (oauthFlow.browserOpened) "Der Browser wurde geöffnet. Gib dort den folgenden Code ein." else oauthFlow.statusMessage,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Surface(
@@ -513,22 +513,22 @@ private fun OnboardingProviderLoginPage(
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("设备验证码", style = MaterialTheme.typography.labelMedium)
+                            Text("Gerätecode", style = MaterialTheme.typography.labelMedium)
                             Text(oauthFlow.userCode, style = MaterialTheme.typography.headlineMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = authController::copyYtmusicOAuthUserCode) { Text("复制验证码") }
+                                OutlinedButton(onClick = authController::copyYtmusicOAuthUserCode) { Text("Code kopieren") }
                                 OutlinedButton(
                                     enabled = verificationUrl.isNotBlank(),
                                     onClick = {
                                         runCatching { uriHandler.openUri(verificationUrl) }
                                             .onSuccess { authController.markYtmusicOAuthBrowserOpened() }
                                     },
-                                ) { Text("重新打开浏览器") }
+                                ) { Text("Browser erneut öffnen") }
                             }
                         }
                     }
                     Text(verificationUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = authController::cancelYtmusicTvOAuthLogin) { Text("取消授权") }
+                    TextButton(onClick = authController::cancelYtmusicTvOAuthLogin) { Text("Autorisierung abbrechen") }
                 }
             }
         }
@@ -568,7 +568,7 @@ private fun OnboardingFeatureFooter(
 }
 
 private fun onboardingLoginModeLabel(mode: ProviderLoginMode): String = when (mode) {
-    ProviderLoginMode.WebView -> "网页"
+    ProviderLoginMode.WebView -> "Web"
     ProviderLoginMode.Cookie -> "Cookie"
     ProviderLoginMode.Headers -> "Headers"
     ProviderLoginMode.OAuth -> "OAuth"

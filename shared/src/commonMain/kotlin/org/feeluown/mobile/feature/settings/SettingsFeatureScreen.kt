@@ -97,12 +97,12 @@ private enum class FeatureSettingsCategory(
     val title: String,
     val supportingText: String,
 ) {
-    Sources("音源与账号", "音源启用、排序、登录与显示范围"),
-    Playback("播放与音质", "网络音质、播放策略与智能替换"),
-    Appearance("外观与显示", "主题、歌词字号与歌词同步"),
-    LocalMusic("本地音乐", "媒体目录扫描与短音频过滤"),
-    Storage("下载与存储", "下载行为、缓存上限与清理"),
-    About("关于", "版本、项目链接与诊断信息"),
+    Sources("Musikquellen & Konten", "Musikquellen aktivieren, sortieren, anmelden und Sichtbarkeit festlegen"),
+    Playback("Wiedergabe & Audioqualität", "Netzwerkqualität, Wiedergabestrategie und intelligenter Ersatz"),
+    Appearance("Darstellung & Anzeige", "Design, Liedtextgröße und Liedtextsynchronisierung"),
+    LocalMusic("Lokale Musik", "Medienordner scannen und kurze Audiodateien filtern"),
+    Storage("Downloads & Speicher", "Downloadverhalten, Cache-Limits und Bereinigung"),
+    About("Über die App", "Version, Projektlinks und Diagnoseinformationen"),
 }
 
 @Serializable
@@ -213,7 +213,7 @@ fun SettingsFeatureScreen(
                         onBack = ::pop,
                     )
                     FeatureSettingsRoute.Theme -> SettingsScaffold(
-                        title = "主题设置",
+                        title = "Design-Einstellungen",
                         onBack = ::pop,
                         isLoading = settingsState.isBusy || catalogState.isLoading,
                     ) { bodyModifier ->
@@ -226,7 +226,7 @@ fun SettingsFeatureScreen(
                         }
                     }
                     FeatureSettingsRoute.CredentialBackup -> SettingsScaffold(
-                        title = "登录凭证",
+                        title = "Anmeldedaten",
                         onBack = ::pop,
                         isLoading = catalogState.isLoading,
                     ) { bodyModifier ->
@@ -241,13 +241,13 @@ fun SettingsFeatureScreen(
                         val provider = catalogState.availableProviders.firstOrNull { it.providerId == route.providerId }
                             ?: catalogState.providers.firstOrNull { it.providerId == route.providerId }
                         SettingsScaffold(
-                            title = provider?.providerName ?: "音源账号",
+                            title = provider?.providerName ?: "Musikquellen-Konto",
                             onBack = ::pop,
                             isLoading = settingsState.isBusy || catalogState.isLoading,
                         ) { bodyModifier ->
                             if (provider == null) {
                                 Box(bodyModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("该音源当前不可用", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Diese Musikquelle ist derzeit nicht verfügbar", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             } else {
                                 SettingsDetailColumn(modifier = bodyModifier) {
@@ -296,13 +296,13 @@ private fun SettingsMainPage(
         topBar = {
             if (useWideLayout) {
                 TopAppBar(
-                    title = { Text("设置") },
+                    title = { Text("Einstellungen") },
                     navigationIcon = { SettingsBackButton(onBack) },
                     colors = settingsTopAppBarColors(),
                 )
             } else {
                 LargeTopAppBar(
-                    title = { Text("设置") },
+                    title = { Text("Einstellungen") },
                     navigationIcon = { SettingsBackButton(onBack) },
                     colors = settingsTopAppBarColors(),
                 )
@@ -419,7 +419,7 @@ private fun SettingsScaffold(
 @Composable
 private fun SettingsBackButton(onBack: () -> Unit) {
     IconButton(onClick = onBack) {
-        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
     }
 }
 
@@ -575,7 +575,7 @@ private fun ProviderCatalogSettings(
     var draggingProviderId by remember { mutableStateOf<String?>(null) }
     var dragDistance by remember { mutableStateOf(0f) }
 
-    SettingsGroup(title = "音源") {
+    SettingsGroup(title = "Musikquellen") {
         ordered.forEachIndexed { index, provider ->
             val enabled = provider.providerId in state.enabledProviderIds
             val auth = state.sessions.authStates[provider.providerId]
@@ -621,7 +621,7 @@ private fun ProviderCatalogSettings(
                             )
                         },
                         imageVector = Icons.Filled.DragHandle,
-                        contentDescription = "长按拖动排序${provider.providerName}",
+                        contentDescription = "${provider.providerName} zum Sortieren lange drücken und ziehen",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
@@ -631,13 +631,13 @@ private fun ProviderCatalogSettings(
                             enabled = !state.isLoading,
                             onClick = { configuringProvider = provider },
                         ) {
-                            Icon(Icons.Filled.Settings, contentDescription = "配置${provider.providerName}")
+                            Icon(Icons.Filled.Settings, contentDescription = "${provider.providerName} konfigurieren")
                         }
                         IconButton(
                             enabled = !state.isLoading && enabled,
                             onClick = { onOpenProvider(provider) },
                         ) {
-                            Icon(Icons.Filled.ManageAccounts, contentDescription = "管理${provider.providerName}账号")
+                            Icon(Icons.Filled.ManageAccounts, contentDescription = "${provider.providerName}-Konto verwalten")
                         }
                         Switch(
                             checked = enabled,
@@ -651,9 +651,9 @@ private fun ProviderCatalogSettings(
         }
     }
     if (credentialBackupActions.isAvailable) {
-        SettingsGroup(title = "登录凭证") {
+        SettingsGroup(title = "Anmeldedaten") {
             SettingsRow(
-                title = "备份与恢复",
+                title = "Sichern & Wiederherstellen",
                 leadingContent = { Icon(Icons.Filled.ManageAccounts, contentDescription = null) },
                 trailingContent = {
                     Icon(
@@ -666,10 +666,10 @@ private fun ProviderCatalogSettings(
             )
         }
     }
-    SettingsGroup(title = "说明") {
+    SettingsGroup(title = "Hinweis") {
         SettingsRow(
-            title = "长按拖动调整音源优先级",
-            supportingText = "配置按钮单独管理搜索、推荐、探索和“我的”显示范围；账号按钮用于登录与授权。",
+            title = "Lange drücken und ziehen, um die Priorität der Musikquellen zu ändern",
+            supportingText = "Über „Konfigurieren“ legst du separat fest, wo eine Quelle in Suche, Empfehlungen, Entdecken und „Meine Musik“ erscheint. Über „Konto“ verwaltest du Anmeldung und Autorisierung.",
         )
     }
     configuringProvider?.let { provider ->
@@ -697,10 +697,10 @@ private fun ProviderCredentialBackupSettings(
     val exportProvider = actions.exportProvider
     val importBackup = actions.importBackup
 
-    SettingsGroup(title = "备份") {
+    SettingsGroup(title = "Sicherung") {
         SettingsRow(
-            title = "导出全部",
-            supportingText = orderedLoggedInProviders.takeIf { it.isNotEmpty() }?.let { "${it.size} 个音源" },
+            title = "Alle exportieren",
+            supportingText = orderedLoggedInProviders.takeIf { it.isNotEmpty() }?.let { "${it.size} Musikquellen" },
             enabled = exportAll != null && orderedLoggedInProviders.isNotEmpty(),
             leadingContent = { Icon(Icons.Filled.Download, contentDescription = null) },
             trailingContent = {
@@ -714,9 +714,9 @@ private fun ProviderCredentialBackupSettings(
         )
     }
 
-    SettingsGroup(title = "单独导出") {
+    SettingsGroup(title = "Einzeln exportieren") {
         if (orderedLoggedInProviders.isEmpty()) {
-            SettingsRow(title = "暂无已登录音源")
+            SettingsRow(title = "Keine angemeldeten Musikquellen")
         } else {
             orderedLoggedInProviders.forEachIndexed { index, provider ->
                 val auth = state.sessions.authStates[provider.providerId]
@@ -739,9 +739,9 @@ private fun ProviderCredentialBackupSettings(
         }
     }
 
-    SettingsGroup(title = "恢复") {
+    SettingsGroup(title = "Wiederherstellen") {
         SettingsRow(
-            title = "从文件恢复",
+            title = "Aus Datei wiederherstellen",
             enabled = importBackup != null,
             leadingContent = { Icon(Icons.Filled.Settings, contentDescription = null) },
             trailingContent = {
@@ -768,17 +768,17 @@ private fun ProviderDisplaySettingsDialog(
         title = { Text(provider.providerName) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FuoSpacing.sm)) {
-                Text("显示范围", style = MaterialTheme.typography.bodyMedium)
+                Text("Sichtbarkeit", style = MaterialTheme.typography.bodyMedium)
                 listOf(
-                    ProviderDisplaySection.Search to "搜索",
-                    ProviderDisplaySection.Recommend to "推荐",
-                    ProviderDisplaySection.Explore to "探索",
-                    ProviderDisplaySection.Mine to "我的",
+                    ProviderDisplaySection.Search to "Suchen",
+                    ProviderDisplaySection.Recommend to "Empfohlen",
+                    ProviderDisplaySection.Explore to "Entdecken",
+                    ProviderDisplaySection.Mine to "Meine Musik",
                 ).forEach { (section, label) ->
                     val selected = providerShownIn(state, provider.providerId, section)
                     SettingsRow(
                         title = label,
-                        supportingText = if (selected) "已显示" else "已隐藏",
+                        supportingText = if (selected) "Sichtbar" else "Ausgeblendet",
                         enabled = !state.isLoading,
                         trailingContent = {
                             Icon(
@@ -794,7 +794,7 @@ private fun ProviderDisplaySettingsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismissRequest) { Text("完成") } },
+        confirmButton = { TextButton(onClick = onDismissRequest) { Text("Fertig") } },
     )
 }
 
@@ -809,13 +809,13 @@ private fun providerShownIn(state: ProviderCatalogUiState, providerId: String, s
 
 private fun providerDisplaySummary(state: ProviderCatalogUiState, providerId: String): String =
     listOf(
-        ProviderDisplaySection.Search to "搜索",
-        ProviderDisplaySection.Recommend to "推荐",
-        ProviderDisplaySection.Explore to "探索",
-        ProviderDisplaySection.Mine to "我的",
+        ProviderDisplaySection.Search to "Suchen",
+        ProviderDisplaySection.Recommend to "Empfohlen",
+        ProviderDisplaySection.Explore to "Entdecken",
+        ProviderDisplaySection.Mine to "Meine Musik",
     ).filter { (section, _) -> providerShownIn(state, providerId, section) }
         .joinToString("、") { it.second }
-        .ifBlank { "未显示" }
+        .ifBlank { "Nicht sichtbar" }
 
 @Composable
 private fun PlaybackFeatureSettings(
@@ -826,10 +826,10 @@ private fun PlaybackFeatureSettings(
 ) {
     val settings = state.settings
     val busy = state.isBusy || catalog.isLoading
-    SettingsGroup(title = "音质") {
+    SettingsGroup(title = "Audioqualität") {
         SettingsChoiceRow(
             title = "Wi‑Fi",
-            supportingText = "连接 Wi‑Fi 时优先使用的音质",
+            supportingText = "Bevorzugte Audioqualität über WLAN",
             value = settings.wifiAudioQualityPolicy.label,
             options = AudioQualityPolicy.entries,
             selected = settings.wifiAudioQualityPolicy,
@@ -839,8 +839,8 @@ private fun PlaybackFeatureSettings(
         )
         SettingsDivider()
         SettingsChoiceRow(
-            title = "蜂窝网络",
-            supportingText = "使用移动数据时优先使用的音质",
+            title = "Mobilfunk",
+            supportingText = "Bevorzugte Audioqualität über Mobilfunk",
             value = settings.cellularAudioQualityPolicy.label,
             options = AudioQualityPolicy.entries,
             selected = settings.cellularAudioQualityPolicy,
@@ -850,10 +850,10 @@ private fun PlaybackFeatureSettings(
         )
     }
 
-    SettingsGroup(title = "播放策略") {
+    SettingsGroup(title = "Wiedergabeverhalten") {
         SettingsToggleRow(
-            title = "其他应用播放时自动暂停",
-            supportingText = "检测到其他应用开始播放时暂停当前播放",
+            title = "Bei Wiedergabe durch andere Apps automatisch pausieren",
+            supportingText = "Aktuelle Wiedergabe pausieren, wenn eine andere App Audio startet",
             checked = settings.pauseOnOtherAppPlayback,
             enabled = !busy,
         ) { enabled -> settingsController.update { it.copy(pauseOnOtherAppPlayback = enabled) } }
@@ -862,7 +862,7 @@ private fun PlaybackFeatureSettings(
             modifier = Modifier.padding(FuoSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(FuoSpacing.sm),
         ) {
-            Text("资源不可用时", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Wenn eine Quelle nicht verfügbar ist", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 UnavailablePlaybackPolicy.entries.forEachIndexed { index, policy ->
                     SegmentedButton(
@@ -897,9 +897,9 @@ private fun SmartReplacementFeatureSettings(
     val enabled = settings.unavailablePlaybackPolicy == UnavailablePlaybackPolicy.SmartReplace
     val providers = catalog.providers
     val presets = listOf(
-        "宽松" to 0.45,
-        "平衡" to DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
-        "严格" to 0.70,
+        "Locker" to 0.45,
+        "Ausgewogen" to DEFAULT_SMART_REPLACEMENT_MIN_SCORE,
+        "Streng" to 0.70,
     )
     fun isPreset(score: Double): Boolean = presets.any { (_, value) -> abs(score - value) < 0.001 }
     var customExpanded by remember { mutableStateOf(!isPreset(settings.smartReplacementMinScore)) }
@@ -907,23 +907,23 @@ private fun SmartReplacementFeatureSettings(
         if (!isPreset(settings.smartReplacementMinScore)) customExpanded = true
     }
 
-    SettingsGroup(title = "智能替换") {
+    SettingsGroup(title = "Intelligenter Ersatz") {
         Column(
             modifier = Modifier.padding(FuoSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(FuoSpacing.md),
         ) {
             Text(
                 if (enabled) {
-                    "原音源无法播放时，从所选音源中搜索并匹配可播放版本"
+                    "Wenn die ursprüngliche Quelle nicht abspielbar ist, in ausgewählten Quellen nach einer passenden Version suchen"
                 } else {
-                    "当前资源不可用策略不是“智能替换”，切换后以下设置生效"
+                    "Die aktuelle Strategie ist nicht „Intelligenter Ersatz“. Die folgenden Einstellungen gelten nach dem Umschalten."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text("替换音源", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Ersatzquellen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (providers.isEmpty()) {
-                Text("没有已启用的音源", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Keine aktivierten Musikquellen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -948,15 +948,15 @@ private fun SmartReplacementFeatureSettings(
                 }
                 Text(
                     if (providers.size < 2) {
-                        "仅启用一个音源时无法跨源替换；播放时会自动排除歌曲自身来源"
+                        "Bei nur einer aktivierten Quelle ist kein quellenübergreifender Ersatz möglich. Die ursprüngliche Quelle wird bei der Suche automatisch ausgeschlossen."
                     } else {
-                        "播放时会自动排除歌曲自身来源；候选音源顺序沿用上方音源排序"
+                        "Die ursprüngliche Quelle wird automatisch ausgeschlossen. Die Reihenfolge der Ersatzquellen folgt der obigen Sortierung."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text("匹配严格度", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Übereinstimmungsgenauigkeit", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(FuoSpacing.sm),
@@ -977,7 +977,7 @@ private fun SmartReplacementFeatureSettings(
                     selected = customExpanded,
                     enabled = enabled && !busy,
                     onClick = { customExpanded = true },
-                    label = { Text("自定义") },
+                    label = { Text("Benutzerdefiniert") },
                     colors = settingsFilterChipColors(),
                 )
             }
@@ -987,7 +987,7 @@ private fun SmartReplacementFeatureSettings(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("最低匹配分")
+                    Text("Mindestwert für Übereinstimmung")
                     Text(formatReplacementScore(settings.smartReplacementMinScore), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Slider(
@@ -1002,7 +1002,7 @@ private fun SmartReplacementFeatureSettings(
                     enabled = enabled && !busy,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("分数越高匹配越严格", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Je höher der Wert, desto strenger die Übereinstimmung", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1016,10 +1016,10 @@ private fun AppearanceFeatureSettings(
 ) {
     val settings = state.settings
     val enabled = !state.isBusy
-    SettingsGroup(title = "主题") {
+    SettingsGroup(title = "Design") {
         SettingsChoiceRow(
-            title = "主题模式",
-            supportingText = "选择浅色、深色或跟随系统",
+            title = "Designmodus",
+            supportingText = "Hell, dunkel oder Systemeinstellung wählen",
             value = settings.themeMode.label,
             leadingContent = { Icon(Icons.Filled.DarkMode, contentDescription = null) },
             options = ThemeMode.entries,
@@ -1029,8 +1029,8 @@ private fun AppearanceFeatureSettings(
         ) { value -> controller.update { it.copy(themeMode = value) } }
         SettingsDivider()
         SettingsRow(
-            title = "主题设置",
-            supportingText = "${settings.themeColorScheme.label} · 调色板与色彩规范",
+            title = "Design-Einstellungen",
+            supportingText = "${settings.themeColorScheme.label} · Farbpalette und Farbspezifikation",
             enabled = enabled,
             leadingContent = { Icon(Icons.Filled.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
             trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -1038,12 +1038,12 @@ private fun AppearanceFeatureSettings(
         )
     }
 
-    SettingsGroup(title = "播放显示") {
+    SettingsGroup(title = "Wiedergabeanzeige") {
         Column(
             modifier = Modifier.padding(horizontal = FuoSpacing.lg, vertical = FuoSpacing.md),
             verticalArrangement = Arrangement.spacedBy(FuoSpacing.sm),
         ) {
-            Text("歌词字号", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Liedtextgröße", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 LyricFontSize.entries.forEachIndexed { index, size ->
                     SegmentedButton(
@@ -1059,8 +1059,8 @@ private fun AppearanceFeatureSettings(
         if (state.statusBarLyricsAvailable) {
             SettingsDivider(startPadding = FuoSpacing.lg)
             SettingsToggleRow(
-                title = "状态栏歌词",
-                supportingText = "通过词幕在系统状态栏显示当前歌词",
+                title = "Liedtext in der Statusleiste",
+                supportingText = "Aktuellen Liedtext über die Lyrics-Anzeige in der Systemstatusleiste anzeigen",
                 checked = settings.statusBarLyricsEnabled,
                 enabled = enabled,
                 onCheckedChange = controller::setStatusBarLyricsEnabled,
@@ -1069,8 +1069,8 @@ private fun AppearanceFeatureSettings(
         if (state.bydInstrumentLyricsAvailable) {
             SettingsDivider(startPadding = FuoSpacing.lg)
             SettingsToggleRow(
-                title = "比亚迪仪表歌词",
-                supportingText = "将当前歌词同步到驾驶仪表的三行歌词区域",
+                title = "BYD-Instrumenten-Liedtext",
+                supportingText = "Aktuellen Liedtext mit dem dreizeiligen Liedtextbereich des Fahrzeuginstruments synchronisieren",
                 checked = settings.bydInstrumentLyricsEnabled,
                 enabled = enabled,
                 onCheckedChange = controller::setBydInstrumentLyricsEnabled,
@@ -1087,10 +1087,10 @@ private fun ThemeSettingsContent(
 ) {
     val settings = state.settings
     val enabled = !state.isBusy
-    SettingsGroup(title = "颜色") {
+    SettingsGroup(title = "Farben") {
         SettingsChoiceRow(
-            title = "强调色",
-            supportingText = "选择应用主要颜色方案",
+            title = "Akzentfarbe",
+            supportingText = "Primäres Farbschema der App auswählen",
             value = settings.themeColorScheme.label,
             options = ThemeColorScheme.entries,
             selected = settings.themeColorScheme,
@@ -1099,8 +1099,8 @@ private fun ThemeSettingsContent(
         ) { value -> controller.update { it.copy(themeColorScheme = value) } }
         SettingsDivider()
         SettingsChoiceRow(
-            title = "调色板风格",
-            supportingText = "Material 3 动态配色算法风格",
+            title = "Palettenstil",
+            supportingText = "Stil des Material-3-Algorithmus für dynamische Farben",
             value = settings.themePaletteStyle.label,
             options = ThemePaletteStyle.entries,
             selected = settings.themePaletteStyle,
@@ -1110,8 +1110,8 @@ private fun ThemeSettingsContent(
         )
         SettingsDivider()
         SettingsChoiceRow(
-            title = "色彩规范",
-            supportingText = "选择 Material 3 色彩规范版本",
+            title = "Farbspezifikation",
+            supportingText = "Version der Material-3-Farbspezifikation auswählen",
             value = settings.themeColorSpec.label,
             options = ThemeColorSpec.entries,
             selected = settings.themeColorSpec,
@@ -1121,20 +1121,20 @@ private fun ThemeSettingsContent(
         )
     }
     if (predictiveBackPreference.isSupported) {
-        SettingsGroup(title = "导航") {
+        SettingsGroup(title = "Navigation") {
             SettingsToggleRow(
-                title = "预测性返回手势",
-                supportingText = "返回手势过程中预览上一页",
+                title = "Vorausschauende Zurück-Geste",
+                supportingText = "Während der Zurück-Geste die vorherige Seite anzeigen",
                 checked = predictiveBackPreference.enabled,
                 enabled = enabled,
                 onCheckedChange = predictiveBackPreference.onEnabledChange,
             )
         }
     }
-    SettingsGroup(title = "封面") {
+    SettingsGroup(title = "Cover") {
         SettingsToggleRow(
-            title = "封面动态取色",
-            supportingText = "播放时根据当前封面调整界面颜色",
+            title = "Dynamische Farben aus dem Cover",
+            supportingText = "Oberflächenfarben während der Wiedergabe an das aktuelle Cover anpassen",
             checked = settings.dynamicCoverColorEnabled,
             enabled = enabled,
         ) { value -> controller.update { it.copy(dynamicCoverColorEnabled = value) } }
@@ -1145,27 +1145,27 @@ private fun ThemeSettingsContent(
 private fun LocalMusicFeatureSettings(state: SettingsFeatureUiState, controller: SettingsFeatureController) {
     LaunchedEffect(Unit) { controller.refreshLocalMusicDirectories() }
     val enabled = !state.isBusy
-    SettingsGroup(title = "扫描设置") {
+    SettingsGroup(title = "Scan-Einstellungen") {
         SettingsChoiceRow(
-            title = "忽略短音频",
-            supportingText = "扫描时过滤低于指定时长的音频",
-            value = if (state.localMusic.minDurationSeconds == 0) "不过滤" else "${state.localMusic.minDurationSeconds} 秒",
+            title = "Kurze Audiodateien ignorieren",
+            supportingText = "Audiodateien unterhalb der festgelegten Dauer beim Scannen ausfiltern",
+            value = if (state.localMusic.minDurationSeconds == 0) "Nicht filtern" else "${state.localMusic.minDurationSeconds} Sekunden",
             options = listOf(0, 15, 30, 60, 120),
             selected = state.localMusic.minDurationSeconds,
-            optionLabel = { if (it == 0) "不过滤" else "$it 秒" },
+            optionLabel = { if (it == 0) "Nicht filtern" else "$it Sekunden" },
             enabled = enabled,
             onSelect = controller::setLocalMusicMinDurationSeconds,
         )
     }
-    SettingsGroup(title = "媒体目录") {
+    SettingsGroup(title = "Medienordner") {
         if (state.localMusic.directories.isEmpty()) {
-            SettingsRow(title = "暂无可用目录", supportingText = "刷新本地音乐后将在这里显示媒体目录")
+            SettingsRow(title = "Keine verfügbaren Ordner", supportingText = "Nach dem Aktualisieren der lokalen Musik werden die Medienordner hier angezeigt.")
         } else {
             state.localMusic.directories.forEachIndexed { index, directory ->
                 val directoryEnabled = !isLocalMusicDirectoryExcluded(directory.id, state.localMusic.excludedDirectoryIds)
                 SettingsToggleRow(
                     title = directory.name,
-                    supportingText = "${directory.trackCount} 首",
+                    supportingText = "${directory.trackCount} Titel",
                     checked = directoryEnabled,
                     enabled = enabled,
                 ) { controller.setLocalMusicDirectoryEnabled(directory.id, it) }
@@ -1179,10 +1179,10 @@ private fun LocalMusicFeatureSettings(state: SettingsFeatureUiState, controller:
 private fun StorageFeatureSettings(state: SettingsFeatureUiState, controller: SettingsFeatureController) {
     val settings = state.settings
     val enabled = !state.isBusy
-    SettingsGroup(title = "下载") {
+    SettingsGroup(title = "Downloads") {
         SettingsRow(
-            title = "下载管理",
-            supportingText = "${state.downloadTasks.count { it.status == DownloadTaskStatus.Downloading }} 个下载中",
+            title = "Downloadverwaltung",
+            supportingText = "${state.downloadTasks.count { it.status == DownloadTaskStatus.Downloading }} laufende Downloads",
             enabled = enabled,
             leadingContent = { Icon(Icons.Filled.Download, contentDescription = null) },
             trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -1190,8 +1190,8 @@ private fun StorageFeatureSettings(state: SettingsFeatureUiState, controller: Se
         )
         SettingsDivider()
         SettingsChoiceRow(
-            title = "并行下载数量",
-            supportingText = "同时进行的下载任务数量",
+            title = "Parallele Downloads",
+            supportingText = "Anzahl gleichzeitig laufender Downloadaufträge",
             value = settings.downloadParallelism.toString(),
             options = (1..5).toList(),
             selected = settings.downloadParallelism,
@@ -1200,10 +1200,10 @@ private fun StorageFeatureSettings(state: SettingsFeatureUiState, controller: Se
             onSelect = controller::setDownloadParallelism,
         )
     }
-    SettingsGroup(title = "缓存") {
+    SettingsGroup(title = "Cache") {
         SettingsChoiceRow(
-            title = "音频缓存上限",
-            supportingText = "本地音频缓存最大占用空间",
+            title = "Audio-Cache-Limit",
+            supportingText = "Maximaler Speicherplatz für den lokalen Audio-Cache",
             value = "${settings.audioCacheLimitMb} MB",
             options = listOf(128, 256, 512, 1024, 2048),
             selected = settings.audioCacheLimitMb,
@@ -1213,8 +1213,8 @@ private fun StorageFeatureSettings(state: SettingsFeatureUiState, controller: Se
         )
         SettingsDivider()
         SettingsChoiceRow(
-            title = "图片缓存上限",
-            supportingText = "封面等图片缓存最大占用空间",
+            title = "Bild-Cache-Limit",
+            supportingText = "Maximaler Speicherplatz für Cover und andere Bilder",
             value = "${settings.imageCacheLimitMb} MB",
             options = listOf(64, 128, 256, 512),
             selected = settings.imageCacheLimitMb,
@@ -1224,13 +1224,13 @@ private fun StorageFeatureSettings(state: SettingsFeatureUiState, controller: Se
         )
         SettingsDivider()
         SettingsRow(
-            title = "当前缓存",
+            title = "Aktueller Cache",
             supportingText = formatCacheBytes(state.cacheUsage.totalBytes),
             trailingContent = {
                 OutlinedButton(onClick = controller::clearCache, enabled = enabled) {
                     Icon(Icons.Filled.Delete, contentDescription = null)
                     Spacer(Modifier.size(FuoSpacing.xs))
-                    Text("清理")
+                    Text("Bereinigen")
                 }
             },
         )
@@ -1244,13 +1244,13 @@ private fun AboutFeatureSettings(
     appVersionInfo: String?,
 ) {
     val uriHandler = LocalUriHandler.current
-    SettingsGroup(title = "应用信息") {
+    SettingsGroup(title = "App-Informationen") {
         appVersionInfo?.takeIf { it.isNotBlank() }?.let { version ->
             SettingsRow(
-                title = "版本",
+                title = "Version",
                 trailingContent = {
                     Text(
-                        version.removePrefix("版本 "),
+                        version.removePrefix("Version "),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1261,26 +1261,26 @@ private fun AboutFeatureSettings(
             SettingsDivider()
         }
         SettingsRow(
-            title = "FuoEvolve 源代码",
-            supportingText = "GitHub 项目主页",
+            title = "FuoEvolve-Quellcode",
+            supportingText = "GitHub-Projektseite",
             leadingContent = { Icon(Icons.Filled.Code, contentDescription = null) },
             trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
             onClick = { uriHandler.openUri(FUO_EVOLVE_SOURCE_URL) },
         )
         SettingsDivider()
         SettingsRow(
-            title = "FeelUOwn 主项目",
-            supportingText = "上游项目主页",
+            title = "FeelUOwn-Hauptprojekt",
+            supportingText = "Upstream-Projektseite",
             leadingContent = { Icon(Icons.Filled.Code, contentDescription = null) },
             trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
             onClick = { uriHandler.openUri(FEELUOWN_SOURCE_URL) },
         )
     }
     if (state.debugLogViewerAvailable) {
-        SettingsGroup(title = "诊断") {
+        SettingsGroup(title = "Diagnose") {
             SettingsRow(
-                title = "应用日志",
-                supportingText = "查看调试日志与错误信息",
+                title = "App-Protokolle",
+                supportingText = "Debug-Protokolle und Fehlerinformationen anzeigen",
                 enabled = !state.isBusy,
                 leadingContent = { Icon(Icons.Filled.BugReport, contentDescription = null) },
                 trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -1311,9 +1311,9 @@ private fun ProviderAccountSettings(
     val oauth = authController.oauthInput(provider.providerId)
     val oauthFlow = authUiState.ytmusicOAuthFlow.takeIf { provider.providerId == "ytmusic" }
 
-    SettingsGroup(title = "账号状态") {
+    SettingsGroup(title = "Kontostatus") {
         SettingsRow(
-            title = if (auth.isLoggedIn) "已登录" else "未登录",
+            title = if (auth.isLoggedIn) "Angemeldet" else "Nicht angemeldet",
             supportingText = auth.userName.orEmpty().ifBlank { provider.providerName },
             leadingContent = { Icon(Icons.Filled.ManageAccounts, contentDescription = null) },
         )
@@ -1324,15 +1324,15 @@ private fun ProviderAccountSettings(
                     onClick = { onLogoutProvider(provider) },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("退出登录") }
+                ) { Text("Abmelden") }
             }
         }
     }
 
     if (auth.isLoggedIn && credentialBackupActions.exportProvider != null) {
-        SettingsGroup(title = "登录凭证") {
+        SettingsGroup(title = "Anmeldedaten") {
             SettingsRow(
-                title = "导出登录凭证",
+                title = "Anmeldedaten exportieren",
                 enabled = !busy,
                 leadingContent = { Icon(Icons.Filled.Download, contentDescription = null) },
                 trailingContent = {
@@ -1348,7 +1348,7 @@ private fun ProviderAccountSettings(
     }
 
     if (!auth.isLoggedIn) {
-        SettingsGroup(title = "登录方式") {
+        SettingsGroup(title = "Anmeldemethode") {
             if (modes.size > 1) {
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(FuoSpacing.lg)) {
                     modes.forEachIndexed { index, candidate ->
@@ -1368,7 +1368,7 @@ private fun ProviderAccountSettings(
                         onClick = { onOpenProviderWebLogin(provider) },
                         enabled = provider.loginConfig != null && !busy,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("网页登录") }
+                    ) { Text("Web-Anmeldung") }
                 }
                 ProviderLoginMode.Cookie -> Column(
                     modifier = Modifier.fillMaxWidth().padding(FuoSpacing.lg),
@@ -1386,7 +1386,7 @@ private fun ProviderAccountSettings(
                         onClick = { authController.loginWithCookies(provider.providerId, authController.cookieInput(provider.providerId)) },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("使用 Cookie 登录") }
+                    ) { Text("Mit Cookie anmelden") }
                 }
                 ProviderLoginMode.Headers -> Column(
                     modifier = Modifier.fillMaxWidth().padding(FuoSpacing.lg),
@@ -1412,11 +1412,11 @@ private fun ProviderAccountSettings(
                         onClick = { authController.loginWithHeaders(provider.providerId) },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("使用 Headers 登录") }
+                    ) { Text("Mit Headern anmelden") }
                     if (provider.providerId == "ytmusic") {
                         onImportYtmusicHeaderFile?.let { action ->
                             OutlinedButton(onClick = action, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                                Text("导入 ytmusic_header.json")
+                                Text("ytmusic_header.json importieren")
                             }
                         }
                     }
@@ -1426,7 +1426,7 @@ private fun ProviderAccountSettings(
                     verticalArrangement = Arrangement.spacedBy(FuoSpacing.md),
                 ) {
                     Text(
-                        "使用 Google Cloud「TVs and Limited Input devices」类型的 OAuth 客户端，可导入 client_secret.json / oauth.json。",
+                        "Google-Cloud-OAuth-Client vom Typ „TVs and Limited Input devices“ verwenden; client_secret.json / oauth.json kann importiert werden.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1448,11 +1448,11 @@ private fun ProviderAccountSettings(
                     if (oauthFlow == null) {
                         val startAction = onStartYtmusicOAuth ?: authController::startYtmusicTvOAuthLogin
                         Button(onClick = startAction, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                            Text("使用 Google 登录（TV）")
+                            Text("Mit Google anmelden (TV)")
                         }
                         onImportYtmusicOAuthFile?.let { action ->
                             OutlinedButton(onClick = action, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                                Text("导入 client_secret.json / oauth.json")
+                                Text("client_secret.json / oauth.json importieren")
                             }
                         }
                     } else {
@@ -1464,7 +1464,7 @@ private fun ProviderAccountSettings(
                             }
                         }
                         Text(
-                            if (oauthFlow.browserOpened) "浏览器已打开，请输入下方验证码" else oauthFlow.statusMessage,
+                            if (oauthFlow.browserOpened) "Der Browser wurde geöffnet. Gib dort den folgenden Code ein." else oauthFlow.statusMessage,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Surface(
@@ -1476,22 +1476,22 @@ private fun ProviderAccountSettings(
                                 modifier = Modifier.padding(FuoSpacing.lg),
                                 verticalArrangement = Arrangement.spacedBy(FuoSpacing.sm),
                             ) {
-                                Text("设备验证码", style = MaterialTheme.typography.labelMedium)
+                                Text("Gerätecode", style = MaterialTheme.typography.labelMedium)
                                 Text(oauthFlow.userCode, style = MaterialTheme.typography.headlineMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(FuoSpacing.sm)) {
-                                    Button(onClick = authController::copyYtmusicOAuthUserCode) { Text("复制验证码") }
+                                    Button(onClick = authController::copyYtmusicOAuthUserCode) { Text("Code kopieren") }
                                     TextButton(
                                         enabled = verificationUrl.isNotBlank(),
                                         onClick = {
                                             runCatching { uriHandler.openUri(verificationUrl) }
                                                 .onSuccess { authController.markYtmusicOAuthBrowserOpened() }
                                         },
-                                    ) { Text("重新打开浏览器") }
+                                    ) { Text("Browser erneut öffnen") }
                                 }
                             }
                         }
                         Text(verificationUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = authController::cancelYtmusicTvOAuthLogin) { Text("取消授权") }
+                        TextButton(onClick = authController::cancelYtmusicTvOAuthLogin) { Text("Autorisierung abbrechen") }
                     }
                 }
             }
@@ -1499,10 +1499,10 @@ private fun ProviderAccountSettings(
     }
 
     authController.authError(provider.providerId)?.let { error ->
-        SettingsGroup(title = "错误") { SettingsRow(title = error, titleColor = MaterialTheme.colorScheme.error) }
+        SettingsGroup(title = "Fehler") { SettingsRow(title = error, titleColor = MaterialTheme.colorScheme.error) }
     }
     authUiState.feedback?.let { feedback ->
-        SettingsGroup(title = "状态") { SettingsRow(title = feedback) }
+        SettingsGroup(title = "Status") { SettingsRow(title = feedback) }
     }
 }
 
@@ -1637,14 +1637,14 @@ private fun categorySummary(
 ): String = when (category) {
     FeatureSettingsCategory.Sources -> {
         val loggedIn = catalog.sessions.authStates.values.count { it.isLoggedIn }
-        if (loggedIn > 0) "${catalog.enabledProviderIds.size} 个音源已启用 · $loggedIn 个已登录"
-        else "${catalog.enabledProviderIds.size} 个音源已启用"
+        if (loggedIn > 0) "${catalog.enabledProviderIds.size} Musikquellen aktiviert · $loggedIn angemeldet"
+        else "${catalog.enabledProviderIds.size} Musikquellen aktiviert"
     }
     FeatureSettingsCategory.Playback ->
         "Wi‑Fi ${settings.settings.wifiAudioQualityPolicy.label} · ${settings.settings.unavailablePlaybackPolicy.label}"
     FeatureSettingsCategory.Appearance -> "${settings.settings.themeMode.label} · ${settings.settings.themeColorScheme.label}"
-    FeatureSettingsCategory.LocalMusic -> "${settings.localMusic.directories.size} 个媒体目录"
-    FeatureSettingsCategory.Storage -> "并行下载 ${settings.settings.downloadParallelism} · 缓存与清理"
+    FeatureSettingsCategory.LocalMusic -> "${settings.localMusic.directories.size} Medienordner"
+    FeatureSettingsCategory.Storage -> "${settings.settings.downloadParallelism} parallele Downloads · Cache und Bereinigung"
     FeatureSettingsCategory.About -> appVersionInfo ?: "FuoEvolve"
 }
 
@@ -1659,13 +1659,13 @@ private fun categoryIcon(category: FeatureSettingsCategory): ImageVector = when 
 
 private fun providerStatusText(enabled: Boolean, auth: ProviderAuthState?): String {
     val login = auth?.takeIf { it.isLoggedIn }?.let { state ->
-        state.userName?.takeIf { it.isNotBlank() }?.let { "已登录 · $it" } ?: "已登录"
+        state.userName?.takeIf { it.isNotBlank() }?.let { "Angemeldet · $it" } ?: "Angemeldet"
     }
-    return listOfNotNull(login, if (enabled) "已启用" else "未启用").joinToString(" · ")
+    return listOfNotNull(login, if (enabled) "Aktiviert" else "Deaktiviert").joinToString(" · ")
 }
 
 private fun providerLoginModeLabel(mode: ProviderLoginMode): String = when (mode) {
-    ProviderLoginMode.WebView -> "网页"
+    ProviderLoginMode.WebView -> "Web"
     ProviderLoginMode.Cookie -> "Cookie"
     ProviderLoginMode.Headers -> "Headers"
     ProviderLoginMode.OAuth -> "OAuth"

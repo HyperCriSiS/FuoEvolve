@@ -184,7 +184,7 @@ fun LocalMusicCollectionScreen() {
                     IconButton(onClick = graph.feature::closeCollection) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = "Zurück",
                         )
                     }
                 },
@@ -244,7 +244,7 @@ private fun LocalMusicCollectionOverview(
                                 id = collection.key,
                                 title = collection.title,
                                 providerId = "local",
-                                providerName = "本地 · ${collection.trackCount} 首",
+                                providerName = "Lokal · ${collection.trackCount} Titel",
                                 coverUrl = collection.coverUrl,
                                 trackCount = collection.trackCount,
                             )
@@ -260,7 +260,7 @@ private fun LocalMusicCollectionOverview(
                                 id = collection.key,
                                 title = collection.title,
                                 providerId = "local",
-                                providerName = "本地",
+                                providerName = "Lokal",
                                 type = if (mode == LocalMusicViewMode.Artist) {
                                     ProviderMediaItemType.Artist
                                 } else {
@@ -385,7 +385,7 @@ private fun LocalMusicTrackList(
         ) {
             if (tracks.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    ProviderContentMessage("暂无歌曲")
+                    ProviderContentMessage("Keine Titel")
                 }
             } else {
                 items(tracks, key = { it.id }) { track ->
@@ -396,7 +396,7 @@ private fun LocalMusicTrackList(
     } else {
         LazyColumn(modifier = modifier) {
             if (tracks.isEmpty()) {
-                item { ProviderContentMessage("暂无歌曲") }
+                item { ProviderContentMessage("Keine Titel") }
             } else {
                 itemsIndexed(tracks, key = { _, item -> item.id }) { _, track ->
                     LocalMusicTrackRow(graph, track, tracks)
@@ -442,12 +442,12 @@ internal fun buildLocalMusicCollections(
                 .thenBy { it.artists.lowercase() },
         )
         LocalMusicViewMode.Artist -> tracks.sortedWith(
-            compareBy<MusicTrack> { normalizedGroupName(it.artists, "未知歌手").lowercase() }
+            compareBy<MusicTrack> { normalizedGroupName(it.artists, "Unbekannter Interpret").lowercase() }
                 .thenBy { it.album.lowercase() }
                 .thenBy { it.title.lowercase() },
         )
         LocalMusicViewMode.Album -> tracks.sortedWith(
-            compareBy<MusicTrack> { normalizedGroupName(it.album, "未知专辑").lowercase() }
+            compareBy<MusicTrack> { normalizedGroupName(it.album, "Unbekanntes Album").lowercase() }
                 .thenBy { it.artists.lowercase() }
                 .thenBy { it.title.lowercase() },
         )
@@ -464,7 +464,7 @@ internal fun buildLocalMusicCollections(
                 )
             }
         LocalMusicViewMode.Artist -> sortedTracks
-            .groupBy { normalizedGroupName(it.artists, "未知歌手") }
+            .groupBy { normalizedGroupName(it.artists, "Unbekannter Interpret") }
             .entries
             .map { (name, group) ->
                 LocalMusicCollection(
@@ -475,7 +475,7 @@ internal fun buildLocalMusicCollections(
                 )
             }
         LocalMusicViewMode.Album -> sortedTracks
-            .groupBy { normalizedGroupName(it.album, "未知专辑") }
+            .groupBy { normalizedGroupName(it.album, "Unbekanntes Album") }
             .entries
             .map { (name, group) ->
                 LocalMusicCollection(
@@ -492,7 +492,7 @@ private fun LocalMusicCollection.toDisplayTrack(mode: LocalMusicViewMode): Music
     return MusicTrack(
         id = "local-collection:${mode.name}:$key",
         title = title,
-        artists = if (mode == LocalMusicViewMode.Artist) title else "本地",
+        artists = if (mode == LocalMusicViewMode.Artist) title else "Lokal",
         album = if (mode == LocalMusicViewMode.Album) title else "",
         source = "local",
         sourceType = TrackSourceType.LocalMediaStore,
@@ -510,9 +510,9 @@ private fun LocalMusicViewMode.localMusicCollectionPlaceholder(): CoverPlacehold
 
 private fun LocalMusicViewMode.localMusicCollectionSubtitle(trackCount: Int): String {
     return when (this) {
-        LocalMusicViewMode.All -> "本地文件夹 · $trackCount 首"
-        LocalMusicViewMode.Artist -> "本地 · 歌手 · $trackCount 首"
-        LocalMusicViewMode.Album -> "本地 · 专辑 · $trackCount 首"
+        LocalMusicViewMode.All -> "Lokaler Ordner · $trackCount Titel"
+        LocalMusicViewMode.Artist -> "Lokal · Interpret · $trackCount Titel"
+        LocalMusicViewMode.Album -> "Lokal · Album · $trackCount Titel"
     }
 }
 
@@ -530,11 +530,11 @@ private fun LocalMusicImagePermissionPanel(onRequestImagePermission: () -> Unit)
         ) {
             Text(
                 modifier = Modifier.weight(1f),
-                text = "允许读取图片以显示封面",
+                text = "Zugriff auf Bilder erlauben, um Cover anzuzeigen",
                 style = MaterialTheme.typography.bodySmall,
             )
             TextButton(onClick = onRequestImagePermission) {
-                Text("授权图片")
+                Text("Bilderzugriff erlauben")
             }
         }
     }
@@ -550,7 +550,7 @@ fun LocalMetadataDialog() {
     var album by remember(track.id, track.album) { mutableStateOf(track.album) }
     AlertDialog(
         onDismissRequest = feature::closeMetadataEditor,
-        title = { Text("修改元信息") },
+        title = { Text("Metadaten bearbeiten") },
         text = {
             Column(
                 modifier = if (LocalAppLayoutInfo.current.useWideLayout) {
@@ -565,21 +565,21 @@ fun LocalMetadataDialog() {
                 TextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("标题") },
+                    label = { Text("Titel") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 TextField(
                     value = artists,
                     onValueChange = { artists = it },
-                    label = { Text("歌手") },
+                    label = { Text("Interpreten") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 TextField(
                     value = album,
                     onValueChange = { album = it },
-                    label = { Text("专辑") },
+                    label = { Text("Alben") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -602,11 +602,11 @@ fun LocalMetadataDialog() {
                     ) {
                         Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("搜索补充")
+                        Text("Ergänzungen suchen")
                     }
                 } else {
                     Text(
-                        text = "没有可用音源",
+                        text = "Keine verfügbaren Musikquellen",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -649,12 +649,12 @@ fun LocalMetadataDialog() {
                 enabled = !uiState.isLoading,
                 onClick = { feature.saveMetadata(track, title, artists, album) },
             ) {
-                Text("保存")
+                Text("Speichern")
             }
         },
         dismissButton = {
             TextButton(onClick = feature::closeMetadataEditor) {
-                Text("关闭")
+                Text("Schließen")
             }
         },
     )
@@ -680,7 +680,7 @@ fun LocalMetadataSearchResultRow(
             CoverBox(track, modifier = Modifier.size(48.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = track.title.ifBlank { "未知歌曲" },
+                    text = track.title.ifBlank { "Unbekannter Titel" },
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -696,10 +696,10 @@ fun LocalMetadataSearchResultRow(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onApplyMetadata) {
-                Text("使用元信息")
+                Text("Metadaten übernehmen")
             }
             TextButton(onClick = onDownloadLyrics) {
-                Text("下载歌词")
+                Text("Liedtext herunterladen")
             }
         }
     }
@@ -711,9 +711,9 @@ fun LocalMusicViewModeTabs() {
     val feature = LocalLocalMusicUiGraph.current.feature
     val uiState by feature.uiState.collectAsStateWithLifecycle()
     val modes = listOf(
-        LocalMusicViewMode.All to "全部",
-        LocalMusicViewMode.Artist to "歌手",
-        LocalMusicViewMode.Album to "专辑",
+        LocalMusicViewMode.All to "Alle",
+        LocalMusicViewMode.Artist to "Interpreten",
+        LocalMusicViewMode.Album to "Alben",
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         modes.forEach { (mode, label) ->
@@ -732,6 +732,6 @@ fun EmptyLocalMusicHint() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 24.dp),
-        title = "未发现本地音乐",
+        title = "Keine lokale Musik gefunden",
     )
 }

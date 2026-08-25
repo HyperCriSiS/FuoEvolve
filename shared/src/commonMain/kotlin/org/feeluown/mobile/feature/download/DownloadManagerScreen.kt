@@ -54,10 +54,10 @@ fun DownloadManagerScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("下载管理") },
+                title = { Text("Downloadverwaltung") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
             )
@@ -68,7 +68,7 @@ fun DownloadManagerScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (active.isNotEmpty()) {
-                item { DownloadSectionTitle("下载任务") }
+                item { DownloadSectionTitle("Downloadaufträge") }
                 items(active, key = { it.id }) { task ->
                     DownloadTaskCard(
                         task = task,
@@ -79,12 +79,12 @@ fun DownloadManagerScreen(
                     )
                 }
             }
-            item { DownloadSectionTitle("已完成") }
+            item { DownloadSectionTitle("Abgeschlossen") }
             if (completed.isEmpty()) {
                 item {
                     FuoEmptyState(
                         modifier = Modifier.fillMaxWidth(),
-                        title = "暂无已完成下载",
+                        title = "Keine abgeschlossenen Downloads",
                     )
                 }
             } else {
@@ -98,7 +98,7 @@ fun DownloadManagerScreen(
                 if (completed.size > completedLimit) {
                     item {
                         TextButton(onClick = { completedLimit += 20 }) {
-                            Text(if (completedLimit == 5) "展开更多" else "加载更多")
+                            Text(if (completedLimit == 5) "Mehr anzeigen" else "Mehr laden")
                         }
                     }
                 }
@@ -108,17 +108,17 @@ fun DownloadManagerScreen(
     pendingDelete?.let { task ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除下载") },
+            title = { Text("Download löschen") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(task.track.title.ifBlank { "该下载任务" })
+                    Text(task.track.title.ifBlank { "Diesen Downloadauftrag" })
                     if (task.status == DownloadTaskStatus.Completed) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = deleteFile, onCheckedChange = { deleteFile = it })
-                            Text("同时删除本地文件")
+                            Text("Lokale Datei ebenfalls löschen")
                         }
                     } else {
-                        Text("删除后将清理保留的临时文件，无法继续下载。")
+                        Text("Dabei werden auch temporäre Dateien gelöscht; der Download kann danach nicht fortgesetzt werden.")
                     }
                 }
             },
@@ -126,9 +126,9 @@ fun DownloadManagerScreen(
                 TextButton(onClick = {
                     port.deleteTask(task.id, deleteFile || task.status != DownloadTaskStatus.Completed)
                     pendingDelete = null
-                }) { Text("删除") }
+                }) { Text("Löschen") }
             },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Abbrechen") } },
         )
     }
 }
@@ -156,7 +156,7 @@ private fun DownloadTaskCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(task.track.title.ifBlank { "未知歌曲" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(task.track.title.ifBlank { "Unbekannter Titel" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOf(task.track.artists, downloadTaskStatusText(task)).filter { it.isNotBlank() }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -171,25 +171,25 @@ private fun DownloadTaskCard(
             }
             when (task.status) {
                 DownloadTaskStatus.Downloading, DownloadTaskStatus.Queued -> IconButton(onClick = onPause) {
-                    Icon(Icons.Filled.Pause, contentDescription = "暂停下载")
+                    Icon(Icons.Filled.Pause, contentDescription = "Download pausieren")
                 }
                 DownloadTaskStatus.Paused -> IconButton(onClick = onResume) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "继续下载")
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Download fortsetzen")
                 }
                 DownloadTaskStatus.Failed -> IconButton(onClick = onRetry) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "重试下载")
+                    Icon(Icons.Filled.Refresh, contentDescription = "Download erneut versuchen")
                 }
                 DownloadTaskStatus.Completed -> Unit
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "删除下载") }
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Download löschen") }
         }
     }
 }
 
 private fun downloadTaskStatusText(task: DownloadTask): String = when (task.status) {
-    DownloadTaskStatus.Queued -> "等待下载"
-    DownloadTaskStatus.Downloading -> task.totalBytes?.let { "${formatBytes(task.downloadedBytes)} / ${formatBytes(it)}" } ?: "下载中"
-    DownloadTaskStatus.Paused -> "已暂停，可继续"
-    DownloadTaskStatus.Failed -> task.failureMessage ?: "下载失败"
-    DownloadTaskStatus.Completed -> "已完成"
+    DownloadTaskStatus.Queued -> "Wartet auf Download"
+    DownloadTaskStatus.Downloading -> task.totalBytes?.let { "${formatBytes(task.downloadedBytes)} / ${formatBytes(it)}" } ?: "Wird heruntergeladen"
+    DownloadTaskStatus.Paused -> "Pausiert, kann fortgesetzt werden"
+    DownloadTaskStatus.Failed -> task.failureMessage ?: "Download fehlgeschlagen"
+    DownloadTaskStatus.Completed -> "Abgeschlossen"
 }

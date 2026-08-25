@@ -296,10 +296,10 @@ private fun RuntimePlayerHeader(currentTrack: MusicTrack?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = navigation::closeFullPlayer) {
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "收起播放器")
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Player minimieren")
         }
         Text(
-            text = "正在播放",
+            text = "Wird abgespielt",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -308,7 +308,7 @@ private fun RuntimePlayerHeader(currentTrack: MusicTrack?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = navigation::toggleQueue) {
-                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "播放队列")
+                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Warteschlange")
             }
             currentTrack?.let { RuntimeNowPlayingTrackAction(it) }
         }
@@ -376,7 +376,7 @@ private fun RuntimePlayerTitleBlock(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
-            text = track?.title ?: "未播放",
+            text = track?.title ?: "Nicht abgespielt",
             style = MaterialTheme.typography.headlineSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -498,7 +498,7 @@ private fun RuntimeNowPlayingTrackAction(track: MusicTrack) {
         } else {
             null
         },
-        dislikedActionLabel = "不喜欢",
+        dislikedActionLabel = "Gefällt mir nicht",
         onShare = sharePayload?.let { payload -> { onShare(payload) } },
         roundButton = false,
     )
@@ -601,7 +601,7 @@ private fun RuntimeQueueContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "播放队列",
+                    text = "Warteschlange",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -610,13 +610,13 @@ private fun RuntimeQueueContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "$queueSize 首",
+                        text = "$queueSize Titel",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (queueSize > 1) {
                         IconButton(onClick = { showClearConfirmDialog = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "清空队列")
+                            Icon(Icons.Filled.Delete, contentDescription = "Warteschlange leeren")
                         }
                     }
                 }
@@ -639,19 +639,19 @@ private fun RuntimeQueueContent(
     if (showClearConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showClearConfirmDialog = false },
-            title = { Text("清空播放队列") },
-            text = { Text("确定要清空播放队列吗？当前播放的歌曲将保留。") },
+            title = { Text("Wiedergabewarteschlange leeren") },
+            text = { Text("Wiedergabewarteschlange wirklich leeren? Der aktuell abgespielte Titel bleibt erhalten.") },
             confirmButton = {
                 TextButton(onClick = {
                     showClearConfirmDialog = false
                     queuePort.clearQueue()
                 }) {
-                    Text("清空")
+                    Text("Leeren")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirmDialog = false }) {
-                    Text("取消")
+                    Text("Abbrechen")
                 }
             },
         )
@@ -674,7 +674,7 @@ private fun RuntimeQueueList(
         itemsIndexed(queue) { index, track ->
             if (index == 0 && currentCount == 1) {
                 Text(
-                    text = "当前播放",
+                    text = "Aktuell",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
@@ -682,7 +682,7 @@ private fun RuntimeQueueList(
             }
             if (index == currentCount && upNextCount > 0) {
                 Text(
-                    text = "接下来播放",
+                    text = "Als Nächstes",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
@@ -690,7 +690,7 @@ private fun RuntimeQueueList(
             }
             if (index == currentCount + upNextCount && index < queue.size && index > 0) {
                 Text(
-                    text = "队列后续",
+                    text = "Später in der Warteschlange",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
@@ -718,7 +718,7 @@ private fun RuntimeQueueList(
                 CoverBox(track, modifier = Modifier.size(48.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "${index + 1}. ${track.title.ifBlank { "未知歌曲" }}",
+                        text = "${index + 1}. ${track.title.ifBlank { "Unbekannter Titel" }}",
                         style = MaterialTheme.typography.titleMedium,
                         color = titleColor,
                         fontWeight = if (isCurrent && !isUnavailable) FontWeight.SemiBold else FontWeight.Normal,
@@ -728,7 +728,7 @@ private fun RuntimeQueueList(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = listOf(track.artists, track.album).filter { it.isNotBlank() }.joinToString(" · ")
-                            .ifBlank { "未知歌手" },
+                            .ifBlank { "Unbekannter Interpret" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -743,7 +743,7 @@ private fun RuntimeQueueList(
                     )
                 }
                 IconButton(onClick = { queuePort.removeFromQueue(track) }) {
-                    Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "从队列移除")
+                    Icon(Icons.Filled.RemoveCircleOutline, contentDescription = "Aus Warteschlange entfernen")
                 }
             }
             if (isCurrent && playbackParts.isNotEmpty()) {
@@ -765,9 +765,9 @@ private fun RuntimeSleepTimerAction() {
     val timerState = sleepTimer.sleepTimerState
     val isActive = timerState.mode != SleepTimerMode.Off
     val contentDescription = when (timerState.mode) {
-        SleepTimerMode.Off -> "睡眠定时"
-        SleepTimerMode.Duration -> "睡眠定时，剩余 ${runtimeFormatSleepTimerRemaining(timerState.remainingMs ?: 0L)}"
-        SleepTimerMode.EndOfTrack -> "当前曲目结束后暂停"
+        SleepTimerMode.Off -> "Sleep-Timer"
+        SleepTimerMode.Duration -> "Sleep-Timer, noch ${runtimeFormatSleepTimerRemaining(timerState.remainingMs ?: 0L)}"
+        SleepTimerMode.EndOfTrack -> "Nach aktuellem Titel pausieren"
     }
     Box {
         RoundControlButton(
@@ -810,12 +810,12 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = "睡眠定时",
+                text = "Sleep-Timer",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "选择自动暂停播放的时间",
+                text = "Zeitpunkt für automatisches Pausieren wählen",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -837,7 +837,7 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
                     },
                 )
             }
-            RuntimeSleepTimerSectionLabel("按时长")
+            RuntimeSleepTimerSectionLabel("Nach Dauer")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -873,7 +873,7 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
                 )
             }
 
-            RuntimeSleepTimerSectionLabel("播放结束")
+            RuntimeSleepTimerSectionLabel("Nach Wiedergabeende")
             RuntimeSleepTimerEndOfTrackOption(
                 selected = timerState.mode == SleepTimerMode.EndOfTrack,
                 onClick = {
@@ -887,7 +887,7 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
     if (showCustomDurationDialog) {
         AlertDialog(
             onDismissRequest = { showCustomDurationDialog = false },
-            title = { Text("自定义睡眠定时") },
+            title = { Text("Benutzerdefinierter Sleep-Timer") },
             text = {
                 OutlinedTextField(
                     value = customMinutesText,
@@ -897,11 +897,11 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     isError = customMinutesText.isNotBlank() && !customMinutesValid,
-                    label = { Text("时长（分钟）") },
-                    placeholder = { Text("例如 45") },
+                    label = { Text("Dauer (Minuten)") },
+                    placeholder = { Text("z. B. 45") },
                     supportingText = if (customMinutesText.isNotBlank() && !customMinutesValid) {
                         {
-                            Text("请输入 $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES 分钟")
+                            Text("Bitte $SLEEP_TIMER_MIN_MINUTES–$SLEEP_TIMER_MAX_MINUTES Minuten eingeben")
                         }
                     } else {
                         null
@@ -918,12 +918,12 @@ private fun RuntimeSleepTimerBottomSheet(onDismiss: () -> Unit) {
                         onDismiss()
                     },
                 ) {
-                    Text("确定")
+                    Text("OK")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCustomDurationDialog = false }) {
-                    Text("取消")
+                    Text("Abbrechen")
                 }
             },
         )
@@ -964,18 +964,18 @@ private fun RuntimeSleepTimerActiveStatus(
             ) {
                 Text(
                     text = if (isDuration) {
-                        "还有 ${runtimeFormatSleepTimerRemaining(timerState.remainingMs ?: 0L)}"
+                        "Noch ${runtimeFormatSleepTimerRemaining(timerState.remainingMs ?: 0L)}"
                     } else {
-                        "当前曲目结束后暂停"
+                        "Nach aktuellem Titel pausieren"
                     },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = if (isDuration) {
-                        "时间到后自动暂停播放"
+                        "Nach Ablauf automatisch pausieren"
                     } else {
-                        "播放完当前曲目的全部内容后暂停"
+                        "Nach vollständiger Wiedergabe des aktuellen Titels pausieren"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -992,11 +992,11 @@ private fun RuntimeSleepTimerActiveStatus(
                     enabled = canExtend,
                     onClick = onExtend,
                 ) {
-                    Text("+5 分钟")
+                    Text("+5 Minuten")
                 }
             }
             TextButton(onClick = onClear) {
-                Text("关闭定时")
+                Text("Timer ausschalten")
             }
         }
         HorizontalDivider()
@@ -1024,7 +1024,7 @@ private fun RuntimeSleepTimerPresetOption(
         modifier = modifier,
         label = {
             Text(
-                text = "$minutes 分钟",
+                text = "$minutes Minuten",
                 maxLines = 1,
             )
         },
@@ -1039,7 +1039,7 @@ private fun RuntimeSleepTimerCustomOption(
     AssistChip(
         onClick = onClick,
         modifier = modifier,
-        label = { Text("自定义", maxLines = 1) },
+        label = { Text("Benutzerdefiniert", maxLines = 1) },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Filled.Edit,
@@ -1079,20 +1079,20 @@ private fun RuntimeSleepTimerEndOfTrackOption(
         },
         headlineContent = {
             Text(
-                text = "当前曲目结束后暂停",
+                text = "Nach aktuellem Titel pausieren",
                 fontWeight = FontWeight.Medium,
             )
         },
         supportingContent = {
             Text(
-                text = "包含当前曲目的全部多段内容",
+                text = "Alle Teile des aktuellen Titels einschließen",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         trailingContent = if (selected) {
             {
                 Text(
-                    text = "已选",
+                    text = "Ausgewählt",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1117,8 +1117,8 @@ private fun runtimeFormatSleepTimerRemaining(remainingMs: Long): String {
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return when {
-        minutes >= 60L -> "${minutes / 60L}小时${minutes % 60L}分"
-        minutes > 0L -> "${minutes}分${seconds}秒"
-        else -> "${seconds}秒"
+        minutes >= 60L -> "${minutes / 60L} Std. ${minutes % 60L} Min."
+        minutes > 0L -> "${minutes} Min. ${seconds} Sek."
+        else -> "${seconds} Sek."
     }
 }

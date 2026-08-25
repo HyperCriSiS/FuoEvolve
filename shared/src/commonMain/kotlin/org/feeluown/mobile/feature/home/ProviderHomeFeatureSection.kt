@@ -24,7 +24,7 @@ fun ProviderContentHomeFeatureSection(
 ) {
     val state = home.uiState.collectAsStateWithLifecycle().value
     val graph = LocalHomeFeatureUiGraph.current
-    val title = if (section == HomeSection.Recommend) "推荐" else "探索"
+    val title = if (section == HomeSection.Recommend) "Empfohlen" else "Entdecken"
     val sections = if (section == HomeSection.Recommend) state.recommendSections else state.exploreSections
     val visibleSections = remember(sections) { sections.filterNot { it.isLoginRequired } }
     val lockedProviders = remember(sections) {
@@ -58,7 +58,7 @@ fun ProviderContentHomeFeatureSection(
                         item(key = "header:explore") {
                             ProviderFeatureHeader(
                                 feature = visibleSections.first().feature,
-                                title = "探索",
+                                title = "Entdecken",
                                 providerLabel = visibleSections.map { it.feature.providerName }.distinct().joinToString(" / "),
                             )
                         }
@@ -93,7 +93,7 @@ fun ProviderContentHomeFeatureSection(
                                     maxRows = 2,
                                 )
                             }
-                            else -> item(key = "empty:${contentSection.feature.id}") { ProviderContentMessage("暂无内容") }
+                            else -> item(key = "empty:${contentSection.feature.id}") { ProviderContentMessage("Keine Inhalte") }
                         }
                     }
                 } else {
@@ -111,7 +111,7 @@ fun ProviderContentHomeFeatureSection(
                         item(key = "header:for-you") {
                             ProviderFeatureHeader(
                                 feature = forYouSections.first().feature,
-                                title = "为你推荐",
+                                title = "Für dich empfohlen",
                                 providerLabel = forYouSections.map { it.feature.providerName }.distinct().joinToString(" / "),
                             )
                         }
@@ -171,7 +171,7 @@ fun ProviderContentHomeFeatureSection(
                             contentSection.videos.isNotEmpty() -> item(key = "videos:${contentSection.feature.id}") {
                                 ProviderVideoList(contentSection.videos, home::openVideo)
                             }
-                            else -> item(key = "empty:${contentSection.feature.id}") { ProviderContentMessage("暂无内容") }
+                            else -> item(key = "empty:${contentSection.feature.id}") { ProviderContentMessage("Keine Inhalte") }
                         }
                     }
                 }

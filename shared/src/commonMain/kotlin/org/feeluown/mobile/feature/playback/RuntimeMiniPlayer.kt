@@ -95,16 +95,16 @@ internal fun RuntimeMiniPlayer(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = state.currentTrack?.title ?: "未播放",
+                        text = state.currentTrack?.title ?: "Nicht abgespielt",
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = if (isLoadingAudio) {
-                            "正在加载音频"
+                            "Audio wird geladen"
                         } else {
-                            state.currentTrack?.let(::runtimeArtistAlbumLabel) ?: "选择一首音乐开始播放"
+                            state.currentTrack?.let(::runtimeArtistAlbumLabel) ?: "Wähle einen Titel zum Abspielen"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isLoadingAudio) {
@@ -123,7 +123,7 @@ internal fun RuntimeMiniPlayer(
                 ) {
                     RoundControlButton(
                         imageVector = Icons.Filled.SkipPrevious,
-                        contentDescription = "上一首",
+                        contentDescription = "Vorheriger Titel",
                         onClick = playbackSession::previous,
                         size = 48.dp,
                         iconSize = 24.dp,
@@ -137,7 +137,7 @@ internal fun RuntimeMiniPlayer(
                     )
                     RoundControlButton(
                         imageVector = Icons.Filled.SkipNext,
-                        contentDescription = "下一首",
+                        contentDescription = "Nächster Titel",
                         onClick = playbackSession::next,
                         size = 48.dp,
                         iconSize = 24.dp,

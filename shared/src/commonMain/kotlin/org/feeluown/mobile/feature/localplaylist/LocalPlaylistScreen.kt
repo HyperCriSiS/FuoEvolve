@@ -42,11 +42,11 @@ val LocalLocalPlaylistFileActions = androidx.compose.runtime.staticCompositionLo
 fun LocalPlaylist.toDisplayTrack(): MusicTrack = MusicTrack(
     id = id,
     title = title,
-    artists = "本地歌单",
+    artists = "Lokale Playlists",
     album = "",
     source = "local-playlist",
     sourceType = TrackSourceType.LocalMediaStore,
-    providerName = "本地歌单",
+    providerName = "Lokale Playlists",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,10 +68,10 @@ fun LocalPlaylistScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(displayPlaylist.title.ifBlank { "本地歌单" }, maxLines = 1) },
+                title = { Text(displayPlaylist.title.ifBlank { "Lokale Playlists" }, maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = actions::close) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
                 actions = {
@@ -79,7 +79,7 @@ fun LocalPlaylistScreen(
                         onClick = { showDeleteDialog = true },
                         enabled = actions.canDeleteSelected(),
                     ) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除歌单")
+                        Icon(Icons.Filled.Delete, contentDescription = "Playlist löschen")
                     }
                     IconButton(
                         onClick = {
@@ -89,7 +89,7 @@ fun LocalPlaylistScreen(
                         },
                         enabled = fileActions.exportFile != null,
                     ) {
-                        Icon(Icons.Filled.FileUpload, contentDescription = "导出歌单")
+                        Icon(Icons.Filled.FileUpload, contentDescription = "Playlist exportieren")
                     }
                     IconButton(
                         onClick = {
@@ -99,7 +99,7 @@ fun LocalPlaylistScreen(
                         },
                         enabled = fileActions.shareFile != null,
                     ) {
-                        Icon(Icons.Filled.Share, contentDescription = "分享歌单文件")
+                        Icon(Icons.Filled.Share, contentDescription = "Playlist-Datei teilen")
                     }
                 },
             )
@@ -117,8 +117,8 @@ fun LocalPlaylistScreen(
         ) {
             ProviderDetailHeader(
                 track = displayPlaylist.toDisplayTrack(),
-                title = displayPlaylist.title.ifBlank { "未命名歌单" },
-                subtitle = "本地文件 · ${uiState.selectedTracks.size} 首",
+                title = displayPlaylist.title.ifBlank { "Unbenannte Playlist" },
+                subtitle = "Lokale Dateien · ${uiState.selectedTracks.size} Titel",
                 description = displayPlaylist.description,
                 placeholder = CoverPlaceholder.Playlist,
                 action = {
@@ -140,7 +140,7 @@ fun LocalPlaylistScreen(
                     .fillMaxWidth(),
             ) {
                 if (uiState.selectedTracks.isEmpty() && !uiState.isLoading) {
-                    item { ProviderContentMessage("歌单暂无歌曲") }
+                    item { ProviderContentMessage("Die Playlist enthält noch keine Titel") }
                 } else {
                     itemsIndexed(
                         uiState.selectedTracks,
@@ -183,18 +183,18 @@ fun LocalPlaylistScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除本地歌单？") },
-            text = { Text("将删除《${displayPlaylist.title}》，此操作无法撤销。") },
+            title = { Text("Lokale Playlist löschen?") },
+            text = { Text("„${displayPlaylist.title}“ wird gelöscht. Dies kann nicht rückgängig gemacht werden.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
                         actions.deleteSelected()
                     },
-                ) { Text("删除") }
+                ) { Text("Löschen") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Abbrechen") }
             },
         )
     }

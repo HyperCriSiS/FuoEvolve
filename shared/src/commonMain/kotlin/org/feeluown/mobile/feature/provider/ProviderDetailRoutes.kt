@@ -81,10 +81,10 @@ fun ProviderFeatureDetailRoute(feature: ProviderFeature) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(displayFeature.title.ifBlank { "推荐" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(displayFeature.title.ifBlank { "Empfohlen" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = owner::close) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
             )
@@ -115,7 +115,7 @@ fun ProviderFeatureDetailRoute(feature: ProviderFeature) {
                     }
                     Text(displayFeature.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "${displayFeature.providerName} · $contentCount 项",
+                        "${displayFeature.providerName} · $contentCount Einträge",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -137,7 +137,7 @@ fun ProviderFeatureDetailRoute(feature: ProviderFeature) {
                 ) {
                     Text(
                         modifier = Modifier.weight(1f),
-                        text = "${displayFeature.providerName} · $contentCount 项",
+                        text = "${displayFeature.providerName} · $contentCount Einträge",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -192,7 +192,7 @@ private fun ProviderFeatureDetailContent(
             }
             if (state.hasMore) item {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = graph.owners.feature::loadMore) { Text("加载更多") }
+                    TextButton(onClick = graph.owners.feature::loadMore) { Text("Mehr laden") }
                 }
             }
         }
@@ -205,7 +205,7 @@ private fun ProviderFeatureDetailContent(
             }
             if (state.hasMore) item {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = graph.owners.feature::loadMore) { Text("加载更多") }
+                    TextButton(onClick = graph.owners.feature::loadMore) { Text("Mehr laden") }
                 }
             }
         }
@@ -213,13 +213,13 @@ private fun ProviderFeatureDetailContent(
             item { ProviderVideoList(videos = content.videos, onClick = graph.owners.video::open) }
             if (state.hasMore) item {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = graph.owners.feature::loadMore) { Text("加载更多") }
+                    TextButton(onClick = graph.owners.feature::loadMore) { Text("Mehr laden") }
                 }
             }
         }
         else -> ProviderDetailTrackList(
             tracks = state.tracks,
-            emptyMessage = if (feature.isBilibiliWeeklyFeature()) "本期暂无内容" else "暂无内容",
+            emptyMessage = if (feature.isBilibiliWeeklyFeature()) "Derzeit keine Inhalte" else "Keine Inhalte",
             showEmpty = !state.isLoading && state.errorMessage == null,
             modifier = modifier,
             onClick = graph.owners.feature::play,
@@ -271,21 +271,21 @@ fun ProviderPlaylistDetailRoute(playlist: ProviderPlaylist, category: ProviderFe
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(displayPlaylist.title.ifBlank { "歌单" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(displayPlaylist.title.ifBlank { "Playlists" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = owner::close) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
                 actions = {
                     if (owner.canDelete()) {
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "删除歌单")
+                            Icon(Icons.Filled.Delete, contentDescription = "Playlist löschen")
                         }
                     }
                     val onShare = LocalShareHandler.current
                     IconButton(onClick = { sharePayload?.let(onShare) }, enabled = sharePayload != null) {
-                        Icon(Icons.Filled.Share, contentDescription = "分享")
+                        Icon(Icons.Filled.Share, contentDescription = "Teilen")
                     }
                 },
             )
@@ -299,11 +299,11 @@ fun ProviderPlaylistDetailRoute(playlist: ProviderPlaylist, category: ProviderFe
             LoadingIndicator(state.isLoading)
             ProviderDetailHeader(
                 track = displayPlaylist.toDisplayTrack(),
-                title = displayPlaylist.title.ifBlank { "未命名歌单" },
+                title = displayPlaylist.title.ifBlank { "Unbenannte Playlist" },
                 subtitle = buildList {
                     add(displayPlaylist.providerName)
                     displayPlaylist.playCount?.let { add(formatPlayCount(it)) }
-                    displayPlaylist.trackCount?.let { add("$it 首") }
+                    displayPlaylist.trackCount?.let { add("$it Titel") }
                 }.joinToString(" · "),
                 description = displayPlaylist.description,
                 placeholder = CoverPlaceholder.Playlist,
@@ -318,8 +318,8 @@ fun ProviderPlaylistDetailRoute(playlist: ProviderPlaylist, category: ProviderFe
                                 isFavorite = state.favoriteState.isFavorite,
                                 isLoading = state.isFavoriteLoading,
                                 enabled = owner.canToggleFavorite(),
-                                favoriteLabel = "收藏",
-                                unfavoriteLabel = "已收藏",
+                                favoriteLabel = "Favoriten",
+                                unfavoriteLabel = "Favorisiert",
                                 onClick = owner::toggleFavorite,
                             )
                         }
@@ -331,7 +331,7 @@ fun ProviderPlaylistDetailRoute(playlist: ProviderPlaylist, category: ProviderFe
             state.errorMessage?.let { ProviderContentMessage(it) }
             ProviderDetailTrackList(
                 tracks = state.tracks,
-                emptyMessage = "歌单暂无歌曲",
+                emptyMessage = "Die Playlist enthält noch keine Titel",
                 showEmpty = !state.isLoading && state.errorMessage == null,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 onClick = owner::play,
@@ -344,15 +344,15 @@ fun ProviderPlaylistDetailRoute(playlist: ProviderPlaylist, category: ProviderFe
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除歌单？") },
-            text = { Text("将删除《${displayPlaylist.title}》，此操作无法撤销。") },
+            title = { Text("Playlist löschen?") },
+            text = { Text("„${displayPlaylist.title}“ wird gelöscht. Dies kann nicht rückgängig gemacht werden.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteDialog = false
                     owner.delete()
-                }) { Text("删除") }
+                }) { Text("Löschen") }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Abbrechen") } },
         )
     }
 }
@@ -370,16 +370,16 @@ fun ProviderTrackDetailRoute(track: MusicTrack) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(displayTrack.title.ifBlank { "歌曲" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(displayTrack.title.ifBlank { "Titel" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = owner::close) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
                 actions = {
                     val onShare = LocalShareHandler.current
                     IconButton(onClick = { sharePayload?.let(onShare) }, enabled = sharePayload != null) {
-                        Icon(Icons.Filled.Share, contentDescription = "分享")
+                        Icon(Icons.Filled.Share, contentDescription = "Teilen")
                     }
                 },
             )
@@ -394,7 +394,7 @@ fun ProviderTrackDetailRoute(track: MusicTrack) {
             LoadingIndicator(state.isLoading)
             ProviderDetailHeader(
                 track = displayTrack,
-                title = displayTrack.title.ifBlank { "未知歌曲" },
+                title = displayTrack.title.ifBlank { "Unbekannter Titel" },
                 subtitle = buildList {
                     if (displayTrack.artists.isNotBlank()) add(displayTrack.artists)
                     if (displayTrack.album.isNotBlank()) add("《${displayTrack.album}》")
@@ -406,20 +406,20 @@ fun ProviderTrackDetailRoute(track: MusicTrack) {
                         TextButton(onClick = owner::play) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(4.dp))
-                            Text("播放")
+                            Text("Abspielen")
                         }
                         if (state.video != null) {
                             TextButton(onClick = owner::openVideo) {
                                 Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.size(4.dp))
-                                Text("播放 MV")
+                                Text("Musikvideo abspielen")
                             }
                         }
                         if (graph.playlists.canAddTrackToPlaylist(displayTrack)) {
                             TextButton(onClick = { graph.playlists.openPlaylistTargetPicker(displayTrack) }) {
                                 Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
                                 Spacer(Modifier.size(4.dp))
-                                Text("添加到歌单")
+                                Text("Zur Playlist hinzufügen")
                             }
                         }
                         ShareTextButton(sharePayload)
@@ -429,17 +429,17 @@ fun ProviderTrackDetailRoute(track: MusicTrack) {
             state.errorMessage?.let { ProviderContentMessage(it) }
             state.relatedErrorMessage?.let { ProviderContentMessage(it) }
             if (state.similarTracks.isNotEmpty()) {
-                Text("相似歌曲", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Ähnliche Titel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 state.similarTracks.take(6).forEachIndexed { index, related ->
                     ProviderDetailTrackRow(related, onClick = { owner.playSimilar(index) })
                     HorizontalDivider()
                 }
             }
             if (state.comments.isNotEmpty()) {
-                Text("热评", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Top-Kommentare", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 state.comments.take(5).forEach { comment ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(comment.userName.ifBlank { "匿名用户" }, color = MaterialTheme.colorScheme.primary)
+                        Text(comment.userName.ifBlank { "Anonymer Benutzer" }, color = MaterialTheme.colorScheme.primary)
                         Text(comment.content, maxLines = 4, overflow = TextOverflow.Ellipsis)
                     }
                     HorizontalDivider()
@@ -464,16 +464,16 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(displayItem.title.ifBlank { if (isArtist) "歌手" else "专辑" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(displayItem.title.ifBlank { if (isArtist) "Interpreten" else "Alben" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = owner::close) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
                 actions = {
                     val onShare = LocalShareHandler.current
                     IconButton(onClick = { sharePayload?.let(onShare) }, enabled = sharePayload != null) {
-                        Icon(Icons.Filled.Share, contentDescription = "分享")
+                        Icon(Icons.Filled.Share, contentDescription = "Teilen")
                     }
                 },
             )
@@ -487,12 +487,12 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
             LoadingIndicator(state.isLoading)
             ProviderDetailHeader(
                 track = displayItem.toDisplayTrack(),
-                title = displayItem.title.ifBlank { if (isArtist) "未知歌手" else "未知专辑" },
+                title = displayItem.title.ifBlank { if (isArtist) "Unbekannter Interpret" else "Unbekanntes Album" },
                 subtitle = buildList {
                     add(displayItem.providerName)
-                    add(if (isArtist) "歌手" else "专辑")
-                    displayItem.trackCount?.let { add("$it 首") }
-                    if (isArtist) displayItem.albumCount?.let { add("$it 张专辑") }
+                    add(if (isArtist) "Interpreten" else "Alben")
+                    displayItem.trackCount?.let { add("$it Titel") }
+                    if (isArtist) displayItem.albumCount?.let { add("$it Alben") }
                 }.joinToString(" · "),
                 description = displayItem.description,
                 placeholder = if (isArtist) CoverPlaceholder.Artist else CoverPlaceholder.Album,
@@ -507,8 +507,8 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
                                 isFavorite = state.favoriteState.isFavorite,
                                 isLoading = state.isFavoriteLoading,
                                 enabled = owner.canToggleFavorite(),
-                                favoriteLabel = if (isArtist) "关注" else "收藏",
-                                unfavoriteLabel = if (isArtist) "已关注" else "已收藏",
+                                favoriteLabel = if (isArtist) "Folgen" else "Favoriten",
+                                unfavoriteLabel = if (isArtist) "Gefolgt" else "Favorisiert",
                                 onClick = owner::toggleFavorite,
                             )
                         }
@@ -520,7 +520,7 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
             state.errorMessage?.let { ProviderContentMessage(it) }
             if (isArtist) {
                 PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
-                    listOf("歌曲", "专辑").forEachIndexed { index, title ->
+                    listOf("Titel", "Alben").forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTabIndex == index,
                             onClick = { selectedTabIndex = index },
@@ -532,7 +532,7 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
             if (isArtist && selectedTabIndex == 1) {
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     if (state.albums.isEmpty() && !state.isLoading && state.errorMessage == null) {
-                        item { ProviderContentMessage("暂无专辑") }
+                        item { ProviderContentMessage("Keine Alben") }
                     } else {
                         item {
                             ProviderMediaItemGrid(
@@ -546,7 +546,7 @@ fun ProviderMediaItemDetailRoute(item: ProviderMediaItem) {
             } else {
                 ProviderDetailTrackList(
                     tracks = state.tracks,
-                    emptyMessage = "暂无歌曲",
+                    emptyMessage = "Keine Titel",
                     showEmpty = !state.isLoading && state.errorMessage == null,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     onClick = owner::play,

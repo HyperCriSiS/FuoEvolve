@@ -83,15 +83,15 @@ fun HomeScreen(
                     title = {},
                     navigationIcon = {
                         IconButton(onClick = { home.openSettings() }) {
-                            Icon(Icons.Filled.Settings, contentDescription = "设置")
+                            Icon(Icons.Filled.Settings, contentDescription = "Einstellungen")
                         }
                     },
                     actions = {
                         IconButton(onClick = onOpenRecognition) {
-                            Icon(Icons.Filled.Mic, contentDescription = "听歌识曲")
+                            Icon(Icons.Filled.Mic, contentDescription = "Musik erkennen")
                         }
                         IconButton(onClick = home::openSearch) {
-                            Icon(Icons.Filled.Search, contentDescription = "搜索")
+                            Icon(Icons.Filled.Search, contentDescription = "Suchen")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -139,9 +139,9 @@ fun HomeSectionPager(
 ) {
     val state = home.uiState.collectAsStateWithLifecycle().value
     val sections = listOf(
-        HomeSection.Recommend to "推荐",
-        HomeSection.Music to "探索",
-        HomeSection.Mine to "我的",
+        HomeSection.Recommend to "Empfohlen",
+        HomeSection.Music to "Entdecken",
+        HomeSection.Mine to "Meine Musik",
     )
     val selectedIndex = sections.indexOfFirst { it.first == state.homeSection }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = selectedIndex, pageCount = { sections.size })
@@ -254,7 +254,7 @@ fun HomeSectionRail(
             modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "设置") }
+            IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "Einstellungen") }
             Spacer(Modifier.weight(1f))
             sections.forEachIndexed { index, (section, label) ->
                 val selected = index == selectedIndex
@@ -283,8 +283,8 @@ fun HomeSectionRail(
                 }
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onRecognition) { Icon(Icons.Filled.Mic, contentDescription = "听歌识曲") }
-            IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, contentDescription = "搜索") }
+            IconButton(onClick = onRecognition) { Icon(Icons.Filled.Mic, contentDescription = "Musik erkennen") }
+            IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, contentDescription = "Suchen") }
         }
     }
 }

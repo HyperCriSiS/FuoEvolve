@@ -31,27 +31,27 @@ fun AudioFormatInfoDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("音频信息") },
+        title = { Text("Audioinformationen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                info?.format?.takeIf { it.isNotBlank() }?.let { ReplacementInfoLine("当前格式", it) }
-                info?.codec?.takeIf { it.isNotBlank() }?.let { ReplacementInfoLine("编码", it) }
-                formatAudioBitrate(info?.averageBitrate)?.let { ReplacementInfoLine("平均比特率", it) }
-                formatAudioBitrate(info?.peakBitrate)?.let { ReplacementInfoLine("峰值比特率", it) }
+                info?.format?.takeIf { it.isNotBlank() }?.let { ReplacementInfoLine("Aktuelles Format", it) }
+                info?.codec?.takeIf { it.isNotBlank() }?.let { ReplacementInfoLine("Codec", it) }
+                formatAudioBitrate(info?.averageBitrate)?.let { ReplacementInfoLine("Durchschnittliche Bitrate", it) }
+                formatAudioBitrate(info?.peakBitrate)?.let { ReplacementInfoLine("Spitzen-Bitrate", it) }
                 decoderInfo?.let { decoder ->
                     ReplacementInfoLine(
-                        "解码方式",
-                        if (decoder.type == AudioDecoderType.Software) "软件解码" else "硬件解码",
+                        "Decodierung",
+                        if (decoder.type == AudioDecoderType.Software) "Software-Decodierung" else "Hardware-Decodierung",
                     )
                     decoder.name.takeIf { it.isNotBlank() }?.let {
-                        ReplacementInfoLine("解码器", it)
+                        ReplacementInfoLine("Decoder", it)
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("关闭")
+                Text("Schließen")
             }
         },
     )
@@ -86,22 +86,22 @@ fun ReplacementInfoDialog(
     val detailAction = onOpenDetail?.takeIf { track.replacementId?.isNotBlank() == true }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("替换音频") },
+        title = { Text("Audio ersetzen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReplacementInfoLine("标题", track.replacementTitle ?: track.title)
-                ReplacementInfoLine("歌手", track.replacementArtists ?: track.artists)
+                ReplacementInfoLine("Titel", track.replacementTitle ?: track.title)
+                ReplacementInfoLine("Interpreten", track.replacementArtists ?: track.artists)
                 replacementProviderLabel(track).takeIf { it.isNotBlank() }?.let {
-                    ReplacementInfoLine("来源", it)
+                    ReplacementInfoLine("Quelle", it)
                 }
                 track.replacementStrategy?.let {
-                    ReplacementInfoLine("策略", it)
+                    ReplacementInfoLine("Strategie", it)
                 }
                 track.replacementScore?.let {
-                    ReplacementInfoLine("匹配度", formatSmartReplacementScore(it))
+                    ReplacementInfoLine("Übereinstimmung", formatSmartReplacementScore(it))
                 }
                 Text(
-                    text = "候选音源",
+                    text = "Alternative Quellen",
                     style = MaterialTheme.typography.titleSmall,
                 )
                 when {
@@ -117,20 +117,20 @@ fun ReplacementInfoDialog(
                     candidateState.errorMessage != null -> {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "候选查询失败：${candidateState.errorMessage}",
+                                text = "Abfrage der Alternativen fehlgeschlagen: ${candidateState.errorMessage}",
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             onRetry?.let { retry ->
                                 TextButton(onClick = retry) {
-                                    Text("重试")
+                                    Text("Erneut versuchen")
                                 }
                             }
                         }
                     }
                     candidateState.candidates.isEmpty() -> {
                         Text(
-                            text = "暂无符合条件的候选音源",
+                            text = "Keine passende alternative Quelle gefunden",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -169,20 +169,20 @@ fun ReplacementInfoDialog(
                                         )
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = candidate.track.title.ifBlank { "未知歌曲" },
+                                                text = candidate.track.title.ifBlank { "Unbekannter Titel" },
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
                                             Text(
-                                                text = candidate.track.artists.ifBlank { "未知歌手" },
+                                                text = candidate.track.artists.ifBlank { "Unbekannter Interpret" },
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 style = MaterialTheme.typography.bodySmall,
                                             )
                                             Text(
-                                                text = "${sourceLabel(candidate.track, null)} · 匹配度 ${formatSmartReplacementScore(candidate.score)}",
+                                                text = "${sourceLabel(candidate.track, null)} · Übereinstimmung ${formatSmartReplacementScore(candidate.score)}",
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,7 +191,7 @@ fun ReplacementInfoDialog(
                                         }
                                         if (isSelected) {
                                             Text(
-                                                text = "已选",
+                                                text = "Ausgewählt",
                                                 color = MaterialTheme.colorScheme.primary,
                                                 style = MaterialTheme.typography.labelMedium,
                                             )
@@ -211,13 +211,13 @@ fun ReplacementInfoDialog(
                     if (detailAction != null) detailAction()
                 },
             ) {
-                Text(if (detailAction != null) "歌曲详情" else "关闭")
+                Text(if (detailAction != null) "Titeldetails" else "Schließen")
             }
         },
         dismissButton = if (detailAction != null) {
             {
                 TextButton(onClick = onDismiss) {
-                    Text("关闭")
+                    Text("Schließen")
                 }
             }
         } else {

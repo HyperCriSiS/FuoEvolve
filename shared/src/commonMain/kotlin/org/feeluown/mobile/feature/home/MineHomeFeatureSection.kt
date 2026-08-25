@@ -53,8 +53,8 @@ fun MineHomeSection(
         ) {
             when (state.mineSection) {
                 MineSection.Playlists, MineSection.Songs -> MineOwnerPlaylists(home, !wide, Modifier.fillMaxSize())
-                MineSection.Artists -> MineOwnerMediaItems(home, ProviderContentType.Artists, "歌手", Modifier.fillMaxSize())
-                MineSection.Albums -> MineOwnerMediaItems(home, ProviderContentType.Albums, "专辑", Modifier.fillMaxSize())
+                MineSection.Artists -> MineOwnerMediaItems(home, ProviderContentType.Artists, "Interpreten", Modifier.fillMaxSize())
+                MineSection.Albums -> MineOwnerMediaItems(home, ProviderContentType.Albums, "Alben", Modifier.fillMaxSize())
                 MineSection.LocalMusic -> LocalMusicSection(
                     hasAudioPermission = hasAudioPermission,
                     onRequestAudioPermission = onRequestAudioPermission,
@@ -72,10 +72,10 @@ fun MineHomeSection(
 private fun MineOwnerChips(home: HomeFeatureController, includeSecondary: Boolean) {
     val state by home.uiState.collectAsStateWithLifecycle()
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MineChip(state.mineSection == MineSection.Playlists, { home.setMineSection(MineSection.Playlists) }, "歌单")
-        MineChip(state.mineSection == MineSection.Artists, { home.setMineSection(MineSection.Artists) }, "歌手")
-        MineChip(state.mineSection == MineSection.Albums, { home.setMineSection(MineSection.Albums) }, "专辑")
-        MineChip(state.mineSection == MineSection.LocalMusic, { home.setMineSection(MineSection.LocalMusic) }, "本地")
+        MineChip(state.mineSection == MineSection.Playlists, { home.setMineSection(MineSection.Playlists) }, "Playlists")
+        MineChip(state.mineSection == MineSection.Artists, { home.setMineSection(MineSection.Artists) }, "Interpreten")
+        MineChip(state.mineSection == MineSection.Albums, { home.setMineSection(MineSection.Albums) }, "Alben")
+        MineChip(state.mineSection == MineSection.LocalMusic, { home.setMineSection(MineSection.LocalMusic) }, "Lokal")
         if (includeSecondary) {
             Spacer(Modifier.width(12.dp))
             if (state.mineSection == MineSection.LocalMusic) LocalMusicViewModeTabs()
@@ -93,9 +93,9 @@ private fun MineChip(selected: Boolean, onClick: () -> Unit, label: String) {
 private fun MineFilterChips(home: HomeFeatureController) {
     val filter by home.uiState.collectAsStateWithLifecycle().let { state -> mutableStateOf(state.value.playlistFilter) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MineChip(filter == PlaylistFilter.UserPlaylists, { home.setPlaylistFilter(PlaylistFilter.UserPlaylists) }, "用户")
-        MineChip(filter == PlaylistFilter.FavoritePlaylists, { home.setPlaylistFilter(PlaylistFilter.FavoritePlaylists) }, "收藏")
-        MineChip(filter == PlaylistFilter.Local, { home.setPlaylistFilter(PlaylistFilter.Local) }, "本地")
+        MineChip(filter == PlaylistFilter.UserPlaylists, { home.setPlaylistFilter(PlaylistFilter.UserPlaylists) }, "Benutzer")
+        MineChip(filter == PlaylistFilter.FavoritePlaylists, { home.setPlaylistFilter(PlaylistFilter.FavoritePlaylists) }, "Favoriten")
+        MineChip(filter == PlaylistFilter.Local, { home.setPlaylistFilter(PlaylistFilter.Local) }, "Lokal")
     }
 }
 
@@ -129,25 +129,25 @@ private fun MineOwnerPlaylists(home: HomeFeatureController, showFilter: Boolean,
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.playlistFilter == PlaylistFilter.UserPlaylists && frequent.isNotEmpty()) {
                 item("mine-frequent") {
-                    Text("我的常听", style = MaterialTheme.typography.titleMedium)
+                    Text("Oft gehört", style = MaterialTheme.typography.titleMedium)
                     ProviderPlaylistGrid(frequent, { home.openPlaylist(it, home.categoryForMinePlaylist(it)) }, maxRows = 2)
                 }
             }
             if (state.playlistFilter == PlaylistFilter.Local) {
                 item("local-header") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("本地歌单", style = MaterialTheme.typography.titleMedium)
+                        Text("Lokale Playlists", style = MaterialTheme.typography.titleMedium)
                         Row {
-                            TextButton(onClick = { createLocal = true }) { Text("新建") }
-                            TextButton(onClick = { fileActions.importFile?.invoke() }, enabled = fileActions.importFile != null) { Text("导入") }
+                            TextButton(onClick = { createLocal = true }) { Text("Neu") }
+                            TextButton(onClick = { fileActions.importFile?.invoke() }, enabled = fileActions.importFile != null) { Text("Importieren") }
                         }
                     }
                 }
-                if (local.playlists.isEmpty()) item("local-empty") { ProviderContentMessage("暂无本地歌单，可新建或导入 .fuo 文件") }
+                if (local.playlists.isEmpty()) item("local-empty") { ProviderContentMessage("Noch keine lokalen Playlists. Erstelle eine neue oder importiere eine .fuo-Datei.") }
                 else item("local-grid") {
                     ProviderPlaylistGrid(
                         playlists = local.playlists.map { p ->
-                            ProviderPlaylist(p.id, p.title, "local", "本地 · ${p.tracks.size} 首", description = p.description, trackCount = p.tracks.size)
+                            ProviderPlaylist(p.id, p.title, "local", "Lokal · ${p.tracks.size} Titel", description = p.description, trackCount = p.tracks.size)
                         },
                         onClick = { card -> local.playlists.firstOrNull { it.id == card.id }?.let(graph.localPlaylist::open) },
                     )
@@ -158,7 +158,7 @@ private fun MineOwnerPlaylists(home: HomeFeatureController, showFilter: Boolean,
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         ProviderFeatureHeader(section.feature)
                         if (home.creatablePlaylistProviders().any { it.providerId == section.feature.providerId }) {
-                            TextButton(onClick = { createProvider = section.feature.providerId }) { Text("新建") }
+                            TextButton(onClick = { createProvider = section.feature.providerId }) { Text("Neu") }
                         }
                     }
                 }
@@ -173,19 +173,19 @@ private fun MineOwnerPlaylists(home: HomeFeatureController, showFilter: Boolean,
             }
             if (locked.isNotEmpty()) item("mine-locked") { ProviderLockedSummary(locked) { home.openSettings(it.providerId) } }
             if (state.playlistFilter == PlaylistFilter.UserPlaylists && songEntries.isNotEmpty()) {
-                item("mine-songs-head") { Text("我的歌曲", style = MaterialTheme.typography.titleMedium) }
+                item("mine-songs-head") { Text("Meine Titel", style = MaterialTheme.typography.titleMedium) }
                 item("mine-songs") { ProviderFeatureCoverGrid(songEntries, home::openFeature) }
             }
         }
     }
 
-    if (createLocal) PlaylistNameDialog("新建本地歌单", name, { name = it }, {
+    if (createLocal) PlaylistNameDialog("Lokale Playlist erstellen", name, { name = it }, {
         graph.localPlaylist.create(name); name = ""; createLocal = false
     }) { createLocal = false }
 
     createProvider?.let { providerId ->
         val provider = home.creatablePlaylistProviders().firstOrNull { it.providerId == providerId }
-        PlaylistNameDialog("在 ${provider?.providerName.orEmpty()} 新建歌单", name, { name = it }, {
+        PlaylistNameDialog("Playlist bei ${provider?.providerName.orEmpty()} erstellen", name, { name = it }, {
             provider?.let { home.createProviderPlaylist(it.providerId, name) }; name = ""; createProvider = null
         }) { createProvider = null }
     }
@@ -194,17 +194,17 @@ private fun MineOwnerPlaylists(home: HomeFeatureController, showFilter: Boolean,
         val existing = graph.localPlaylist.existingForImport(preview)
         AlertDialog(
             onDismissRequest = graph.localPlaylist::cancelImport,
-            title = { Text("导入本地歌单") },
-            text = { Text("《${preview.title}》 · ${preview.tracks.size} 首") },
+            title = { Text("Lokale Playlist importieren") },
+            text = { Text("„${preview.title}“ · ${preview.tracks.size} Titel") },
             confirmButton = {
                 Row {
-                    TextButton(onClick = { graph.localPlaylist.importPlaylist(LocalPlaylistImportMode.CreateNew) }) { Text("新建导入") }
+                    TextButton(onClick = { graph.localPlaylist.importPlaylist(LocalPlaylistImportMode.CreateNew) }) { Text("Als neue importieren") }
                     if (existing != null) TextButton(onClick = {
                         graph.localPlaylist.importPlaylist(LocalPlaylistImportMode.Replace, existing.id)
-                    }) { Text("替换同名") }
+                    }) { Text("Gleichnamige ersetzen") }
                 }
             },
-            dismissButton = { TextButton(onClick = graph.localPlaylist::cancelImport) { Text("取消") } },
+            dismissButton = { TextButton(onClick = graph.localPlaylist::cancelImport) { Text("Abbrechen") } },
         )
     }
 }
@@ -220,9 +220,9 @@ private fun PlaylistNameDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { OutlinedTextField(value, onValueChange, label = { Text("歌单名称") }, singleLine = true) },
-        confirmButton = { TextButton(onClick = onConfirm, enabled = value.isNotBlank()) { Text("创建") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        text = { OutlinedTextField(value, onValueChange, label = { Text("Playlistname") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = onConfirm, enabled = value.isNotBlank()) { Text("Erstellen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
     )
 }
 

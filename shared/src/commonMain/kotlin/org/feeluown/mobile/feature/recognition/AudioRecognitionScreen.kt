@@ -66,10 +66,10 @@ internal fun AudioRecognitionFeatureScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("听歌识曲") },
+                title = { Text("Musik erkennen") },
                 navigationIcon = {
                     IconButton(onClick = actions.onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                     }
                 },
             )
@@ -85,7 +85,7 @@ internal fun AudioRecognitionFeatureScreen(
                     ) {
                         Icon(Icons.Filled.Stop, contentDescription = null)
                         Spacer(Modifier.size(8.dp))
-                        Text("停止识别")
+                        Text("Erkennung stoppen")
                     }
                 }
             }
@@ -122,10 +122,10 @@ private fun MicrophonePermissionContent(
     ) {
         RecognitionIcon()
         Spacer(Modifier.size(24.dp))
-        Text("需要麦克风权限", style = MaterialTheme.typography.headlineSmall)
+        Text("Mikrofonberechtigung erforderlich", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.size(8.dp))
         Text(
-            text = "录音仅在内存中用于生成音频指纹，不会保存或上传原始音频。",
+            text = "Die Aufnahme wird nur im Arbeitsspeicher zur Erstellung eines Audio-Fingerabdrucks verwendet. Das Originalaudio wird weder gespeichert noch hochgeladen.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -133,7 +133,7 @@ private fun MicrophonePermissionContent(
         Button(onClick = onRequestPermission) {
             Icon(Icons.Filled.Mic, contentDescription = null)
             Spacer(Modifier.size(8.dp))
-            Text("授权并开始识别")
+            Text("Berechtigen und Erkennung starten")
         }
     }
 }
@@ -147,20 +147,20 @@ private fun RecognitionContent(
     when (val state = uiState) {
         RecognitionUiState.Idle -> ListeningContent(
             modifier = modifier,
-            title = "正在准备麦克风",
-            subtitle = "录音不会保存到设备",
+            title = "Mikrofon wird vorbereitet",
+            subtitle = "Die Aufnahme wird nicht auf dem Gerät gespeichert",
             progress = null,
         )
         is RecognitionUiState.Capturing -> ListeningContent(
             modifier = modifier,
-            title = "正在聆听",
-            subtitle = "请靠近声音来源，并保持周围环境安静",
+            title = "Hört zu",
+            subtitle = "Gehe näher an die Audioquelle und halte die Umgebung möglichst ruhig.",
             progress = (state.capturedMs.toFloat() / state.windowDurationMs).coerceIn(0f, 1f),
         )
         RecognitionUiState.Matching -> ListeningContent(
             modifier = modifier,
-            title = "正在寻找这首歌",
-            subtitle = "马上就好，请继续让音乐播放",
+            title = "Titel wird gesucht",
+            subtitle = "Fast geschafft – lass die Musik weiterlaufen.",
             progress = null,
         )
         is RecognitionUiState.Success -> RecognitionResults(
@@ -170,23 +170,23 @@ private fun RecognitionContent(
         )
         RecognitionUiState.NoResult -> RecognitionMessage(
             modifier = modifier,
-            title = "暂未识别到歌曲",
-            message = "可以让手机更靠近声音来源，或换到安静一点的环境再试一次。",
-            actionLabel = "重新识别",
+            title = "Noch kein Titel erkannt",
+            message = "Halte das Smartphone näher an die Audioquelle oder versuche es in einer ruhigeren Umgebung erneut.",
+            actionLabel = "Erneut erkennen",
             onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
         is RecognitionUiState.Error -> RecognitionMessage(
             modifier = modifier,
-            title = "识别失败",
+            title = "Erkennung fehlgeschlagen",
             message = state.message,
-            actionLabel = "重试",
+            actionLabel = "Erneut versuchen",
             onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
         RecognitionUiState.Cancelled -> RecognitionMessage(
             modifier = modifier,
-            title = "已停止识别",
-            message = "准备好后，可以再次开始识别。",
-            actionLabel = "重新识别",
+            title = "Erkennung gestoppt",
+            message = "Du kannst die Erkennung jederzeit erneut starten.",
+            actionLabel = "Erneut erkennen",
             onAction = { actions.dispatch(RecognitionAction.Retry) },
         )
     }
@@ -224,7 +224,7 @@ private fun ListeningContent(
         }
         Spacer(Modifier.size(16.dp))
         Text(
-            "只会向识别接口发送音频指纹",
+            "An den Erkennungsdienst wird nur der Audio-Fingerabdruck gesendet",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -243,7 +243,7 @@ private fun RecognitionResults(
     ) {
         item {
             Text(
-                text = "识别到 ${songs.size} 首歌曲",
+                text = "${songs.size} Titel erkannt",
                 modifier = Modifier.padding(top = 16.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -288,13 +288,13 @@ private fun RecognizedSongCard(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        song.title.ifBlank { "未知歌曲" },
+                        song.title.ifBlank { "Unbekannter Titel" },
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        song.artists.joinToString(" / ").ifBlank { "未知歌手" },
+                        song.artists.joinToString(" / ").ifBlank { "Unbekannter Interpret" },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -315,11 +315,11 @@ private fun RecognizedSongCard(
                 Button(onClick = { actions.onSearchSong(song) }) {
                     Icon(Icons.Filled.Search, contentDescription = null)
                     Spacer(Modifier.size(6.dp))
-                    Text("搜索")
+                    Text("Suchen")
                 }
                 if (actions.canOpenNeteaseDetail(song)) {
                     OutlinedButton(onClick = { actions.onOpenNeteaseDetail(song) }) {
-                        Text("查看网易云详情")
+                        Text("Details bei NetEase ansehen")
                     }
                 }
             }
