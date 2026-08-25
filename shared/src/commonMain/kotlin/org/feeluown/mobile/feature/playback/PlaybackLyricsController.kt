@@ -52,6 +52,8 @@ internal class PlaybackLyricsController(
     private val updateLyrics: (String) -> Unit,
     private val associationForTrackId: (String) -> String?,
     private val rememberAssociation: (String, String?) -> Unit,
+    private val alignmentOffsetForTrackId: (String) -> Long = { 0L },
+    private val rememberAlignmentOffset: (String, Long) -> Unit = { _, _ -> },
 ) : PlaybackLyricsPort {
     constructor(
         providerRegistryRepository: ProviderRegistryRepository,
@@ -65,6 +67,8 @@ internal class PlaybackLyricsController(
         updateLyrics: (String) -> Unit,
         associationForTrackId: (String) -> String?,
         rememberAssociation: (String, String?) -> Unit,
+        alignmentOffsetForTrackId: (String) -> Long = { 0L },
+        rememberAlignmentOffset: (String, Long) -> Unit = { _, _ -> },
     ) : this(
         repository = ProviderPlaybackLyricsRepository(
             registryRepository = providerRegistryRepository,
@@ -79,6 +83,8 @@ internal class PlaybackLyricsController(
         updateLyrics = updateLyrics,
         associationForTrackId = associationForTrackId,
         rememberAssociation = rememberAssociation,
+        alignmentOffsetForTrackId = alignmentOffsetForTrackId,
+        rememberAlignmentOffset = rememberAlignmentOffset,
     )
 
     private val mutableAssociationState = MutableStateFlow(LyricsAssociationUiState())
@@ -88,6 +94,8 @@ internal class PlaybackLyricsController(
     private var searchJob: Job? = null
     private var selectionJob: Job? = null
     private var loadedForTrackId: String? = null
+    private var loadedAssociationTrackId: String? = null
+    private var currentSourceTrackId: String? = null
     private var associationSearchTrack: MusicTrack? = null
     private var associationQueryEdited = false
 
@@ -99,9 +107,15 @@ internal class PlaybackLyricsController(
         searchJob = null
         selectionJob = null
         loadedForTrackId = null
+        loadedAssociationTrackId = null
+        currentSourceTrackId = null
         associationSearchTrack = null
         associationQueryEdited = false
         mutableAssociationState.value = LyricsAssociationUiState()
+    }
+
+    fun refreshPersistentState(track: MusicTrack?) {
+        maybeLoad(track)
     }
 
     fun mergedLyrics(
@@ -124,77 +138,120 @@ internal class PlaybackLyricsController(
 
     fun maybeLoad(track: MusicTrack?) {
         if (track == null) return
-        if (!currentLyrics().isNullOrBlank()) {
-            loadedForTrackId = track.id
-            if (mutableAssociationState.value.trackId != track.id) {
-                mutableAssociationState.value = LyricsAssociationUiState(trackId = track.id)
+        val lyricTrack = lyricSourceTrackForPlayback(track)
+        val associatedTrackId = associationForTrackId(lyricTrack.id)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val alignmentOffsetMs = alignmentOffsetForTrackId(lyricTrack.id)
+            .coerceIn(-3_000L, 3_000L)
+        currentSourceTrackId = lyricTrack.id
+
+        if (loadedForTrackId == track.id && loadedAssociationTrackId == associatedTrackId) {
+            if (
+                mutableAssociationState.value.trackId == track.id &&
+                mutableAssociationState.value.alignmentOffsetMs != alignmentOffsetMs
+            ) {
+                mutableAssociationState.value = mutableAssociationState.value.copy(
+                    alignmentOffsetMs = alignmentOffsetMs,
+                )
             }
             return
         }
-        track.lyrics?.takeIf { it.isNotBlank() }?.let {
-            updateLyrics(it)
-            loadedForTrackId = track.id
-            mutableAssociationState.value = LyricsAssociationUiState(trackId = track.id)
-            return
-        }
-        if (loadedForTrackId == track.id) return
 
         loadedForTrackId = track.id
+        loadedAssociationTrackId = associatedTrackId
         val requestSerial = currentRequestSerial()
-        val lyricTrack = lyricSourceTrackForPlayback(track)
         loadJob?.cancel()
-        loadJob = scope.launch {
-            val associatedTrackId = associationForTrackId(lyricTrack.id)
-            if (!associatedTrackId.isNullOrBlank()) {
+
+        if (associatedTrackId != null) {
+            mutableAssociationState.value = LyricsAssociationUiState(
+                trackId = track.id,
+                alignmentOffsetMs = alignmentOffsetMs,
+            )
+            loadJob = scope.launch {
                 val associatedTrack = repository.trackDetail(associatedTrackId)
                 val associatedLyrics = associatedTrack?.let { candidate ->
                     runCatching { repository.lyrics(candidate) }.getOrNull()
                 }?.takeIf { it.isNotBlank() }
-                if (isCurrent(track, requestSerial) && associatedTrack != null && associatedLyrics != null) {
+                if (!isCurrent(track, requestSerial)) return@launch
+                if (associatedTrack != null && associatedLyrics != null) {
                     updateLyrics(associatedLyrics)
                     mutableAssociationState.value = LyricsAssociationUiState(
                         trackId = track.id,
                         isManualAssociation = true,
                         associatedTrackId = associatedTrack.id,
                         associatedTrackTitle = associatedTrack.title,
+                        alignmentOffsetMs = alignmentOffsetMs,
                     )
                     return@launch
                 }
-            }
 
+                val fallbackLyrics = track.lyrics
+                    ?.takeIf { it.isNotBlank() }
+                    ?: runCatching { repository.lyrics(lyricTrack) }
+                        .getOrNull()
+                        ?.takeIf { it.isNotBlank() }
+                if (!isCurrent(track, requestSerial)) return@launch
+                if (fallbackLyrics != null) updateLyrics(fallbackLyrics)
+                mutableAssociationState.value = LyricsAssociationUiState(
+                    trackId = track.id,
+                    isLyricsUnavailable = fallbackLyrics == null,
+                    alignmentOffsetMs = alignmentOffsetMs,
+                )
+            }
+            return
+        }
+
+        currentLyrics()?.takeIf { it.isNotBlank() }?.let {
+            mutableAssociationState.value = LyricsAssociationUiState(
+                trackId = track.id,
+                alignmentOffsetMs = alignmentOffsetMs,
+            )
+            return
+        }
+        track.lyrics?.takeIf { it.isNotBlank() }?.let {
+            updateLyrics(it)
+            mutableAssociationState.value = LyricsAssociationUiState(
+                trackId = track.id,
+                alignmentOffsetMs = alignmentOffsetMs,
+            )
+            return
+        }
+
+        loadJob = scope.launch {
             val lyrics = runCatching {
                 repository.lyrics(lyricTrack)
             }.getOrNull()?.takeIf { it.isNotBlank() }
             if (!isCurrent(track, requestSerial)) return@launch
-            if (lyrics != null) {
-                updateLyrics(lyrics)
-                mutableAssociationState.value = LyricsAssociationUiState(trackId = track.id)
-            } else {
-                mutableAssociationState.value = LyricsAssociationUiState(
-                    trackId = track.id,
-                    isLyricsUnavailable = true,
-                )
-            }
+            if (lyrics != null) updateLyrics(lyrics)
+            mutableAssociationState.value = LyricsAssociationUiState(
+                trackId = track.id,
+                isLyricsUnavailable = lyrics == null,
+                alignmentOffsetMs = alignmentOffsetMs,
+            )
         }
     }
 
     override fun openAssociationSearch(track: MusicTrack) {
         associationSearchTrack = track
         associationQueryEdited = false
+        val sourceTrack = lyricSourceTrackForPlayback(track)
+        currentSourceTrackId = sourceTrack.id
         val previous = mutableAssociationState.value.takeIf { it.trackId == track.id }
+        val alignmentOffsetMs = previous?.alignmentOffsetMs
+            ?: alignmentOffsetForTrackId(sourceTrack.id).coerceIn(-3_000L, 3_000L)
         mutableAssociationState.value = LyricsAssociationUiState(
             trackId = track.id,
             isLyricsUnavailable = previous?.isLyricsUnavailable ?: currentLyrics().isNullOrBlank(),
             isManualAssociation = previous?.isManualAssociation == true,
             associatedTrackId = previous?.associatedTrackId,
             associatedTrackTitle = previous?.associatedTrackTitle,
-            alignmentOffsetMs = previous?.alignmentOffsetMs ?: 0L,
+            alignmentOffsetMs = alignmentOffsetMs,
             isSearchOpen = true,
             isSearching = true,
         )
         searchJob?.cancel()
         searchJob = scope.launch {
-            val sourceTrack = lyricSourceTrackForPlayback(track)
             val rawKeyword = runCatching { repository.searchKeyword(sourceTrack) }
                 .getOrNull()
                 ?.trim()
@@ -241,6 +298,7 @@ internal class PlaybackLyricsController(
     override fun selectAssociation(track: MusicTrack) {
         val playbackTrack = associationSearchTrack ?: return
         val sourceTrack = lyricSourceTrackForPlayback(playbackTrack)
+        currentSourceTrackId = sourceTrack.id
         val requestSerial = currentRequestSerial()
         selectionJob?.cancel()
         mutableAssociationState.value = mutableAssociationState.value.copy(
@@ -264,6 +322,8 @@ internal class PlaybackLyricsController(
 
             val alignmentOffsetMs = mutableAssociationState.value.alignmentOffsetMs
             rememberAssociation(sourceTrack.id, track.id)
+            loadedForTrackId = playbackTrack.id
+            loadedAssociationTrackId = track.id
             updateLyrics(lyrics)
             mutableAssociationState.value = LyricsAssociationUiState(
                 trackId = playbackTrack.id,
@@ -292,9 +352,15 @@ internal class PlaybackLyricsController(
     }
 
     override fun updateAlignmentOffset(offsetMs: Long) {
-        mutableAssociationState.value = mutableAssociationState.value.copy(
-            alignmentOffsetMs = offsetMs.coerceIn(-3_000L, 3_000L),
-        )
+        val clamped = offsetMs.coerceIn(-3_000L, 3_000L)
+        val current = mutableAssociationState.value
+        if (current.alignmentOffsetMs == clamped) return
+        mutableAssociationState.value = current.copy(alignmentOffsetMs = clamped)
+        if (current.isManualAssociation) {
+            currentSourceTrackId?.let { sourceTrackId ->
+                rememberAlignmentOffset(sourceTrackId, clamped)
+            }
+        }
     }
 
     private suspend fun performSearch(track: MusicTrack, keyword: String) {
