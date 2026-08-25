@@ -81,6 +81,7 @@ private class DefaultPlaybackFeatureOwner(
     private var lastRecoveredPlaybackErrorKey: String? = null
     private var smartReplacementSelections: Map<String, SmartReplacementSelection> = emptyMap()
     private var lyricsAssociations: Map<String, String> = emptyMap()
+    private var lyricsAlignmentOffsetsMs: Map<String, Long> = emptyMap()
     private var pendingManualReplacementSwitch: PlaybackOwnerPendingManualReplacement? = null
     private var suppressPlaybackRecoveryRequestSerial: Long? = null
     private var appendQueueFeatureTask: Deferred<Int>? = null
@@ -105,6 +106,8 @@ private class DefaultPlaybackFeatureOwner(
         updateLyrics = { lyrics -> updatePlaybackState { it.copy(lyrics = lyrics) } },
         associationForTrackId = { trackId -> lyricsAssociations[trackId] },
         rememberAssociation = ::rememberLyricsAssociation,
+        alignmentOffsetForTrackId = { trackId -> lyricsAlignmentOffsetsMs[trackId] ?: 0L },
+        rememberAlignmentOffset = ::rememberLyricsAlignmentOffset,
     )
 
     private val startOwner = PlaybackStartCoordinator(
@@ -212,14 +215,18 @@ private class DefaultPlaybackFeatureOwner(
             val settings = settingsRepository.awaitSettings()
             smartReplacementSelections = settings.smartReplacementSelections
             lyricsAssociations = settings.lyricsAssociations
+            lyricsAlignmentOffsetsMs = settings.lyricsAlignmentOffsetsMs
             runCatching { playbackQueueStore.load() }
                 .onSuccess(::restorePlaybackQueue)
+            lyricsOwner.refreshPersistentState(playbackState.value.currentTrack)
         }
         scope.launch {
             settingsRepository.state.collect { state ->
                 if (state.isLoaded) {
                     smartReplacementSelections = state.settings.smartReplacementSelections
                     lyricsAssociations = state.settings.lyricsAssociations
+                    lyricsAlignmentOffsetsMs = state.settings.lyricsAlignmentOffsetsMs
+                    lyricsOwner.refreshPersistentState(playbackState.value.currentTrack)
                 }
             }
         }
@@ -340,10 +347,23 @@ private class DefaultPlaybackFeatureOwner(
         } else {
             lyricsAssociations + (sourceTrackId to lyricsTrackId)
         }
-        val nextAssociations = lyricsAssociations
         scope.launch {
             settingsRepository.update { current ->
-                current.copy(lyricsAssociations = nextAssociations)
+                current.copy(lyricsAssociations = lyricsAssociations)
+            }
+        }
+    }
+
+    private fun rememberLyricsAlignmentOffset(sourceTrackId: String, offsetMs: Long) {
+        val clamped = offsetMs.coerceIn(-3_000L, 3_000L)
+        lyricsAlignmentOffsetsMs = if (clamped == 0L) {
+            lyricsAlignmentOffsetsMs - sourceTrackId
+        } else {
+            lyricsAlignmentOffsetsMs + (sourceTrackId to clamped)
+        }
+        scope.launch {
+            settingsRepository.update { current ->
+                current.copy(lyricsAlignmentOffsetsMs = lyricsAlignmentOffsetsMs)
             }
         }
     }
