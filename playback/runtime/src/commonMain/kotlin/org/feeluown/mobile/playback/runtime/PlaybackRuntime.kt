@@ -116,6 +116,7 @@ private fun composeState(
     currentTrack = overlay.currentTrack,
     positionMs = engine.positionMs,
     lyricsPositionMs = (engine.positionMs - overlay.lyricsAlignmentOffsetMs).coerceAtLeast(0L),
+    lyricsAlignmentOffsetMs = overlay.lyricsAlignmentOffsetMs,
     durationMs = engine.durationMs,
     bufferedMs = engine.bufferedMs,
     lyrics = overlay.lyrics,
