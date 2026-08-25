@@ -58,7 +58,8 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
     val lines = remember(state.lyrics) { parseLyrics(state.lyrics) }
     val listState = rememberLazyListState()
     val currentTrack = state.currentTrack
-    val lyricOffsetMs = remember(currentTrack?.id) { mutableLongStateOf(0L) }
+    val associationMatchesTrack = associationState.trackId == currentTrack?.id
+    val lyricOffsetMs = if (associationMatchesTrack) associationState.alignmentOffsetMs else 0L
     var alignmentPanelOpen by remember(currentTrack?.id) { mutableStateOf(false) }
     val renderPositionMs = rememberKaraokePositionMs(
         positionMs = state.positionMs,
@@ -66,7 +67,7 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
     )
     val alignedPositionMs = remember(renderPositionMs, lyricOffsetMs) {
         derivedStateOf {
-            (renderPositionMs.value - lyricOffsetMs.longValue).coerceAtLeast(0L)
+            (renderPositionMs.value - lyricOffsetMs).coerceAtLeast(0L)
         }
     }
     val currentIndex by remember(lines, alignedPositionMs) {
@@ -99,7 +100,6 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
         LyricFontSize.Medium -> 7.dp
         LyricFontSize.Large -> 8.dp
     }
-    val associationMatchesTrack = associationState.trackId == currentTrack?.id
 
     LaunchedEffect(currentIndex, lines.size) {
         if (currentIndex < 0) return@LaunchedEffect
@@ -269,14 +269,15 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
                                 verticalArrangement = Arrangement.spacedBy(FuoSpacing.xs),
                             ) {
                                 Text(
-                                    text = "歌词对齐：${lyricOffsetLabel(lyricOffsetMs.longValue)}",
+                                    text = "歌词对齐：${lyricOffsetLabel(lyricOffsetMs)}",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 Slider(
-                                    value = lyricOffsetMs.longValue.toFloat(),
+                                    value = lyricOffsetMs.toFloat(),
                                     onValueChange = { value ->
-                                        lyricOffsetMs.longValue =
-                                            ((value / 250f).roundToInt() * 250L).coerceIn(-3_000L, 3_000L)
+                                        lyricsPort.updateAlignmentOffset(
+                                            ((value / 250f).roundToInt() * 250L).coerceIn(-3_000L, 3_000L),
+                                        )
                                     },
                                     valueRange = -3_000f..3_000f,
                                     steps = 23,
@@ -291,7 +292,7 @@ fun LyricsPanel(state: PlaybackState, fontSize: LyricFontSize, modifier: Modifie
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    TextButton(onClick = { lyricOffsetMs.longValue = 0L }) {
+                                    TextButton(onClick = { lyricsPort.updateAlignmentOffset(0L) }) {
                                         Text("归零")
                                     }
                                     Text(
