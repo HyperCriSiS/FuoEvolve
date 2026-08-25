@@ -17,16 +17,19 @@ internal interface PlaybackLyricsRepository {
 }
 
 private class ProviderPlaybackLyricsRepository(
-    private val delegate: ProviderMusicRepository,
+    private val registryRepository: ProviderRegistryRepository,
+    private val searchRepository: ProviderSearchRepository,
+    private val catalogRepository: ProviderCatalogRepository,
+    private val playbackRepository: ProviderPlaybackRepository,
 ) : PlaybackLyricsRepository {
-    override suspend fun lyrics(track: MusicTrack): String? = delegate.lyrics(track)
+    override suspend fun lyrics(track: MusicTrack): String? = playbackRepository.lyrics(track)
 
     override suspend fun search(keyword: String): List<MusicTrack> {
-        val enabledProviderIds = delegate.providers().mapTo(mutableSetOf()) { it.providerId }
+        val enabledProviderIds = registryRepository.providers().mapTo(mutableSetOf()) { it.providerId }
         val results = mutableListOf<MusicTrack>()
         for (providerId in LYRICS_ASSOCIATION_PROVIDER_IDS) {
             if (providerId !in enabledProviderIds) continue
-            val providerResults = runCatching { delegate.search(keyword, providerId) }
+            val providerResults = runCatching { searchRepository.search(keyword, providerId) }
                 .getOrDefault(emptyList())
             results += providerResults
         }
@@ -34,10 +37,10 @@ private class ProviderPlaybackLyricsRepository(
     }
 
     override suspend fun trackDetail(trackId: String): MusicTrack? =
-        runCatching { delegate.trackDetail(trackId) }.getOrNull()
+        runCatching { catalogRepository.trackDetail(trackId) }.getOrNull()
 
     override suspend fun searchKeyword(track: MusicTrack): String? =
-        delegate.lyricsSearchKeyword(track)
+        playbackRepository.lyricsSearchKeyword(track)
 }
 
 internal class PlaybackLyricsController(
@@ -51,7 +54,10 @@ internal class PlaybackLyricsController(
     private val rememberAssociation: (String, String?) -> Unit,
 ) : PlaybackLyricsPort {
     constructor(
-        providerRepository: ProviderMusicRepository,
+        providerRegistryRepository: ProviderRegistryRepository,
+        providerSearchRepository: ProviderSearchRepository,
+        providerCatalogRepository: ProviderCatalogRepository,
+        providerPlaybackRepository: ProviderPlaybackRepository,
         scope: CoroutineScope,
         currentRequestSerial: () -> Long,
         currentTrackId: () -> String?,
@@ -60,7 +66,12 @@ internal class PlaybackLyricsController(
         associationForTrackId: (String) -> String?,
         rememberAssociation: (String, String?) -> Unit,
     ) : this(
-        repository = ProviderPlaybackLyricsRepository(providerRepository),
+        repository = ProviderPlaybackLyricsRepository(
+            registryRepository = providerRegistryRepository,
+            searchRepository = providerSearchRepository,
+            catalogRepository = providerCatalogRepository,
+            playbackRepository = providerPlaybackRepository,
+        ),
         scope = scope,
         currentRequestSerial = currentRequestSerial,
         currentTrackId = currentTrackId,
@@ -177,6 +188,7 @@ internal class PlaybackLyricsController(
             isManualAssociation = previous?.isManualAssociation == true,
             associatedTrackId = previous?.associatedTrackId,
             associatedTrackTitle = previous?.associatedTrackTitle,
+            alignmentOffsetMs = previous?.alignmentOffsetMs ?: 0L,
             isSearchOpen = true,
             isSearching = true,
         )
@@ -250,6 +262,7 @@ internal class PlaybackLyricsController(
                 return@launch
             }
 
+            val alignmentOffsetMs = mutableAssociationState.value.alignmentOffsetMs
             rememberAssociation(sourceTrack.id, track.id)
             updateLyrics(lyrics)
             mutableAssociationState.value = LyricsAssociationUiState(
@@ -257,6 +270,7 @@ internal class PlaybackLyricsController(
                 isManualAssociation = true,
                 associatedTrackId = track.id,
                 associatedTrackTitle = track.title,
+                alignmentOffsetMs = alignmentOffsetMs,
             )
             associationSearchTrack = null
         }
@@ -274,6 +288,12 @@ internal class PlaybackLyricsController(
             isSearching = false,
             selectingTrackId = null,
             message = null,
+        )
+    }
+
+    override fun updateAlignmentOffset(offsetMs: Long) {
+        mutableAssociationState.value = mutableAssociationState.value.copy(
+            alignmentOffsetMs = offsetMs.coerceIn(-3_000L, 3_000L),
         )
     }
 
@@ -311,15 +331,19 @@ internal class PlaybackLyricsController(
     private fun normalizeAssociationSearchKeyword(track: MusicTrack, keyword: String): String {
         val trimmed = keyword.trim()
         if (track.source != "bilibili") return trimmed
-        val withoutDiscoveryPrefix = trimmed.removePrefix("发现").trim()
-        return if (
-            withoutDiscoveryPrefix.length >= 2 &&
-            withoutDiscoveryPrefix.startsWith('《') &&
-            withoutDiscoveryPrefix.endsWith('》')
-        ) {
-            withoutDiscoveryPrefix.substring(1, withoutDiscoveryPrefix.length - 1).trim()
+        val wrapped = if (trimmed.startsWith("发现《") && trimmed.endsWith('》')) {
+            trimmed.removePrefix("发现").trim()
         } else {
-            withoutDiscoveryPrefix
+            trimmed
+        }
+        return if (
+            wrapped.length >= 2 &&
+            wrapped.startsWith('《') &&
+            wrapped.endsWith('》')
+        ) {
+            wrapped.substring(1, wrapped.length - 1).trim()
+        } else {
+            wrapped
         }
     }
 
