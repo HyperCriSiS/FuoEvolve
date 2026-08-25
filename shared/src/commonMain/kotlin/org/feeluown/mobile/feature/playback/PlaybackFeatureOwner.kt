@@ -116,7 +116,11 @@ private class DefaultPlaybackFeatureOwner(
         playbackRepository = playbackRepository,
         scope = scope,
         currentPlaybackState = { playbackState.value },
-        publishPlaybackState = { mutablePlaybackState.value = it },
+        publishPlaybackState = { state ->
+            mutablePlaybackState.value = state.copy(
+                lyricsAlignmentOffsetMs = lyricsOwner.associationState.value.alignmentOffsetMs,
+            )
+        },
         prepareTrack = { track -> track.withRememberedReplacement().preferDownloaded() },
         unavailablePlaybackPolicy = { currentSettings().unavailablePlaybackPolicy },
         smartReplacementProviderIds = ::selectedSmartReplacementProviderIds,
@@ -231,6 +235,15 @@ private class DefaultPlaybackFeatureOwner(
             }
         }
         scope.launch {
+            lyricsOwner.associationState.collect { state ->
+                if (playbackState.value.lyricsAlignmentOffsetMs != state.alignmentOffsetMs) {
+                    updatePlaybackState { current ->
+                        current.copy(lyricsAlignmentOffsetMs = state.alignmentOffsetMs)
+                    }
+                }
+            }
+        }
+        scope.launch {
             playbackEngine.state.collect(::onEngineState)
         }
     }
@@ -270,6 +283,7 @@ private class DefaultPlaybackFeatureOwner(
                 currentQueueTrackId = currentQueueTrackId,
                 previousPlaybackState = previous,
             ),
+            lyricsAlignmentOffsetMs = lyricsOwner.associationState.value.alignmentOffsetMs,
         )
         lyricsOwner.maybeLoad(playbackState.value.currentTrack)
         if (engineState.playbackParts.isNotEmpty()) {
