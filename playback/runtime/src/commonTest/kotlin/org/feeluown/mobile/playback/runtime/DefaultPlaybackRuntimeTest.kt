@@ -37,6 +37,7 @@ class DefaultPlaybackRuntimeTest {
         assertEquals("a", runtime.state.value.currentTrack?.id)
         assertEquals(12_000, runtime.state.value.positionMs)
         assertEquals(10_750, runtime.state.value.lyricsPositionMs)
+        assertEquals(1_250, runtime.state.value.lyricsAlignmentOffsetMs)
         assertEquals(180_000, runtime.state.value.durationMs)
         assertEquals("merged lyrics", runtime.state.value.lyrics)
         assertEquals(listOf("a", "b"), runtime.state.value.queueTrackIds)
@@ -50,6 +51,7 @@ class DefaultPlaybackRuntimeTest {
 
         assertEquals("b", runtime.state.value.currentTrack?.id)
         assertEquals(12_500, runtime.state.value.lyricsPositionMs)
+        assertEquals(-500, runtime.state.value.lyricsAlignmentOffsetMs)
         assertEquals(null, runtime.state.value.lyrics)
         assertEquals(listOf("b"), runtime.state.value.queueTrackIds)
         scope.cancel()
