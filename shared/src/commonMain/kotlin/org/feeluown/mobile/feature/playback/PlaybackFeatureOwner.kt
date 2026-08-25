@@ -94,7 +94,10 @@ private class DefaultPlaybackFeatureOwner(
     )
 
     private val lyricsOwner = PlaybackLyricsController(
-        providerRepository = providerRepository,
+        providerRegistryRepository = providerRepository,
+        providerSearchRepository = providerRepository,
+        providerCatalogRepository = providerRepository,
+        providerPlaybackRepository = playbackRepository,
         scope = scope,
         currentRequestSerial = { playRequestSerial },
         currentTrackId = { queueState.currentTrack()?.id ?: playbackState.value.currentTrack?.id },
