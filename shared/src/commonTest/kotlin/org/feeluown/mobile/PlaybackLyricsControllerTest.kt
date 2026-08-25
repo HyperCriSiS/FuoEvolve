@@ -107,6 +107,56 @@ class PlaybackLyricsControllerTest {
     }
 
     @Test
+    fun bilibiliBgmKeywordKeepsLegitimateDiscoveryPrefix() = runTest {
+        val source = providerTrack("bilibili:BVdemo", "视频标题", "bilibili")
+        val repository = FakePlaybackLyricsRepository(
+            searchKeyword = "发现爱",
+        )
+        val controller = PlaybackLyricsController(
+            repository = repository,
+            scope = this,
+            currentRequestSerial = { 1L },
+            currentTrackId = { source.id },
+            currentLyrics = { null },
+            updateLyrics = {},
+            associationForTrackId = { null },
+            rememberAssociation = { _, _ -> },
+        )
+
+        controller.openAssociationSearch(source)
+        advanceUntilIdle()
+
+        assertEquals("发现爱", controller.associationState.value.query)
+        assertEquals(listOf("发现爱"), repository.searchRequests)
+    }
+
+    @Test
+    fun alignmentOffsetSurvivesAssociationPanelOpenAndClose() = runTest {
+        val source = providerTrack("bilibili:BVdemo", "视频标题", "bilibili")
+        val repository = FakePlaybackLyricsRepository()
+        val controller = PlaybackLyricsController(
+            repository = repository,
+            scope = this,
+            currentRequestSerial = { 1L },
+            currentTrackId = { source.id },
+            currentLyrics = { null },
+            updateLyrics = {},
+            associationForTrackId = { null },
+            rememberAssociation = { _, _ -> },
+        )
+
+        controller.maybeLoad(source)
+        advanceUntilIdle()
+        controller.updateAlignmentOffset(1_250L)
+
+        controller.openAssociationSearch(source)
+        advanceUntilIdle()
+        controller.closeAssociationSearch()
+
+        assertEquals(1_250L, controller.associationState.value.alignmentOffsetMs)
+    }
+
+    @Test
     fun rememberedAssociationIsPreservedWhenLookupFails() = runTest {
         val source = providerTrack("bilibili:BVdemo", "视频标题", "bilibili")
         val repository = FakePlaybackLyricsRepository()
